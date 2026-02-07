@@ -162,7 +162,6 @@ public class VoteService {
         int totalMembers = Math.max(1, vote.getTotalMembers());
         int majority = (totalMembers / 2) + 1;
         boolean passed = agree >= 2 || (totalMembers == 1 && agree >= 1);
-        debugLog("VoteService:submitVote", "counts", vote.getRoomId(), vote.getStockCode(), "agree=" + agree + " totalMembers=" + totalMembers + " passed=" + passed);
         if (passed) {
             vote.setStatus("passed");
             voteRepository.save(vote);
@@ -199,17 +198,8 @@ public class VoteService {
         User proposer = userRepository.findById(vote.getProposerId()).orElse(null);
         try {
             tradeService.placeOrderForTeam(request, vote.getRoomId(), proposer);
-            debugLog("VoteService:executeVoteOrder", "executed", vote.getRoomId(), vote.getStockCode(), vote.getQuantity());
         } catch (Exception e) {
-            debugLog("VoteService:executeVoteOrder", "failed", vote.getRoomId(), vote.getStockCode(), e.getMessage());
         }
     }
 
-    private static void debugLog(String location, String message, Long roomId, String stockCode, Object extra) {
-        try {
-            String safe = (extra != null ? extra.toString() : "").replace("\"", "\\\"");
-            String logLine = "{\"location\":\"" + location + "\",\"message\":\"" + message + "\",\"data\":{\"roomId\":" + roomId + ",\"stockCode\":\"" + (stockCode != null ? stockCode.replace("\"", "\\\"") : "") + "\",\"extra\":\"" + safe + "\"},\"timestamp\":" + System.currentTimeMillis() + "}\n";
-            java.nio.file.Files.write(java.nio.file.Path.of("c:", "uniport", "uniport", ".cursor", "debug.log"), logLine.getBytes(java.nio.charset.StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
-        } catch (Exception ignored) {}
-    }
 }

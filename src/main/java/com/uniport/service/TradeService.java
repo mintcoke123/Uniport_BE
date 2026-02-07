@@ -102,11 +102,6 @@ public class TradeService {
     }
 
     private OrderResponseDTO executeTeamOrder(PlaceOrderRequestDTO request, Long teamId, User orderUser) {
-        try {
-            String logLine = "{\"location\":\"TradeService:executeTeamOrder\",\"message\":\"order\",\"data\":{\"teamId\":" + teamId + ",\"stockCode\":\"" + (request.getStockCode() != null ? request.getStockCode().replace("\"", "\\\"") : "") + "\",\"quantity\":" + request.getQuantity() + "},\"timestamp\":" + System.currentTimeMillis() + "}\n";
-            java.nio.file.Files.write(java.nio.file.Path.of("c:", "uniport", "uniport", ".cursor", "debug.log"), logLine.getBytes(java.nio.charset.StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
-        } catch (Exception ignored) {}
-
         TeamAccount account = teamAccountRepository.findByTeamId(teamId)
                 .orElseGet(() -> teamAccountRepository.save(TeamAccount.builder()
                         .teamId(teamId)

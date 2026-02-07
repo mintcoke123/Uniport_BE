@@ -75,12 +75,6 @@ public class GroupController {
         List<Map<String, Object>> holdingsList = new ArrayList<>();
 
         List<TeamHolding> holdings = teamHoldingRepository.findByTeamId(groupId);
-        // #region agent log
-        try {
-            String logLine = "{\"location\":\"GroupController:getGroup\",\"message\":\"holdings\",\"data\":{\"groupId\":" + groupId + ",\"holdingsSize\":" + holdings.size() + "},\"timestamp\":" + System.currentTimeMillis() + ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"H2,H3\"}\n";
-            java.nio.file.Files.write(java.nio.file.Path.of("c:", "uniport", "uniport", ".cursor", "debug.log"), logLine.getBytes(java.nio.charset.StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
-        } catch (Exception ignored) {}
-        // #endregion
         for (TeamHolding h : holdings) {
             String stockName = (h.getStockName() != null && !h.getStockName().isBlank())
                     ? h.getStockName()

@@ -3,9 +3,8 @@ spring:
     name: uniport
 
   datasource:
-    # env: SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+    # env: SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD. driver/dialect는 URL 기준 자동 선택.
     url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./data/testdb;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE}
-    driver-class-name: org.h2.Driver
     username: ${SPRING_DATASOURCE_USERNAME:sa}
     password: ${SPRING_DATASOURCE_PASSWORD:}
 
@@ -23,7 +22,6 @@ spring:
       hibernate:
         format_sql: true
         default_batch_fetch_size: 100
-    database-platform: org.hibernate.dialect.H2Dialect
     open-in-view: false
 
 # 로깅 (SQL 가독성)
