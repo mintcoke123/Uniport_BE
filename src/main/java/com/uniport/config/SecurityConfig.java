@@ -2,6 +2,7 @@ package com.uniport.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -42,6 +43,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/favicon.ico").permitAll()
                         .requestMatchers("/", "/api/auth/**", "/api/me/**", "/api/market/**", "/api/stocks/**", "/api/trades", "/api/competitions/**", "/api/ranking/**", "/api/groups/**", "/api/matching-rooms/**", "/api/admin/**", "/api/config/**", "/api/health", "/auth/**", "/stock/**", "/market/**", "/trade/**", "/h2-console/**", "/error").permitAll()
                         .requestMatchers("/groups/*/chat").permitAll()
