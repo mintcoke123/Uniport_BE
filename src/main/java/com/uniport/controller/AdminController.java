@@ -3,6 +3,9 @@ package com.uniport.controller;
 import com.uniport.entity.Competition;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.repository.HoldingRepository;
+import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.OrderRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.CompetitionService;
@@ -10,6 +13,7 @@ import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -34,13 +38,22 @@ public class AdminController {
 
     private final AuthService authService;
     private final UserRepository userRepository;
+    private final OrderRepository orderRepository;
+    private final HoldingRepository holdingRepository;
+    private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final MatchingRoomService matchingRoomService;
     private final CompetitionService competitionService;
     private final RankingService rankingService;
 
-    public AdminController(AuthService authService, UserRepository userRepository, MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService) {
+    public AdminController(AuthService authService, UserRepository userRepository,
+                           OrderRepository orderRepository, HoldingRepository holdingRepository,
+                           MatchingRoomMemberRepository matchingRoomMemberRepository,
+                           MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService) {
         this.authService = authService;
         this.userRepository = userRepository;
+        this.orderRepository = orderRepository;
+        this.holdingRepository = holdingRepository;
+        this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.matchingRoomService = matchingRoomService;
         this.competitionService = competitionService;
         this.rankingService = rankingService;
@@ -148,7 +161,8 @@ public class AdminController {
         return ResponseEntity.ok(list);
     }
 
-    /** 유저 삭제 (관리자 전용). 본인·다른 관리자 계정은 삭제 불가. */
+    /** 유저 삭제 (관리자 전용). 본인·다른 관리자 계정은 삭제 불가. FK 제약으로 주문·보유·매칭방멤버를 먼저 삭제. */
+    @Transactional
     @DeleteMapping("/users/{userId}")
     public ResponseEntity<Map<String, Object>> deleteUser(
             @RequestHeader(value = "Authorization", required = false) String authorization,
@@ -162,6 +176,10 @@ public class AdminController {
         if ("admin".equalsIgnoreCase(target.getRole())) {
             throw new ApiException("관리자 계정은 삭제할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
+        // FK 제약: 유저를 참조하는 주문·보유·매칭방멤버를 먼저 삭제
+        orderRepository.deleteByUser_Id(userId);
+        holdingRepository.deleteByUser_Id(userId);
+        matchingRoomMemberRepository.deleteByUser_Id(userId);
         userRepository.deleteById(userId);
         return ResponseEntity.ok(Map.of("success", true, "message", "Deleted"));
     }

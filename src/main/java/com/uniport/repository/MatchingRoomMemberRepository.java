@@ -29,4 +29,7 @@ public interface MatchingRoomMemberRepository extends JpaRepository<MatchingRoom
 
     /** 해당 사용자가 status가 "started"인 방에 참가 중인지 (모의투자 시작 여부). */
     boolean existsByUserIdAndMatchingRoom_Status(Long userId, String status);
+
+    /** 유저 삭제 시 FK 제약을 위해 해당 유저의 매칭방 참가 기록 삭제 */
+    void deleteByUser_Id(Long userId);
 }
