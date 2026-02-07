@@ -10,7 +10,7 @@ description = '유니포트 mvp(모의투자 관련)'
 
 java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(17)
+		languageVersion = JavaLanguageVersion.of(21)
 	}
 }
 
