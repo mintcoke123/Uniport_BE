@@ -1,0 +1,43 @@
+# 프로덕션 프로파일. 배포 시 SPRING_PROFILES_ACTIVE=prod 필수.
+# 환경 변수로 시크릿·DB·CORS 반드시 설정.
+
+spring:
+  h2:
+    console:
+      enabled: false
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: update
+  # DB: 배포 시 Postgres/MySQL 등 외부 DB 권장. H2 사용 시 볼륨 마운트 + 백업 필수.
+  # Postgres 예: SPRING_DATASOURCE_URL=jdbc:postgresql://host:5432/dbname
+  #             SPRING_DATASOURCE_USERNAME=... SPRING_DATASOURCE_PASSWORD=...
+  # H2 유지 시: SPRING_DATASOURCE_URL=jdbc:h2:file:/var/data/uniport/db;...
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./data/proddb;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+
+# 프로덕션 로깅: SQL/바인더 로그 비활성화
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: WARN
+
+# CORS: 프로덕션 도메인만 허용. 기본값 없음 → APP_CORS_ALLOWED_ORIGINS 필수.
+app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
+
+# JWT: 프로덕션에서는 env JWT_SECRET 필수(32자 이상 랜덤). 기본값 사용 금지.
+jwt:
+  secret: ${JWT_SECRET:}
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+# 시드/어드민: 프로덕션에서 테스트 유저 시드 비활성화, 어드민 비밀번호 강한 값으로 설정
+uniport:
+  admin:
+    email: ${UNIPORT_ADMIN_EMAIL:admin@uniport.com}
+    password: ${UNIPORT_ADMIN_PASSWORD:}
+  seed:
+    test-user-enabled: ${UNIPORT_SEED_TEST_USER_ENABLED:false}

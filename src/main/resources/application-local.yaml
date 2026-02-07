@@ -1,0 +1,11 @@
+# 로컬 전용 오버라이드. 시크릿은 env 로만 설정 (KIS_API_APPKEY, KIS_API_APPSECRET 등).
+spring:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+kis:
+  api:
+    # appkey/appsecret 은 application.yaml 에서 ${KIS_API_APPKEY:}, ${KIS_API_APPSECRET:} 로 로드.
+    # 로컬에서 사용 시 환경 변수 또는 .env 에 설정.
+    use-mock: false
