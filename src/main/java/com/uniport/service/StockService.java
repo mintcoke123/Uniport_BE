@@ -7,6 +7,8 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.TeamHoldingRepository;
+import com.uniport.service.kisws.KisWsSubscriptionManager;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -24,12 +26,15 @@ public class StockService {
     private final KisApiService kisApiService;
     private final HoldingRepository holdingRepository;
     private final TeamHoldingRepository teamHoldingRepository;
+    private final KisWsSubscriptionManager kisWsSubscriptionManager;
 
     public StockService(KisApiService kisApiService, HoldingRepository holdingRepository,
-                        TeamHoldingRepository teamHoldingRepository) {
+                        TeamHoldingRepository teamHoldingRepository,
+                        @Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
         this.kisApiService = kisApiService;
         this.holdingRepository = holdingRepository;
         this.teamHoldingRepository = teamHoldingRepository;
+        this.kisWsSubscriptionManager = kisWsSubscriptionManager;
     }
 
     private static Long parseTeamId(User user) {
@@ -69,6 +74,11 @@ public class StockService {
     /** 명세 §3-5: 종목 상세. id는 숫자(예: 5930) → 코드 "005930" */
     public StockDetailDTO getStockDetail(Long id, User user) {
         String code = id != null ? String.format("%06d", id) : "000000";
+        try {
+            kisWsSubscriptionManager.ensureSubscribed(code);
+        } catch (Exception ignored) {
+            /* WS 구독은 best-effort, REST 응답에는 영향 없음 */
+        }
         StockPriceDTO price = getStockPrice(code);
 
         Long idLong = id != null ? id : 0L;

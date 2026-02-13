@@ -7,7 +7,11 @@ import com.uniport.dto.StockPriceDTO;
 import com.uniport.entity.OrderStatus;
 import com.uniport.entity.OrderType;
 import com.uniport.exception.ApiException;
+import com.uniport.service.kisws.PriceCache;
+import com.uniport.service.kisws.PriceSnapshot;
+import com.uniport.service.kisws.KisWsSubscriptionManager;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -27,6 +31,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -66,7 +71,11 @@ public class KisApiService {
     /** KIS 미설정 시 전역 예외 처리에서 503 + code/message/configured 응답에 사용 */
     public static final String ERROR_CODE_KIS_NOT_CONFIGURED = "KIS_NOT_CONFIGURED";
 
+    private static final long PRICE_CACHE_FRESH_MILLIS = 3000L;
+
     private final RestTemplate restTemplate;
+    private final KisWsSubscriptionManager kisWsSubscriptionManager;
+    private final PriceCache priceCache;
 
     @Value("${kis.api.base-url:https://openapi.koreainvestment.com:9443}")
     private String baseUrl;
@@ -89,8 +98,12 @@ public class KisApiService {
     /** 동시에 한 번만 approval_key 발급되도록 락 */
     private final ReentrantLock approvalKeyLock = new ReentrantLock();
 
-    public KisApiService(RestTemplate restTemplate) {
+    public KisApiService(RestTemplate restTemplate,
+                         @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
+                         PriceCache priceCache) {
         this.restTemplate = restTemplate;
+        this.kisWsSubscriptionManager = kisWsSubscriptionManager;
+        this.priceCache = priceCache;
     }
 
     private String getBaseUrl() {
@@ -291,7 +304,7 @@ public class KisApiService {
     }
 
     /**
-     * 주식 현재가 조회. KIS domestic-stock inquire-price API 호출.
+     * 주식 현재가 조회. PriceCache에 값이 있고 3초 이내 갱신이면 캐시로 DTO 반환, 없거나 stale이면 KIS HTTP 호출.
      * appkey/appsecret 미설정 시 예외 발생(스텁 반환 금지).
      */
     public StockPriceDTO getStockPrice(String stockCode) {
@@ -301,9 +314,19 @@ public class KisApiService {
         if (!isConfigured()) {
             throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
         }
+        String code = stockCode.trim();
+        String normalized = code.length() >= 6 ? code : String.format("%6s", code).replace(' ', '0');
+        kisWsSubscriptionManager.ensureSubscribed(normalized);
+        Optional<PriceSnapshot> cached = priceCache.get(normalized);
+        if (cached.isPresent()) {
+            PriceSnapshot sn = cached.get();
+            if (System.currentTimeMillis() - sn.getUpdatedAtMillis() <= PRICE_CACHE_FRESH_MILLIS) {
+                return mapPriceSnapshotToStockPriceDTO(normalized, sn);
+            }
+        }
         String url = UriComponentsBuilder.fromUriString(getBaseUrl() + STOCK_PRICE_PATH)
                 .queryParam("FID_COND_MRKT_DIV_CODE", "J")
-                .queryParam("FID_INPUT_ISCD", stockCode.trim())
+                .queryParam("FID_INPUT_ISCD", normalized)
                 .build()
                 .toUriString();
         HttpHeaders headers = buildAuthHeaders(TR_ID_STOCK_PRICE);
@@ -324,7 +347,7 @@ public class KisApiService {
             if (outputMap == null) {
                 throw new ApiException("KIS stock price output2 is null", HttpStatus.SERVICE_UNAVAILABLE);
             }
-            return mapToStockPriceDTO(stockCode.trim(), outputMap);
+            return mapToStockPriceDTO(normalized, outputMap);
         } catch (ApiException e) {
             throw e;
         } catch (RestClientException e) {
@@ -357,6 +380,17 @@ public class KisApiService {
             }
         }
         return "종목_" + stockCode;
+    }
+
+    private static StockPriceDTO mapPriceSnapshotToStockPriceDTO(String stockCode, PriceSnapshot sn) {
+        return StockPriceDTO.builder()
+                .stockCode(stockCode)
+                .stockName("종목_" + stockCode)
+                .currentPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
+                .changeAmount(sn.getChange() != null ? sn.getChange() : BigDecimal.ZERO)
+                .changeRate(sn.getChangeRate() != null ? sn.getChangeRate() : BigDecimal.ZERO)
+                .volume(sn.getVolume() != null ? sn.getVolume() : 0L)
+                .build();
     }
 
     private StockPriceDTO mapToStockPriceDTO(String stockCode, Map<String, Object> output2) {

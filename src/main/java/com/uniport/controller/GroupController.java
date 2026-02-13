@@ -11,6 +11,7 @@ import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import com.uniport.service.KisApiService;
 import com.uniport.service.VoteService;
+import com.uniport.service.kisws.KisWsSubscriptionManager;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,6 +46,7 @@ public class GroupController {
     private final MatchingRoomRepository matchingRoomRepository;
     private final KisApiService kisApiService;
     private final VoteService voteService;
+    private final KisWsSubscriptionManager kisWsSubscriptionManager;
 
     public GroupController(ChatService chatService, AuthService authService,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
@@ -52,7 +54,8 @@ public class GroupController {
                            TeamHoldingRepository teamHoldingRepository,
                            MatchingRoomRepository matchingRoomRepository,
                            KisApiService kisApiService,
-                           VoteService voteService) {
+                           VoteService voteService,
+                           KisWsSubscriptionManager kisWsSubscriptionManager) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
@@ -61,6 +64,7 @@ public class GroupController {
         this.matchingRoomRepository = matchingRoomRepository;
         this.kisApiService = kisApiService;
         this.voteService = voteService;
+        this.kisWsSubscriptionManager = kisWsSubscriptionManager;
     }
 
     @GetMapping("/{groupId}")
@@ -76,6 +80,11 @@ public class GroupController {
 
         List<TeamHolding> holdings = teamHoldingRepository.findByTeamId(groupId);
         for (TeamHolding h : holdings) {
+            try {
+                kisWsSubscriptionManager.ensureSubscribed(h.getStockCode());
+            } catch (Exception ignored) {
+                /* WS 구독은 best-effort */
+            }
             String stockName = (h.getStockName() != null && !h.getStockName().isBlank())
                     ? h.getStockName()
                     : "종목_" + h.getStockCode();

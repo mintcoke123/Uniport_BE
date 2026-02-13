@@ -6,6 +6,8 @@ import com.uniport.dto.MarketIndexItemDTO;
 import com.uniport.dto.MarketStockItemDTO;
 import com.uniport.dto.StockPriceDTO;
 import com.uniport.exception.ApiException;
+import com.uniport.service.kisws.KisWsSubscriptionManager;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -20,9 +22,12 @@ public class MarketService {
     private static final String DEFAULT_LOGO_COLOR = "#4A90D9";
 
     private final KisApiService kisApiService;
+    private final KisWsSubscriptionManager kisWsSubscriptionManager;
 
-    public MarketService(KisApiService kisApiService) {
+    public MarketService(KisApiService kisApiService,
+                         @Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
         this.kisApiService = kisApiService;
+        this.kisWsSubscriptionManager = kisWsSubscriptionManager;
     }
 
     public List<StockPriceDTO> getVolumeRank() {
@@ -124,6 +129,13 @@ public class MarketService {
         }
         if (list == null) {
             list = List.of();
+        }
+        for (StockPriceDTO p : list) {
+            try {
+                kisWsSubscriptionManager.ensureSubscribed(p.getStockCode());
+            } catch (Exception ignored) {
+                /* WS 구독은 best-effort */
+            }
         }
         return list.stream()
                 .map(p -> MarketStockItemDTO.builder()
