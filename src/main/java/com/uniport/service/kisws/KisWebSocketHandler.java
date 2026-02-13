@@ -28,12 +28,13 @@ public class KisWebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     public void handleMessage(WebSocketSession session, WebSocketMessage<?> message) throws Exception {
-        // 구독/파싱 미구현
+        Object payload = message.getPayload();
+        log.info("KIS WS recv(raw): {}", payload != null ? payload.toString() : "");
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        log.info("KIS WebSocket connection closed");
+        log.info("KIS WS close statusCode={} reason={}", status != null ? status.getCode() : null, status != null ? status.getReason() : null);
         if (onCloseCallback != null) {
             onCloseCallback.run();
         }
@@ -41,6 +42,6 @@ public class KisWebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
-        log.warn("KIS WebSocket transport error");
+        log.warn("KIS WS error: {}", exception != null ? exception.toString() : "");
     }
 }
