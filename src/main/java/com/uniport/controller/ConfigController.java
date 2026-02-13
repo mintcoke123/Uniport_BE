@@ -1,12 +1,14 @@
 package com.uniport.controller;
 
 import com.uniport.service.KisApiService;
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Arrays;
 import java.util.Map;
 
 /**
@@ -17,9 +19,11 @@ import java.util.Map;
 public class ConfigController {
 
     private final KisApiService kisApiService;
+    private final Environment env;
 
-    public ConfigController(KisApiService kisApiService) {
+    public ConfigController(KisApiService kisApiService, Environment env) {
         this.kisApiService = kisApiService;
+        this.env = env;
     }
 
     /** KIS appkey/appsecret 설정 여부. configured: true면 시세·거래량 등 KIS API 사용 가능. */
@@ -36,9 +40,14 @@ public class ConfigController {
         return ResponseEntity.ok(Map.of("success", true, "message", "접근토큰이 폐기되었습니다."));
     }
 
-    /** 실시간(웹소켓) 접속키 발급. POST /oauth2/Approval 호출 후 approval_key 반환. */
+    /** 실시간(웹소켓) 접속키 발급. local/dev 프로필에서만 200 반환, 그 외 403. */
     @GetMapping("/kis-approval")
     public ResponseEntity<Map<String, Object>> getKisApprovalKey() {
+        boolean allowed = Arrays.stream(env.getActiveProfiles())
+                .anyMatch(p -> "local".equals(p) || "dev".equals(p));
+        if (!allowed) {
+            return ResponseEntity.status(403).body(Map.of("message", "Forbidden in non-dev profile"));
+        }
         String approvalKey = kisApiService.getWebSocketApprovalKey();
         return ResponseEntity.ok(Map.of("approval_key", approvalKey));
     }

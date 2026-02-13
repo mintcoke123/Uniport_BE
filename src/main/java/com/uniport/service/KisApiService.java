@@ -59,6 +59,10 @@ public class KisApiService {
     /** 지수 차트 시세 tr_id */
     private static final String TR_ID_INDEX_CHART = "FHKUP03500100";
     private static final int TOKEN_REFRESH_BUFFER_SECONDS = 60;
+    /** approval_key TTL 23시간 */
+    private static final long APPROVAL_KEY_TTL_MILLIS = 23L * 60 * 60 * 1000;
+    /** approval_key 만료 5분 전까지 캐시 재사용 */
+    private static final long APPROVAL_KEY_REFRESH_BUFFER_MILLIS = 5L * 60 * 1000;
     /** KIS 미설정 시 전역 예외 처리에서 503 + code/message/configured 응답에 사용 */
     public static final String ERROR_CODE_KIS_NOT_CONFIGURED = "KIS_NOT_CONFIGURED";
 
@@ -80,6 +84,11 @@ public class KisApiService {
     /** 동시에 한 번만 토큰 발급되도록 락 (배포 시 레이트리밋/지연 방지) */
     private final ReentrantLock tokenIssueLock = new ReentrantLock();
 
+    private volatile String cachedApprovalKey;
+    private volatile long approvalKeyExpiresAtMillis = 0L;
+    /** 동시에 한 번만 approval_key 발급되도록 락 */
+    private final ReentrantLock approvalKeyLock = new ReentrantLock();
+
     public KisApiService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
@@ -95,6 +104,11 @@ public class KisApiService {
     /** KIS appkey/appsecret 설정 여부. GET /api/config/kis-status 등에서 사용. */
     public boolean isKisConfigured() {
         return isConfigured();
+    }
+
+    /** KIS 실시간 WebSocket base URL. useMock이면 31000, 아니면 21000. */
+    public String getKisWebSocketBaseUrl() {
+        return useMock ? "ws://ops.koreainvestment.com:31000" : "ws://ops.koreainvestment.com:21000";
     }
 
     /**
@@ -211,6 +225,7 @@ public class KisApiService {
     /**
      * 실시간(웹소켓) 접속키 발급. POST /oauth2/Approval, body JSON { grant_type, appkey, secretkey }.
      * KIS 명세: secretkey 필드에 appsecret 값 전달. 응답의 approval_key를 웹소켓 연결 시 사용.
+     * TTL 23시간 캐시, 만료 5분 전까지 재사용. 동시 요청 시 락으로 1회만 발급.
      */
     public String getWebSocketApprovalKey() {
         String key = appkey != null ? appkey.trim() : "";
@@ -218,16 +233,27 @@ public class KisApiService {
         if (key.isBlank() || secret.isBlank()) {
             throw new ApiException("KIS API appkey/appsecret not configured", HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        String url = getBaseUrl() + APPROVAL_PATH;
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
-        Map<String, String> body = Map.of(
-                "grant_type", "client_credentials",
-                "appkey", key,
-                "secretkey", secret
-        );
-        HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
+        long now = System.currentTimeMillis();
+        if (cachedApprovalKey != null && !cachedApprovalKey.isBlank()
+                && now < (approvalKeyExpiresAtMillis - APPROVAL_KEY_REFRESH_BUFFER_MILLIS)) {
+            return cachedApprovalKey;
+        }
+        approvalKeyLock.lock();
         try {
+            now = System.currentTimeMillis();
+            if (cachedApprovalKey != null && !cachedApprovalKey.isBlank()
+                    && now < (approvalKeyExpiresAtMillis - APPROVAL_KEY_REFRESH_BUFFER_MILLIS)) {
+                return cachedApprovalKey;
+            }
+            String url = getBaseUrl() + APPROVAL_PATH;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
+            Map<String, String> body = Map.of(
+                    "grant_type", "client_credentials",
+                    "appkey", key,
+                    "secretkey", secret
+            );
+            HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     url, HttpMethod.POST, request, new ParameterizedTypeReference<Map<String, Object>>() {});
             if (response.getBody() == null) {
@@ -241,11 +267,15 @@ public class KisApiService {
             if (approvalKey == null || approvalKey.isBlank()) {
                 throw new ApiException("KIS 실시간 접속키 발급 실패. " + kisErrorMessage(res, "approval"), HttpStatus.SERVICE_UNAVAILABLE);
             }
+            cachedApprovalKey = approvalKey;
+            approvalKeyExpiresAtMillis = System.currentTimeMillis() + APPROVAL_KEY_TTL_MILLIS;
             return approvalKey;
         } catch (ApiException e) {
             throw e;
         } catch (RestClientException e) {
             throw new ApiException("KIS approval request failed: " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+        } finally {
+            approvalKeyLock.unlock();
         }
     }
 
