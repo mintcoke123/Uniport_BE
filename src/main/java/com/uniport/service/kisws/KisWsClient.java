@@ -51,7 +51,7 @@ public class KisWsClient {
                             log.info("KIS WS connect success");
                             String escaped = approvalKey.replace("\\", "\\\\").replace("\"", "\\\"");
                             String subscribeJson = "{\"header\":{\"approval_key\":\"" + escaped
-                                    + "\",\"custtype\":\"P\",\"tr_type\":\"1\",\"content-type\":\"utf-8\"}"
+                                    + "\",\"custtype\":\"P\",\"tr_type\":\"1\"}"
                                     + ",\"body\":{\"tr_id\":\"H0STCNT0\",\"tr_key\":\"005930\"}}";
                             webSocket.sendText(subscribeJson, true).whenComplete((w, ex) -> {
                                 if (ex != null) {
