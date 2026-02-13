@@ -53,30 +53,50 @@ public class KisWsClient {
                             String subscribeJson = "{\"header\":{\"approval_key\":\"" + escaped
                                     + "\",\"custtype\":\"P\",\"tr_type\":\"1\",\"content-type\":\"utf-8\"}"
                                     + ",\"body\":{\"tr_id\":\"H0STCNT0\",\"tr_key\":\"005930\"}}";
-                            webSocket.sendText(subscribeJson, true);
+                            webSocket.sendText(subscribeJson, true).whenComplete((w, ex) -> {
+                                if (ex != null) {
+                                    log.warn("KIS WS subscribe send failed: {}", ex.toString());
+                                } else {
+                                    log.info("KIS WS subscribe sent");
+                                }
+                            });
                             webSocket.request(1);
                         }
 
                         @Override
                         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-                            log.info("KIS WS recv: {}", data);
+                            String text = data != null ? data.toString() : "";
+                            if (text.contains("PINGPONG")) {
+                                webSocket.sendText(text, true).whenComplete((w, ex) -> {
+                                    if (ex == null) {
+                                        log.info("KIS WS pong sent");
+                                    }
+                                });
+                            } else {
+                                log.info("KIS WS recv: {}", data);
+                            }
                             webSocket.request(1);
                             return CompletableFuture.completedFuture(null);
                         }
 
                         @Override
                         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-                            log.info("KIS WS close");
+                            log.info("KIS WS close statusCode={} reason={}", statusCode, reason);
                             return CompletableFuture.completedFuture(null);
                         }
 
                         @Override
                         public void onError(WebSocket webSocket, Throwable error) {
-                            log.warn("KIS WS error");
+                            log.warn("KIS WS error: {}", error != null ? error.toString() : "");
+                        }
+                    })
+                    .whenComplete((ws, ex) -> {
+                        if (ex != null) {
+                            log.warn("KIS WS buildAsync failed: {}", ex.toString());
                         }
                     });
         } catch (Exception e) {
-            log.warn("KIS WS error");
+            log.warn("KIS WS error: {}", e.toString());
         }
     }
 }

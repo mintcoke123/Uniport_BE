@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
-import org.springframework.stereotype.Component;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 
 import java.net.URI;
@@ -16,10 +15,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * KIS 실시간 WebSocket 연결을 애플리케이션 기동 후 수립.
- * 연결 끊김 시 1~2회 재연결(짧은 backoff). 구독/메시지 파싱/프론트 중계는 하지 않음.
+ * KIS 실시간 WebSocket 연결 (Spring StandardWebSocketClient + KisWebSocketHandler).
+ * KisWsClient만 사용하도록 비활성화: @Component 제거로 빈 등록하지 않음.
  */
-@Component
+// @Component  // 비활성화: KIS WS는 KisWsClient 1개만 사용
 public class KisWebSocketConnectionRunner implements ApplicationListener<ApplicationReadyEvent> {
 
     private static final Logger log = LoggerFactory.getLogger(KisWebSocketConnectionRunner.class);
