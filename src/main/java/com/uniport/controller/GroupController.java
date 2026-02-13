@@ -245,7 +245,8 @@ public class GroupController {
         if (user == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
         }
-        String voteValue = body != null && body.containsKey("vote") ? body.get("vote") : "보류";
+        String voteValue = (body != null && body.containsKey("vote") && body.get("vote") != null)
+                ? body.get("vote") : "보류";
         return ResponseEntity.ok(voteService.submitVote(groupId, voteId, user, voteValue));
     }
 }

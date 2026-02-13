@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Map;
 
 /**
@@ -16,6 +19,8 @@ import java.util.Map;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Object> handleApiException(ApiException ex) {
@@ -39,6 +44,8 @@ public class GlobalExceptionHandler {
         if (uri != null && uri.startsWith("/h2-console")) {
             throw new RuntimeException(ex);
         }
+
+        log.error("Unhandled exception for {}: {}", uri, ex.getMessage(), ex);
 
         ErrorResponseDTO specBody = new ErrorResponseDTO(false, "Internal server error");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(specBody);

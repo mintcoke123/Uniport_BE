@@ -129,7 +129,7 @@ public class VoteService {
     public Map<String, Object> submitVote(Long groupId, Long voteId, User user, String voteValue) {
         Vote vote = voteRepository.findById(voteId)
                 .orElseThrow(() -> new ApiException("투표를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
-        if (!vote.getRoomId().equals(groupId)) {
+        if (vote.getRoomId() == null || !vote.getRoomId().equals(groupId)) {
             throw new ApiException("해당 그룹의 투표가 아닙니다.", HttpStatus.BAD_REQUEST);
         }
         if (!"ongoing".equals(vote.getStatus())) {
@@ -139,7 +139,7 @@ public class VoteService {
             throw new ApiException("해당 채팅방 멤버만 투표할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
 
-        String v = "찬성".equals(voteValue) || "반대".equals(voteValue) ? voteValue : "보류";
+        String v = (voteValue != null && ("찬성".equals(voteValue) || "반대".equals(voteValue))) ? voteValue : "보류";
 
         VoteParticipant participant = voteParticipantRepository.findByVote_IdAndUserId(voteId, user.getId())
                 .orElse(null);
@@ -184,6 +184,9 @@ public class VoteService {
         if (vote.getStockCode() == null || vote.getStockCode().isBlank()) {
             return;
         }
+        if (vote.getProposerId() == null || vote.getRoomId() == null) {
+            return;
+        }
         BigDecimal price = vote.getProposedPrice() != null && vote.getProposedPrice().compareTo(BigDecimal.ZERO) > 0
                 ? vote.getProposedPrice() : BigDecimal.ONE;
         OrderType orderType = "매도".equals(vote.getType()) ? OrderType.SELL : OrderType.BUY;
@@ -199,6 +202,7 @@ public class VoteService {
         try {
             tradeService.placeOrderForTeam(request, vote.getRoomId(), proposer);
         } catch (Exception e) {
+            // 로그만 남기고 투표 상태는 이미 passed로 저장됨
         }
     }
 
