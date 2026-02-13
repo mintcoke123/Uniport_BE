@@ -52,6 +52,18 @@ public class VoteService {
     @Transactional
     public Vote createVote(Long groupId, User proposer, String type, String stockName, String stockCode,
                            int quantity, BigDecimal proposedPrice, String reason) {
+        String normalizedCode = (stockCode != null && !stockCode.isBlank()) ? stockCode.trim() : "";
+        List<Vote> ongoing = voteRepository.findByRoomIdAndStatusOrderByCreatedAtDesc(groupId, "ongoing");
+        for (Vote v : ongoing) {
+            String vCode = (v.getStockCode() != null && !v.getStockCode().isBlank()) ? v.getStockCode().trim() : "";
+            if (v.getType() != null && v.getType().equals(type) && normalizedCode.equals(vCode)) {
+                throw new ApiException(
+                    "이미 해당 종목에 대한 " + type + " 투표가 진행 중입니다.",
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+        }
+
         int totalMembers = (int) matchingRoomMemberRepository.countByMatchingRoomId(groupId);
         if (totalMembers <= 0) {
             totalMembers = 3;
@@ -95,6 +107,7 @@ public class VoteService {
         map.put("id", v.getId());
         map.put("type", v.getType());
         map.put("stockName", v.getStockName());
+        map.put("stockCode", v.getStockCode() != null ? v.getStockCode() : "");
         map.put("proposerId", v.getProposerId());
         map.put("proposerName", v.getProposerName());
         map.put("quantity", v.getQuantity());

@@ -9,4 +9,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface VoteRepository extends JpaRepository<Vote, Long> {
 
     List<Vote> findByRoomIdOrderByCreatedAtDesc(Long roomId);
+
+    List<Vote> findByRoomIdAndStatusOrderByCreatedAtDesc(Long roomId, String status);
 }
