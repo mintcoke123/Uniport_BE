@@ -1,5 +1,7 @@
 package com.uniport.service.kisws;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.service.KisApiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,8 +53,8 @@ public class KisWsClient {
                             log.info("KIS WS connect success");
                             String escaped = approvalKey.replace("\\", "\\\\").replace("\"", "\\\"");
                             String subscribeJson = "{\"header\":{\"approval_key\":\"" + escaped
-                                    + "\",\"custtype\":\"P\",\"tr_type\":\"1\"}"
-                                    + ",\"body\":{\"tr_id\":\"H0STCNT0\",\"tr_key\":\"005930\"}}";
+                                    + "\",\"custtype\":\"P\",\"tr_type\":\"1\",\"content-type\":\"utf-8\"}"
+                                    + ",\"body\":{\"input\":{\"tr_id\":\"H0STCNT0\",\"tr_key\":\"005930\"}}}";
                             webSocket.sendText(subscribeJson, true).whenComplete((w, ex) -> {
                                 if (ex != null) {
                                     log.warn("KIS WS subscribe send failed: {}", ex.toString());
@@ -66,7 +68,27 @@ public class KisWsClient {
                         @Override
                         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
                             String text = data != null ? data.toString() : "";
-                            if (text.contains("PINGPONG")) {
+                            boolean isPingPong = false;
+                            boolean subscribeSuccess = false;
+                            try {
+                                JsonNode root = new ObjectMapper().readTree(text);
+                                JsonNode header = root.path("header");
+                                if (!header.isMissingNode()) {
+                                    String trId = header.path("tr_id").asText("");
+                                    if ("PINGPONG".equals(trId)) {
+                                        isPingPong = true;
+                                    }
+                                }
+                                JsonNode body = root.path("body");
+                                if (!body.isMissingNode()) {
+                                    String msg1 = body.path("msg1").asText("");
+                                    if ("SUBSCRIBE SUCCESS".equals(msg1)) {
+                                        subscribeSuccess = true;
+                                    }
+                                }
+                            } catch (Exception ignored) {
+                            }
+                            if (isPingPong) {
                                 webSocket.sendText(text, true).whenComplete((w, ex) -> {
                                     if (ex == null) {
                                         log.info("KIS WS pong sent");
@@ -74,6 +96,9 @@ public class KisWsClient {
                                 });
                             } else {
                                 log.info("KIS WS recv: {}", data);
+                            }
+                            if (subscribeSuccess) {
+                                log.info("KIS WS subscribe success");
                             }
                             webSocket.request(1);
                             return CompletableFuture.completedFuture(null);
