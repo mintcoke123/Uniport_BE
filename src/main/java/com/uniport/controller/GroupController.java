@@ -217,7 +217,12 @@ public class GroupController {
         String type = body != null && body.containsKey("type") ? String.valueOf(body.get("type")) : "매수";
         String stockName = body != null && body.containsKey("stockName") ? String.valueOf(body.get("stockName")) : "";
         String stockCode = body != null && body.containsKey("stockCode") ? String.valueOf(body.get("stockCode")) : null;
-        int quantity = body != null && body.containsKey("quantity") ? ((Number) body.get("quantity")).intValue() : 0;
+        int quantity = 0;
+        if (body != null && body.containsKey("quantity")) {
+            Object q = body.get("quantity");
+            if (q instanceof Number) quantity = ((Number) q).intValue();
+            else if (q != null) try { quantity = Integer.parseInt(String.valueOf(q)); } catch (NumberFormatException ignored) {}
+        }
         java.math.BigDecimal proposedPrice = body != null && body.containsKey("proposedPrice")
                 ? new java.math.BigDecimal(String.valueOf(body.get("proposedPrice"))) : java.math.BigDecimal.ZERO;
         String reason = body != null && body.containsKey("reason") ? String.valueOf(body.get("reason")) : "";
