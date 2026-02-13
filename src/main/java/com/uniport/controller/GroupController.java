@@ -242,7 +242,7 @@ public class GroupController {
             @RequestBody Map<String, String> body,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
-        if (user == null) {
+        if (user == null || user.getId() == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
         }
         String voteValue = (body != null && body.containsKey("vote") && body.get("vote") != null)

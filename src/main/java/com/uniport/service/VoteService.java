@@ -127,6 +127,9 @@ public class VoteService {
 
     @Transactional
     public Map<String, Object> submitVote(Long groupId, Long voteId, User user, String voteValue) {
+        if (user == null || user.getId() == null) {
+            throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
+        }
         Vote vote = voteRepository.findById(voteId)
                 .orElseThrow(() -> new ApiException("투표를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         if (vote.getRoomId() == null || !vote.getRoomId().equals(groupId)) {

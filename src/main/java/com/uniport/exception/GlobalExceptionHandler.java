@@ -47,7 +47,8 @@ public class GlobalExceptionHandler {
 
         log.error("Unhandled exception for {}: {}", uri, ex.getMessage(), ex);
 
-        ErrorResponseDTO specBody = new ErrorResponseDTO(false, "Internal server error");
+        String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+        ErrorResponseDTO specBody = new ErrorResponseDTO(false, "Internal server error: " + message);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(specBody);
     }
 }
