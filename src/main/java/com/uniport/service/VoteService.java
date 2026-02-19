@@ -26,6 +26,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -36,6 +37,11 @@ public class VoteService {
     public static final String ORDER_STRATEGY_CONDITIONAL = "CONDITIONAL";
     public static final String TRIGGER_DIRECTION_ABOVE = "ABOVE";
     public static final String TRIGGER_DIRECTION_BELOW = "BELOW";
+    public static final String STATUS_PASSED = "passed";
+    public static final String STATUS_PENDING = "pending";
+    public static final String STATUS_EXECUTING = "executing";
+    public static final String STATUS_EXECUTED = "executed";
+    public static final String STATUS_EXPIRED = "expired";
     private static final int EXECUTION_EXPIRY_DAYS = 60;
 
     private final VoteRepository voteRepository;
@@ -239,9 +245,46 @@ public class VoteService {
         int majority = (totalMembers / 2) + 1;
         boolean passed = agree >= 2 || (totalMembers == 1 && agree >= 1);
         if (passed) {
-            vote.setStatus("passed");
+            vote.setStatus(STATUS_PASSED);
             voteRepository.save(vote);
-            executeVoteOrder(vote);
+            String strategy = vote.getOrderStrategy() != null ? vote.getOrderStrategy() : ORDER_STRATEGY_MARKET;
+            BigDecimal currentPrice = resolveCurrentPrice(vote.getStockCode(), fallbackPrice(vote));
+            if (ORDER_STRATEGY_MARKET.equals(strategy)) {
+                if (vote.getStockCode() != null && !vote.getStockCode().isBlank()) {
+                    Optional<Vote> lockedOpt = voteRepository.findByIdForUpdate(voteId);
+                    if (lockedOpt.isPresent() && STATUS_PASSED.equals(lockedOpt.get().getStatus())) {
+                        Vote locked = lockedOpt.get();
+                        locked.setStatus(STATUS_EXECUTING);
+                        voteRepository.save(locked);
+                        try {
+                            executeVoteOrderWithPrice(locked, currentPrice);
+                        } catch (Exception e) {
+                            locked.setStatus(STATUS_PASSED);
+                            voteRepository.save(locked);
+                            throw e;
+                        }
+                    }
+                }
+            } else {
+                if (vote.getStockCode() != null && !vote.getStockCode().isBlank() && shouldExecute(vote, currentPrice)) {
+                    Optional<Vote> lockedOpt = voteRepository.findByIdForUpdate(voteId);
+                    if (lockedOpt.isPresent() && STATUS_PASSED.equals(lockedOpt.get().getStatus())) {
+                        Vote locked = lockedOpt.get();
+                        locked.setStatus(STATUS_EXECUTING);
+                        voteRepository.save(locked);
+                        try {
+                            executeVoteOrderWithPrice(locked, currentPrice);
+                        } catch (Exception e) {
+                            locked.setStatus(STATUS_PASSED);
+                            voteRepository.save(locked);
+                            throw e;
+                        }
+                    }
+                } else {
+                    vote.setStatus(STATUS_PENDING);
+                    voteRepository.save(vote);
+                }
+            }
         } else if (all.size() >= totalMembers && disagree >= majority) {
             vote.setStatus("rejected");
             voteRepository.save(vote);
@@ -263,63 +306,118 @@ public class VoteService {
         return t.length() >= 6 ? t : String.format("%6s", t).replace(' ', '0');
     }
 
-    /**
-     * 투표 통과 시 주문 실행. 체결가는 실시간 시세(캐시 또는 KIS API)를 사용하고,
-     * 실시간 시세를 구할 수 없을 때만 제안가를 사용한다.
-     */
-    private void executeVoteOrder(Vote vote) {
-        if (vote.getStockCode() == null || vote.getStockCode().isBlank()) {
+    /** 현재가 조회: PriceCache → KIS API → fallback (0이면 BigDecimal.ONE) */
+    public BigDecimal resolveCurrentPrice(String stockCode, BigDecimal fallbackProposedPrice) {
+        String code = normalizeStockCode(stockCode);
+        if (code.isEmpty()) return fallbackOrDefault(fallbackProposedPrice);
+        BigDecimal fromCache = priceCache.get(code)
+                .map(PriceSnapshot::getCurrentPrice)
+                .filter(p -> p != null && p.compareTo(BigDecimal.ZERO) > 0)
+                .orElse(null);
+        if (fromCache != null) return fromCache;
+        try {
+            StockPriceDTO dto = kisApiService.getStockPrice(stockCode);
+            if (dto != null && dto.getCurrentPrice() != null && dto.getCurrentPrice().compareTo(BigDecimal.ZERO) > 0) {
+                return dto.getCurrentPrice();
+            }
+        } catch (Exception ignored) {
+        }
+        return fallbackOrDefault(fallbackProposedPrice);
+    }
+
+    private static BigDecimal fallbackOrDefault(BigDecimal fallback) {
+        return fallback != null && fallback.compareTo(BigDecimal.ZERO) > 0 ? fallback : BigDecimal.ONE;
+    }
+
+    /** 조건 만족 시에만 체결. MARKET 항상 true; LIMIT: 매수 currentPrice<=limitPrice, 매도 currentPrice>=limitPrice; CONDITIONAL: ABOVE currentPrice>=triggerPrice, BELOW currentPrice<=triggerPrice */
+    public boolean shouldExecute(Vote vote, BigDecimal currentPrice) {
+        if (vote == null || currentPrice == null) return false;
+        String strategy = vote.getOrderStrategy() != null ? vote.getOrderStrategy() : ORDER_STRATEGY_MARKET;
+        if (ORDER_STRATEGY_MARKET.equals(strategy)) return true;
+        if (ORDER_STRATEGY_LIMIT.equals(strategy)) {
+            BigDecimal limit = vote.getLimitPrice();
+            if (limit == null) return false;
+            boolean isBuy = "매수".equals(vote.getType());
+            return isBuy ? currentPrice.compareTo(limit) <= 0 : currentPrice.compareTo(limit) >= 0;
+        }
+        if (ORDER_STRATEGY_CONDITIONAL.equals(strategy)) {
+            BigDecimal trigger = vote.getTriggerPrice();
+            String dir = vote.getTriggerDirection();
+            if (trigger == null || dir == null) return false;
+            if (TRIGGER_DIRECTION_ABOVE.equals(dir)) return currentPrice.compareTo(trigger) >= 0;
+            if (TRIGGER_DIRECTION_BELOW.equals(dir)) return currentPrice.compareTo(trigger) <= 0;
+            return false;
+        }
+        return false;
+    }
+
+    /** 체결 실행: 주문 후 vote.status=executed, executedAt 저장. 호출 전에 status=executing 저장해 두는 것은 호출자 책임. */
+    private void executeVoteOrderWithPrice(Vote vote, BigDecimal currentPrice) {
+        if (vote.getStockCode() == null || vote.getStockCode().isBlank() || vote.getProposerId() == null || vote.getRoomId() == null) {
             return;
         }
-        if (vote.getProposerId() == null || vote.getRoomId() == null) {
-            return;
-        }
-        BigDecimal price = resolveExecutionPrice(vote);
         OrderType orderType = "매도".equals(vote.getType()) ? OrderType.SELL : OrderType.BUY;
         String name = (vote.getStockName() != null && !vote.getStockName().isBlank()) ? vote.getStockName() : null;
         PlaceOrderRequestDTO request = PlaceOrderRequestDTO.builder()
                 .stockCode(vote.getStockCode())
                 .stockName(name)
                 .quantity(vote.getQuantity())
-                .price(price)
+                .price(currentPrice != null && currentPrice.compareTo(BigDecimal.ZERO) > 0 ? currentPrice : BigDecimal.ONE)
                 .orderType(orderType)
                 .build();
         User proposer = userRepository.findById(vote.getProposerId()).orElse(null);
-        try {
-            tradeService.placeOrderForTeam(request, vote.getRoomId(), proposer);
-        } catch (Exception e) {
-            // 로그만 남기고 투표 상태는 이미 passed로 저장됨
-        }
-    }
-
-    /** 실시간 시세(캐시 → KIS API) 우선, 없으면 제안가 사용 */
-    private BigDecimal resolveExecutionPrice(Vote vote) {
-        String code = normalizeStockCode(vote.getStockCode());
-        if (code.isEmpty()) return fallbackPrice(vote);
-
-        // 1) WebSocket 실시간 캐시
-        BigDecimal fromCache = priceCache.get(code)
-                .map(PriceSnapshot::getCurrentPrice)
-                .filter(p -> p != null && p.compareTo(BigDecimal.ZERO) > 0)
-                .orElse(null);
-        if (fromCache != null) return fromCache;
-
-        // 2) KIS 현재가 API
-        try {
-            StockPriceDTO dto = kisApiService.getStockPrice(vote.getStockCode());
-            if (dto != null && dto.getCurrentPrice() != null && dto.getCurrentPrice().compareTo(BigDecimal.ZERO) > 0) {
-                return dto.getCurrentPrice();
-            }
-        } catch (Exception ignored) {
-            // API 실패 시 제안가로 fallback
-        }
-
-        return fallbackPrice(vote);
+        tradeService.placeOrderForTeam(request, vote.getRoomId(), proposer);
+        vote.setStatus(STATUS_EXECUTED);
+        vote.setExecutedAt(Instant.now());
+        voteRepository.save(vote);
     }
 
     private static BigDecimal fallbackPrice(Vote vote) {
         return vote.getProposedPrice() != null && vote.getProposedPrice().compareTo(BigDecimal.ZERO) > 0
                 ? vote.getProposedPrice() : BigDecimal.ONE;
+    }
+
+    /** 표결 만료: ongoing 중 expiresAt <= now → status=expired */
+    @Transactional
+    public void processExpiredOngoingVotes() {
+        Instant now = Instant.now();
+        List<Vote> ongoing = voteRepository.findByStatus("ongoing");
+        for (Vote v : ongoing) {
+            if (v.getExpiresAt() != null && !v.getExpiresAt().isAfter(now)) {
+                v.setStatus(STATUS_EXPIRED);
+                voteRepository.save(v);
+            }
+        }
+    }
+
+    /** pending 스캔: executionExpiresAt 만료 → expired; 조건 만족 시 executing → execute → executed */
+    @Transactional
+    public void processPendingVotes() {
+        Instant now = Instant.now();
+        List<Vote> pending = voteRepository.findByStatus(STATUS_PENDING);
+        for (Vote v : pending) {
+            if (v.getStockCode() == null || v.getStockCode().isBlank()) continue;
+            if (v.getExecutionExpiresAt() != null && !v.getExecutionExpiresAt().isAfter(now)) {
+                v.setStatus(STATUS_EXPIRED);
+                voteRepository.save(v);
+                continue;
+            }
+            BigDecimal currentPrice = resolveCurrentPrice(v.getStockCode(), v.getProposedPrice());
+            if (!shouldExecute(v, currentPrice)) continue;
+            Optional<Vote> lockedOpt = voteRepository.findByIdForUpdate(v.getId());
+            if (lockedOpt.isEmpty()) continue;
+            Vote locked = lockedOpt.get();
+            if (!STATUS_PENDING.equals(locked.getStatus())) continue;
+            locked.setStatus(STATUS_EXECUTING);
+            voteRepository.save(locked);
+            try {
+                executeVoteOrderWithPrice(locked, currentPrice);
+            } catch (Exception e) {
+                locked.setStatus(STATUS_PENDING);
+                voteRepository.save(locked);
+                throw e;
+            }
+        }
     }
 
 }

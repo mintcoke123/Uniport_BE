@@ -72,7 +72,7 @@ public class Vote {
 
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String status = "ongoing";  // ongoing, passed, rejected, expired, pending, executed
+    private String status = "ongoing";  // ongoing, passed, rejected, expired, pending, executing, executed
 
     /** 주문 유형: MARKET | LIMIT | CONDITIONAL */
     @Column(name = "order_strategy", nullable = false, length = 20)
