@@ -235,7 +235,12 @@ public class GroupController {
         java.math.BigDecimal proposedPrice = body != null && body.containsKey("proposedPrice")
                 ? new java.math.BigDecimal(String.valueOf(body.get("proposedPrice"))) : java.math.BigDecimal.ZERO;
         String reason = body != null && body.containsKey("reason") ? String.valueOf(body.get("reason")) : "";
-        var vote = voteService.createVote(groupId, user, type, stockName, stockCode, quantity, proposedPrice, reason);
+        String orderStrategy = body != null && body.containsKey("orderStrategy") ? String.valueOf(body.get("orderStrategy")).trim() : null;
+        BigDecimal limitPrice = parseBigDecimalFromMap(body, "limitPrice");
+        BigDecimal triggerPrice = parseBigDecimalFromMap(body, "triggerPrice");
+        String triggerDirection = body != null && body.containsKey("triggerDirection") ? String.valueOf(body.get("triggerDirection")).trim() : null;
+        var vote = voteService.createVote(groupId, user, type, stockName, stockCode, quantity, proposedPrice, reason,
+                orderStrategy, limitPrice, triggerPrice, triggerDirection);
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
         result.put("voteId", vote.getId());
@@ -257,5 +262,17 @@ public class GroupController {
         String voteValue = (body != null && body.containsKey("vote") && body.get("vote") != null)
                 ? body.get("vote") : "보류";
         return ResponseEntity.ok(voteService.submitVote(groupId, voteId, user, voteValue));
+    }
+
+    private static BigDecimal parseBigDecimalFromMap(Map<String, Object> body, String key) {
+        if (body == null || !body.containsKey(key) || body.get(key) == null) return null;
+        Object v = body.get(key);
+        if (v instanceof BigDecimal) return (BigDecimal) v;
+        if (v instanceof Number) return BigDecimal.valueOf(((Number) v).doubleValue());
+        try {
+            return new BigDecimal(String.valueOf(v).trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

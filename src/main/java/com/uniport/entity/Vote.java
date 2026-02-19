@@ -72,7 +72,32 @@ public class Vote {
 
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String status = "ongoing";  // ongoing, passed, rejected, expired
+    private String status = "ongoing";  // ongoing, passed, rejected, expired, pending, executed
+
+    /** 주문 유형: MARKET | LIMIT | CONDITIONAL */
+    @Column(name = "order_strategy", nullable = false, length = 20)
+    @Builder.Default
+    private String orderStrategy = "MARKET";
+
+    /** 지정가 (LIMIT 시 필수) */
+    @Column(name = "limit_price", precision = 19, scale = 4)
+    private BigDecimal limitPrice;
+
+    /** 조건가 (CONDITIONAL 시 필수) */
+    @Column(name = "trigger_price", precision = 19, scale = 4)
+    private BigDecimal triggerPrice;
+
+    /** 조건 방향: ABOVE | BELOW (CONDITIONAL 시 필수) */
+    @Column(name = "trigger_direction", length = 10)
+    private String triggerDirection;
+
+    /** 예약/조건주문 유효기간 (LIMIT/CONDITIONAL 시 설정, MARKET은 null) */
+    @Column(name = "execution_expires_at")
+    private Instant executionExpiresAt;
+
+    /** 실제 체결 완료 시각 */
+    @Column(name = "executed_at")
+    private Instant executedAt;
 
     @OneToMany(mappedBy = "vote", fetch = FetchType.LAZY, orphanRemoval = true)
     @Builder.Default

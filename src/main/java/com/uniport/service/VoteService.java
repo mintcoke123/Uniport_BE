@@ -31,6 +31,13 @@ import java.util.stream.Collectors;
 @Service
 public class VoteService {
 
+    public static final String ORDER_STRATEGY_MARKET = "MARKET";
+    public static final String ORDER_STRATEGY_LIMIT = "LIMIT";
+    public static final String ORDER_STRATEGY_CONDITIONAL = "CONDITIONAL";
+    public static final String TRIGGER_DIRECTION_ABOVE = "ABOVE";
+    public static final String TRIGGER_DIRECTION_BELOW = "BELOW";
+    private static final int EXECUTION_EXPIRY_DAYS = 60;
+
     private final VoteRepository voteRepository;
     private final VoteParticipantRepository voteParticipantRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
@@ -60,7 +67,36 @@ public class VoteService {
 
     @Transactional
     public Vote createVote(Long groupId, User proposer, String type, String stockName, String stockCode,
-                           int quantity, BigDecimal proposedPrice, String reason) {
+                           int quantity, BigDecimal proposedPrice, String reason,
+                           String orderStrategy, BigDecimal limitPrice, BigDecimal triggerPrice, String triggerDirection) {
+        String strategy = (orderStrategy != null && !orderStrategy.isBlank()) ? orderStrategy.trim().toUpperCase() : ORDER_STRATEGY_MARKET;
+        if (!ORDER_STRATEGY_MARKET.equals(strategy) && !ORDER_STRATEGY_LIMIT.equals(strategy) && !ORDER_STRATEGY_CONDITIONAL.equals(strategy)) {
+            throw new ApiException("orderStrategy must be MARKET, LIMIT, or CONDITIONAL", HttpStatus.BAD_REQUEST);
+        }
+        if (ORDER_STRATEGY_MARKET.equals(strategy)) {
+            limitPrice = null;
+            triggerPrice = null;
+            triggerDirection = null;
+        } else if (ORDER_STRATEGY_LIMIT.equals(strategy)) {
+            if (limitPrice == null || limitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new ApiException("LIMIT order requires limitPrice > 0", HttpStatus.BAD_REQUEST);
+            }
+            triggerPrice = null;
+            triggerDirection = null;
+        } else {
+            if (triggerPrice == null || triggerPrice.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new ApiException("CONDITIONAL order requires triggerPrice > 0", HttpStatus.BAD_REQUEST);
+            }
+            if (triggerDirection == null || triggerDirection.isBlank()) {
+                throw new ApiException("CONDITIONAL order requires triggerDirection (ABOVE or BELOW)", HttpStatus.BAD_REQUEST);
+            }
+            String dir = triggerDirection.trim().toUpperCase();
+            if (!TRIGGER_DIRECTION_ABOVE.equals(dir) && !TRIGGER_DIRECTION_BELOW.equals(dir)) {
+                throw new ApiException("triggerDirection must be ABOVE or BELOW", HttpStatus.BAD_REQUEST);
+            }
+            triggerDirection = dir;
+        }
+
         String normalizedCode = (stockCode != null && !stockCode.isBlank()) ? stockCode.trim() : "";
         List<Vote> ongoing = voteRepository.findByRoomIdAndStatusOrderByCreatedAtDesc(groupId, "ongoing");
         for (Vote v : ongoing) {
@@ -79,6 +115,10 @@ public class VoteService {
         }
         Instant now = Instant.now();
         Instant expiresAt = now.plus(24, ChronoUnit.HOURS);
+        Instant executionExpiresAt = null;
+        if (ORDER_STRATEGY_LIMIT.equals(strategy) || ORDER_STRATEGY_CONDITIONAL.equals(strategy)) {
+            executionExpiresAt = now.plus(EXECUTION_EXPIRY_DAYS, ChronoUnit.DAYS);
+        }
 
         Vote vote = Vote.builder()
                 .roomId(groupId)
@@ -94,6 +134,11 @@ public class VoteService {
                 .expiresAt(expiresAt)
                 .totalMembers(totalMembers)
                 .status("ongoing")
+                .orderStrategy(strategy)
+                .limitPrice(limitPrice)
+                .triggerPrice(triggerPrice)
+                .triggerDirection(triggerDirection)
+                .executionExpiresAt(executionExpiresAt)
                 .build();
         vote = voteRepository.save(vote);
         VoteParticipant proposerVote = VoteParticipant.builder()
@@ -134,6 +179,12 @@ public class VoteService {
         map.put("expiresAt", v.getExpiresAt().toString());
         map.put("totalMembers", v.getTotalMembers());
         map.put("status", v.getStatus());
+        map.put("orderStrategy", v.getOrderStrategy() != null ? v.getOrderStrategy() : ORDER_STRATEGY_MARKET);
+        map.put("limitPrice", v.getLimitPrice());
+        map.put("triggerPrice", v.getTriggerPrice());
+        map.put("triggerDirection", v.getTriggerDirection());
+        map.put("executionExpiresAt", v.getExecutionExpiresAt() != null ? v.getExecutionExpiresAt().toString() : null);
+        map.put("executedAt", v.getExecutedAt() != null ? v.getExecutedAt().toString() : null);
 
         List<Map<String, Object>> participants = voteParticipantRepository.findByVote_IdOrderById(v.getId())
                 .stream()
