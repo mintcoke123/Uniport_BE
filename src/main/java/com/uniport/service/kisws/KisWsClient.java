@@ -3,6 +3,7 @@ package com.uniport.service.kisws;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.service.KisApiService;
+import com.uniport.websocket.PriceBroadcaster;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +34,7 @@ public class KisWsClient {
     private final StockRealtimeCache stockRealtimeCache;
     private final PriceCache priceCache;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
+    private final PriceBroadcaster priceBroadcaster;
 
     /** 연결된 WebSocket (onOpen에서 설정, onClose에서 null) */
     private volatile WebSocket webSocketRef;
@@ -48,11 +50,13 @@ public class KisWsClient {
     private static final int IDX_VOLUME = 5;
 
     public KisWsClient(KisApiService kisApiService, StockRealtimeCache stockRealtimeCache,
-                      PriceCache priceCache, @Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
+                      PriceCache priceCache, @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
+                      PriceBroadcaster priceBroadcaster) {
         this.kisApiService = kisApiService;
         this.stockRealtimeCache = stockRealtimeCache;
         this.priceCache = priceCache;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
+        this.priceBroadcaster = priceBroadcaster;
     }
 
     @PostConstruct
@@ -123,6 +127,7 @@ public class KisWsClient {
                                                         volume != null ? volume : 0L,
                                                         now);
                                                 priceCache.put(stockCode, snapshot);
+                                                priceBroadcaster.broadcast(stockCode, snapshot);
                                                 RealtimeStock rt = new RealtimeStock(stockCode, currentPrice, change != null ? change : BigDecimal.ZERO, changeRate != null ? changeRate : BigDecimal.ZERO, volume != null ? volume : 0L, now);
                                                 stockRealtimeCache.put(stockCode, rt);
                                                 log.debug("실시간 캐시 갱신 stock={} price={} vol={}", stockCode, currentPrice, volume);
