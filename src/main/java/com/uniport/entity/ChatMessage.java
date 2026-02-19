@@ -39,6 +39,10 @@ public class ChatMessage {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    /** 투표 생성 시 채팅 카드와 1:1 매칭. 동일 voteId로 중복 저장 방지 */
+    @Column(name = "vote_id")
+    private Long voteId;
+
     public static ChatMessage of(Long roomId, Long userId, String userNickname, String message) {
         return ChatMessage.builder()
                 .roomId(roomId)

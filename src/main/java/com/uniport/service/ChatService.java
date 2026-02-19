@@ -32,13 +32,25 @@ public class ChatService {
         return chatMessageRepository.save(msg);
     }
 
-    /** 투자계획 공유용: type=trade, tradeData 저장 시 message에 JSON 문자열로 저장 */
+    /** 투자계획 공유용: type=trade, tradeData 저장. tradeData에 voteId가 있으면 동일 room+voteId 기존 메시지 반환(중복 방지) */
     @Transactional
     public ChatMessage saveTradeMessage(Long roomId, Long userId, String userNickname, Map<String, Object> tradeData) {
+        Long voteId = null;
+        if (tradeData != null && tradeData.containsKey("voteId")) {
+            Object v = tradeData.get("voteId");
+            if (v instanceof Number) voteId = ((Number) v).longValue();
+        }
+        if (voteId != null) {
+            var existing = chatMessageRepository.findByRoomIdAndVoteId(roomId, voteId);
+            if (existing.isPresent()) return existing.get();
+        }
         try {
-            Map<String, Object> payload = Map.of("type", "trade", "tradeData", tradeData != null ? tradeData : Map.of());
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "trade");
+            payload.put("tradeData", tradeData != null ? tradeData : Map.of());
             String message = OBJECT_MAPPER.writeValueAsString(payload);
             ChatMessage msg = ChatMessage.of(roomId, userId, userNickname, message);
+            msg.setVoteId(voteId);
             return chatMessageRepository.save(msg);
         } catch (Exception e) {
             throw new RuntimeException("Failed to save trade message", e);

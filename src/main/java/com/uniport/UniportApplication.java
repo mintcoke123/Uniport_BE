@@ -15,6 +15,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -25,7 +26,11 @@ import java.math.BigDecimal;
 public class UniportApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(UniportApplication.class, args);
+		var app = SpringApplication.run(UniportApplication.class, args);
+		Environment env = app.getEnvironment();
+		String active = String.join(",", env.getActiveProfiles().length > 0 ? env.getActiveProfiles() : env.getDefaultProfiles());
+		String ddlAuto = env.getProperty("spring.jpa.hibernate.ddl-auto", "not-set");
+		System.out.println("[uniport] spring.profiles.active=" + active + " spring.jpa.hibernate.ddl-auto=" + ddlAuto);
 	}
 
 	/**

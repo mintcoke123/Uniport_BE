@@ -264,6 +264,19 @@ public class GroupController {
         return ResponseEntity.ok(voteService.submitVote(groupId, voteId, user, voteValue));
     }
 
+    /** 대기 중인 조건주문 취소. 제안자만 가능. */
+    @PostMapping("/{groupId}/votes/{voteId}/cancel")
+    public ResponseEntity<Map<String, Object>> cancelPendingVote(
+            @PathVariable Long groupId,
+            @PathVariable Long voteId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
+        if (user == null || user.getId() == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
+        }
+        return ResponseEntity.ok(voteService.cancelPendingVote(groupId, voteId, user));
+    }
+
     private static BigDecimal parseBigDecimalFromMap(Map<String, Object> body, String key) {
         if (body == null || !body.containsKey(key) || body.get(key) == null) return null;
         Object v = body.get(key);

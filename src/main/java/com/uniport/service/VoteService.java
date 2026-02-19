@@ -42,6 +42,7 @@ public class VoteService {
     public static final String STATUS_EXECUTING = "executing";
     public static final String STATUS_EXECUTED = "executed";
     public static final String STATUS_EXPIRED = "expired";
+    public static final String STATUS_CANCELLED = "cancelled";
     private static final int EXECUTION_EXPIRY_DAYS = 60;
 
     private final VoteRepository voteRepository;
@@ -292,11 +293,34 @@ public class VoteService {
             voteRepository.save(vote);
         }
 
+        Vote updated = voteRepository.findById(voteId).orElse(vote);
         return Map.of(
                 "success", true,
                 "message", "투표가 반영되었습니다.",
-                "vote", Map.<String, Object>of("id", voteId, "vote", v)
+                "vote", Map.<String, Object>of("id", voteId, "vote", v, "status", updated.getStatus() != null ? updated.getStatus() : vote.getStatus())
         );
+    }
+
+    /** pending 상태 조건주문 취소. 제안자만 취소 가능. */
+    @Transactional
+    public Map<String, Object> cancelPendingVote(Long groupId, Long voteId, User user) {
+        if (user == null || user.getId() == null) {
+            throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
+        }
+        Vote vote = voteRepository.findById(voteId)
+                .orElseThrow(() -> new ApiException("투표를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (vote.getRoomId() == null || !vote.getRoomId().equals(groupId)) {
+            throw new ApiException("해당 그룹의 투표가 아닙니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (!STATUS_PENDING.equals(vote.getStatus())) {
+            throw new ApiException("대기 중인 투표만 취소할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (!vote.getProposerId().equals(user.getId())) {
+            throw new ApiException("제안자만 대기 취소할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+        vote.setStatus(STATUS_CANCELLED);
+        voteRepository.save(vote);
+        return Map.of("success", true, "message", "대기가 취소되었습니다.", "vote", Map.<String, Object>of("id", voteId, "status", STATUS_CANCELLED));
     }
 
     /** 종목코드 6자리 정규화 (캐시 키 등에 사용) */
