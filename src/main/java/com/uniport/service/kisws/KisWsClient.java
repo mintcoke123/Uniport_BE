@@ -42,12 +42,13 @@ public class KisWsClient {
     /** PINGPONG 로그 억제: 마지막 info 로그 시각 */
     private volatile long lastPongLogMillis;
 
-    /** H0STCNT0 payload(^ 구분) 필드 순서: [0]MKSC_SHRN_ISCD, [1]tradeTime(미사용), [2]STCK_PRPR, [3]PRDY_VRSS, [4]PRDY_CTRT, [5]ACML_VOL */
+    /** H0STCNT0 payload(^ 구분) 필드 순서: 명세 [실시간-003] Body 순서
+     * [0]MKSC_SHRN_ISCD, [1]STCK_CNTG_HOUR, [2]STCK_PRPR, [3]PRDY_VRSS_SIGN, [4]PRDY_VRSS, [5]PRDY_CTRT, ... [13]ACML_VOL */
     private static final int IDX_STOCK_CODE = 0;
-    private static final int IDX_CURRENT_PRICE = 2;
-    private static final int IDX_CHANGE = 3;
-    private static final int IDX_CHANGE_RATE = 4;
-    private static final int IDX_VOLUME = 5;
+    private static final int IDX_CURRENT_PRICE = 2;   // STCK_PRPR
+    private static final int IDX_CHANGE = 4;          // PRDY_VRSS (전일 대비)
+    private static final int IDX_CHANGE_RATE = 5;     // PRDY_CTRT (전일 대비율)
+    private static final int IDX_ACML_VOL = 13;      // ACML_VOL (누적 거래량)
 
     public KisWsClient(KisApiService kisApiService, StockRealtimeCache stockRealtimeCache,
                       PriceCache priceCache, @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
@@ -112,12 +113,12 @@ public class KisWsClient {
                                     if (recvstr.length >= 3 && "H0STCNT0".equals(recvstr[1])) {
                                         String payload = recvstr.length >= 4 ? recvstr[3] : recvstr[2];
                                         String[] fields = payload.split("\\^", -1);
-                                        if (fields.length > IDX_VOLUME) {
+                                        if (fields.length > IDX_CHANGE_RATE) {
                                             String stockCode = safeTrim(fields[IDX_STOCK_CODE]);
                                             BigDecimal currentPrice = parseBigDecimal(fields[IDX_CURRENT_PRICE]);
                                             BigDecimal change = parseBigDecimal(fields[IDX_CHANGE]);
                                             BigDecimal changeRate = parseBigDecimal(fields[IDX_CHANGE_RATE]);
-                                            Long volume = parseLong(fields[IDX_VOLUME]);
+                                            Long volume = fields.length > IDX_ACML_VOL ? parseLong(fields[IDX_ACML_VOL]) : 0L;
                                             if (stockCode != null && currentPrice != null) {
                                                 long now = System.currentTimeMillis();
                                                 PriceSnapshot snapshot = new PriceSnapshot(

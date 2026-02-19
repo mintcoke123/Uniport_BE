@@ -1,6 +1,7 @@
 package com.uniport.service;
 
 import com.uniport.dto.PlaceOrderRequestDTO;
+import com.uniport.dto.StockPriceDTO;
 import com.uniport.entity.OrderType;
 import com.uniport.entity.User;
 import com.uniport.entity.Vote;
@@ -11,6 +12,8 @@ import com.uniport.repository.OrderRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
+import com.uniport.service.kisws.PriceCache;
+import com.uniport.service.kisws.PriceSnapshot;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,19 +37,25 @@ public class VoteService {
     private final OrderRepository orderRepository;
     private final TradeService tradeService;
     private final UserRepository userRepository;
+    private final PriceCache priceCache;
+    private final KisApiService kisApiService;
 
     public VoteService(VoteRepository voteRepository,
                        VoteParticipantRepository voteParticipantRepository,
                        MatchingRoomMemberRepository matchingRoomMemberRepository,
                        OrderRepository orderRepository,
                        TradeService tradeService,
-                       UserRepository userRepository) {
+                       UserRepository userRepository,
+                       PriceCache priceCache,
+                       KisApiService kisApiService) {
         this.voteRepository = voteRepository;
         this.voteParticipantRepository = voteParticipantRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.orderRepository = orderRepository;
         this.tradeService = tradeService;
         this.userRepository = userRepository;
+        this.priceCache = priceCache;
+        this.kisApiService = kisApiService;
     }
 
     @Transactional
@@ -196,6 +205,17 @@ public class VoteService {
         );
     }
 
+    /** 종목코드 6자리 정규화 (캐시 키 등에 사용) */
+    private static String normalizeStockCode(String code) {
+        if (code == null || code.isBlank()) return "";
+        String t = code.trim();
+        return t.length() >= 6 ? t : String.format("%6s", t).replace(' ', '0');
+    }
+
+    /**
+     * 투표 통과 시 주문 실행. 체결가는 실시간 시세(캐시 또는 KIS API)를 사용하고,
+     * 실시간 시세를 구할 수 없을 때만 제안가를 사용한다.
+     */
     private void executeVoteOrder(Vote vote) {
         if (vote.getStockCode() == null || vote.getStockCode().isBlank()) {
             return;
@@ -203,8 +223,7 @@ public class VoteService {
         if (vote.getProposerId() == null || vote.getRoomId() == null) {
             return;
         }
-        BigDecimal price = vote.getProposedPrice() != null && vote.getProposedPrice().compareTo(BigDecimal.ZERO) > 0
-                ? vote.getProposedPrice() : BigDecimal.ONE;
+        BigDecimal price = resolveExecutionPrice(vote);
         OrderType orderType = "매도".equals(vote.getType()) ? OrderType.SELL : OrderType.BUY;
         String name = (vote.getStockName() != null && !vote.getStockName().isBlank()) ? vote.getStockName() : null;
         PlaceOrderRequestDTO request = PlaceOrderRequestDTO.builder()
@@ -220,6 +239,36 @@ public class VoteService {
         } catch (Exception e) {
             // 로그만 남기고 투표 상태는 이미 passed로 저장됨
         }
+    }
+
+    /** 실시간 시세(캐시 → KIS API) 우선, 없으면 제안가 사용 */
+    private BigDecimal resolveExecutionPrice(Vote vote) {
+        String code = normalizeStockCode(vote.getStockCode());
+        if (code.isEmpty()) return fallbackPrice(vote);
+
+        // 1) WebSocket 실시간 캐시
+        BigDecimal fromCache = priceCache.get(code)
+                .map(PriceSnapshot::getCurrentPrice)
+                .filter(p -> p != null && p.compareTo(BigDecimal.ZERO) > 0)
+                .orElse(null);
+        if (fromCache != null) return fromCache;
+
+        // 2) KIS 현재가 API
+        try {
+            StockPriceDTO dto = kisApiService.getStockPrice(vote.getStockCode());
+            if (dto != null && dto.getCurrentPrice() != null && dto.getCurrentPrice().compareTo(BigDecimal.ZERO) > 0) {
+                return dto.getCurrentPrice();
+            }
+        } catch (Exception ignored) {
+            // API 실패 시 제안가로 fallback
+        }
+
+        return fallbackPrice(vote);
+    }
+
+    private static BigDecimal fallbackPrice(Vote vote) {
+        return vote.getProposedPrice() != null && vote.getProposedPrice().compareTo(BigDecimal.ZERO) > 0
+                ? vote.getProposedPrice() : BigDecimal.ONE;
     }
 
 }
