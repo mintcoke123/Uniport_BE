@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -17,6 +18,9 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * KIS 실시간 WebSocket 연결 (Java 표준 java.net.http.WebSocket).
@@ -36,8 +40,21 @@ public class KisWsClient {
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final PriceBroadcaster priceBroadcaster;
 
-    /** 연결된 WebSocket (onOpen에서 설정, onClose에서 null) */
+    /** 연결된 WebSocket (onOpen에서 설정, onClose/send 실패 시 null) */
     private volatile WebSocket webSocketRef;
+
+    /** sendSubscribe 동시 호출 방지 및 send 실패 시 ref 정리 */
+    private final Object sendLock = new Object();
+
+    /** 재연결 스케줄 중복 방지 */
+    private volatile boolean reconnectScheduled;
+    private static final long RECONNECT_DELAY_MS = 5_000L;
+    private final ScheduledExecutorService reconnectExecutor =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "kis-ws-reconnect");
+                t.setDaemon(true);
+                return t;
+            });
 
     /** PINGPONG 로그 억제: 마지막 info 로그 시각 */
     private volatile long lastPongLogMillis;
@@ -163,6 +180,7 @@ public class KisWsClient {
                             webSocketRef = null;
                             kisWsSubscriptionManager.clearSubscribedCodes();
                             log.info("KIS WS close statusCode={} reason={}", statusCode, reason);
+                            scheduleReconnect();
                             return CompletableFuture.completedFuture(null);
                         }
 
@@ -174,6 +192,8 @@ public class KisWsClient {
                     .whenComplete((ws, ex) -> {
                         if (ex != null) {
                             log.warn("KIS WS buildAsync failed: {}", ex.toString());
+                            webSocketRef = null;
+                            scheduleReconnect();
                         }
                     });
         } catch (Exception e) {
@@ -187,30 +207,80 @@ public class KisWsClient {
     }
 
     /**
-     * H0STCNT0 실시간 체결 구독 전송. 연결된 경우에만 전송.
-     * KIS 문서: body는 반드시 {"input": {...}} 형태로 감싼다.
-     * tr_key에 6자리 종목코드 사용.
+     * Sends H0STCNT0 subscribe. Uses sendLock to serialize sends. On send failure (e.g. Output closed),
+     * clears webSocketRef and schedules reconnect. KIS body.input JSON format.
      */
     public void sendSubscribe(String stockCode) {
-        if (stockCode == null || stockCode.isBlank() || webSocketRef == null) {
+        if (stockCode == null || stockCode.isBlank()) {
             return;
         }
         String code = stockCode.length() >= 6 ? stockCode : String.format("%6s", stockCode).replace(' ', '0');
+        String approvalKey;
         try {
-            String approvalKey = kisApiService.getWebSocketApprovalKey();
-            String escaped = approvalKey.replace("\\", "\\\\").replace("\"", "\\\"");
-            String subscribeJson = "{\"header\":{\"approval_key\":\"" + escaped
-                    + "\",\"custtype\":\"P\",\"tr_type\":\"1\",\"content-type\":\"utf-8\"}"
-                    + ",\"body\":{\"input\":{\"tr_id\":\"H0STCNT0\",\"tr_key\":\"" + code + "\"}}}";
-            webSocketRef.sendText(subscribeJson, true).whenComplete((w, ex) -> {
-                if (ex != null) {
-                    log.warn("KIS WS subscribe send failed: {}", ex.toString());
-                } else {
-                    log.debug("KIS WS subscribe sent: {}", code);
-                }
-            });
+            approvalKey = kisApiService.getWebSocketApprovalKey();
         } catch (Exception e) {
-            log.warn("KIS WS subscribe failed");
+            log.debug("KIS WS subscribe skipped (approval key): {}", e.getMessage());
+            return;
+        }
+        String escaped = approvalKey.replace("\\", "\\\\").replace("\"", "\\\"");
+        String subscribeJson = "{\"header\":{\"approval_key\":\"" + escaped
+                + "\",\"custtype\":\"P\",\"tr_type\":\"1\",\"content-type\":\"utf-8\"}"
+                + ",\"body\":{\"input\":{\"tr_id\":\"H0STCNT0\",\"tr_key\":\"" + code + "\"}}}";
+
+        synchronized (sendLock) {
+            WebSocket ws = webSocketRef;
+            if (ws == null) {
+                return;
+            }
+            try {
+                ws.sendText(subscribeJson, true).whenComplete((w, ex) -> {
+                    if (ex != null) {
+                        log.warn("KIS WS subscribe send failed: {}", ex.toString());
+                        webSocketRef = null;
+                        scheduleReconnect();
+                    } else {
+                        log.debug("KIS WS subscribe sent: {}", code);
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("KIS WS subscribe failed: {}", e.toString());
+                webSocketRef = null;
+                scheduleReconnect();
+            }
+        }
+    }
+
+    /** 지연 재연결 1회 스케줄. 중복 스케줄 방지. */
+    private void scheduleReconnect() {
+        if (!kisApiService.isKisConfigured()) {
+            return;
+        }
+        synchronized (sendLock) {
+            if (reconnectScheduled) {
+                return;
+            }
+            reconnectScheduled = true;
+        }
+        reconnectExecutor.schedule(() -> {
+            try {
+                log.info("KIS WS reconnect attempt");
+                connect();
+            } finally {
+                reconnectScheduled = false;
+            }
+        }, RECONNECT_DELAY_MS, TimeUnit.MILLISECONDS);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        reconnectExecutor.shutdown();
+        try {
+            if (!reconnectExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                reconnectExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            reconnectExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 
