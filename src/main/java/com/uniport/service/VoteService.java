@@ -330,15 +330,14 @@ public class VoteService {
         return t.length() >= 6 ? t : String.format("%6s", t).replace(' ', '0');
     }
 
-    /** 현재가 조회: PriceCache → KIS API → fallback (0이면 BigDecimal.ONE) */
+    /**
+     * 체결가용 현재가 조회.
+     * getStockPrice(KIS API + 60초 HTTP 캐시)를 우선 사용해, 장 마감/모의 환경에서 WS 틱에 따라
+     * 체결가가 요청마다 바뀌는 현상을 막음. 실패 시에만 PriceCache → fallback.
+     */
     public BigDecimal resolveCurrentPrice(String stockCode, BigDecimal fallbackProposedPrice) {
         String code = normalizeStockCode(stockCode);
         if (code.isEmpty()) return fallbackOrDefault(fallbackProposedPrice);
-        BigDecimal fromCache = priceCache.get(code)
-                .map(PriceSnapshot::getCurrentPrice)
-                .filter(p -> p != null && p.compareTo(BigDecimal.ZERO) > 0)
-                .orElse(null);
-        if (fromCache != null) return fromCache;
         try {
             StockPriceDTO dto = kisApiService.getStockPrice(stockCode);
             if (dto != null && dto.getCurrentPrice() != null && dto.getCurrentPrice().compareTo(BigDecimal.ZERO) > 0) {
@@ -346,6 +345,11 @@ public class VoteService {
             }
         } catch (Exception ignored) {
         }
+        BigDecimal fromCache = priceCache.get(code)
+                .map(PriceSnapshot::getCurrentPrice)
+                .filter(p -> p != null && p.compareTo(BigDecimal.ZERO) > 0)
+                .orElse(null);
+        if (fromCache != null) return fromCache;
         return fallbackOrDefault(fallbackProposedPrice);
     }
 

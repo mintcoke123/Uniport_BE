@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -44,6 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Service
 public class KisApiService {
 
+    private static final Logger log = LoggerFactory.getLogger(KisApiService.class);
     private static final String TOKEN_PATH = "/oauth2/tokenP";
     private static final String TOKEN_REVOKE_PATH = "/oauth2/revokeP";
     /** 실시간(웹소켓) 접속키 발급 */
@@ -72,10 +74,14 @@ public class KisApiService {
     public static final String ERROR_CODE_KIS_NOT_CONFIGURED = "KIS_NOT_CONFIGURED";
 
     private static final long PRICE_CACHE_FRESH_MILLIS = 3000L;
+    /** HTTP로 조회한 현재가 재사용 TTL. 시장가가 바뀌지 않는 구간에서 평가액이 요청마다 달라지는 것 방지. */
+    private static final long HTTP_PRICE_CACHE_TTL_MILLIS = 60_000L;
 
     private final RestTemplate restTemplate;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final PriceCache priceCache;
+    /** HTTP 현재가 조회 결과 캐시(종목코드 -> (DTO, 만료시각)). 시장가 고정 구간에서 동일 가격 재사용. */
+    private final ConcurrentHashMap<String, CachedHttpPriceEntry> httpPriceCache = new ConcurrentHashMap<>();
 
     @Value("${kis.api.base-url:https://openapi.koreainvestment.com:9443}")
     private String baseUrl;
@@ -321,8 +327,22 @@ public class KisApiService {
         if (cached.isPresent()) {
             PriceSnapshot sn = cached.get();
             if (System.currentTimeMillis() - sn.getUpdatedAtMillis() <= PRICE_CACHE_FRESH_MILLIS) {
-                return mapPriceSnapshotToStockPriceDTO(normalized, sn);
+                StockPriceDTO dto = mapPriceSnapshotToStockPriceDTO(normalized, sn);
+                if (log.isDebugEnabled()) {
+                    log.debug("[getStockPrice] stockCode={} source=CACHE currentPrice={} updatedAtMillis={}",
+                            normalized, dto.getCurrentPrice(), sn.getUpdatedAtMillis());
+                }
+                return dto;
             }
+        }
+        long now = System.currentTimeMillis();
+        CachedHttpPriceEntry httpCached = httpPriceCache.get(normalized);
+        if (httpCached != null && httpCached.expiresAtMillis > now) {
+            if (log.isDebugEnabled()) {
+                log.debug("[getStockPrice] stockCode={} source=HTTP_CACHE currentPrice={}",
+                        normalized, httpCached.dto.getCurrentPrice());
+            }
+            return httpCached.dto;
         }
         String url = UriComponentsBuilder.fromUriString(getBaseUrl() + STOCK_PRICE_PATH)
                 .queryParam("FID_COND_MRKT_DIV_CODE", "J")
@@ -347,11 +367,26 @@ public class KisApiService {
             if (outputMap == null) {
                 throw new ApiException("KIS stock price output2 is null", HttpStatus.SERVICE_UNAVAILABLE);
             }
-            return mapToStockPriceDTO(normalized, outputMap);
+            StockPriceDTO dto = mapToStockPriceDTO(normalized, outputMap);
+            httpPriceCache.put(normalized, new CachedHttpPriceEntry(dto, now + HTTP_PRICE_CACHE_TTL_MILLIS));
+            if (log.isDebugEnabled()) {
+                log.debug("[getStockPrice] stockCode={} source=HTTP currentPrice={}", normalized, dto.getCurrentPrice());
+            }
+            return dto;
         } catch (ApiException e) {
             throw e;
         } catch (RestClientException e) {
             throw new ApiException("KIS stock price request failed: " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    private static final class CachedHttpPriceEntry {
+        final StockPriceDTO dto;
+        final long expiresAtMillis;
+
+        CachedHttpPriceEntry(StockPriceDTO dto, long expiresAtMillis) {
+            this.dto = dto;
+            this.expiresAtMillis = expiresAtMillis;
         }
     }
 

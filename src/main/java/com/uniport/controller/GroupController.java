@@ -36,6 +36,7 @@ import java.util.Optional;
 @RequestMapping("/api/groups")
 public class GroupController {
 
+    private static final Logger log = LoggerFactory.getLogger(GroupController.class);
     private static final BigDecimal INITIAL_TEAM_BALANCE = new BigDecimal("10000000");
 
     private final ChatService chatService;
@@ -116,6 +117,12 @@ public class GroupController {
         BigDecimal profitLossPercentage = INITIAL_TEAM_BALANCE.compareTo(BigDecimal.ZERO) != 0
                 ? profitLoss.divide(INITIAL_TEAM_BALANCE, 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100))
                 : BigDecimal.ZERO;
+
+        // 디버깅: 주말 등 시세 고정 시에도 총손익이 변할 때, 변하는 값 특정용. DEBUG 레벨로 켜서 확인.
+        if (log.isDebugEnabled()) {
+            log.debug("[portfolio] groupId={} cashBalance={} holdingsValue={} totalValue={} profitLoss={} profitLossPct={} holdings(currentPrice,quantity,currentValue)={}",
+                    groupId, cashBalance, holdingsValue, totalValue, profitLoss, profitLossPercentage, holdingsList);
+        }
 
         Map<String, Object> body = new HashMap<>();
         body.put("groupId", groupId);
