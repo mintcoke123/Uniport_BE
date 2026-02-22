@@ -53,6 +53,7 @@ public class VoteService {
     private final UserRepository userRepository;
     private final PriceCache priceCache;
     private final KisApiService kisApiService;
+    private final ChatService chatService;
 
     public VoteService(VoteRepository voteRepository,
                        VoteParticipantRepository voteParticipantRepository,
@@ -61,7 +62,8 @@ public class VoteService {
                        TradeService tradeService,
                        UserRepository userRepository,
                        PriceCache priceCache,
-                       KisApiService kisApiService) {
+                       KisApiService kisApiService,
+                       ChatService chatService) {
         this.voteRepository = voteRepository;
         this.voteParticipantRepository = voteParticipantRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
@@ -70,6 +72,7 @@ public class VoteService {
         this.userRepository = userRepository;
         this.priceCache = priceCache;
         this.kisApiService = kisApiService;
+        this.chatService = chatService;
     }
 
     @Transactional
@@ -398,6 +401,11 @@ public class VoteService {
         vote.setStatus(STATUS_EXECUTED);
         vote.setExecutedAt(Instant.now());
         voteRepository.save(vote);
+        BigDecimal execPrice = currentPrice != null && currentPrice.compareTo(BigDecimal.ZERO) > 0 ? currentPrice : BigDecimal.ONE;
+        String nickname = proposer != null && proposer.getNickname() != null ? proposer.getNickname() : "팀";
+        try {
+            chatService.saveExecutionMessage(vote.getRoomId(), vote.getProposerId(), nickname, vote.getType(), vote.getStockName(), vote.getQuantity(), execPrice);
+        } catch (Exception ignored) { /* 채팅 저장 실패해도 체결은 완료 */ }
     }
 
     private static BigDecimal fallbackPrice(Vote vote) {

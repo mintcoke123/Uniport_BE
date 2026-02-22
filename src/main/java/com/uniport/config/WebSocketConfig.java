@@ -4,6 +4,7 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import com.uniport.websocket.ChatWebSocketHandler;
+import com.uniport.websocket.GroupChatBroadcaster;
 import com.uniport.websocket.PriceBroadcaster;
 import com.uniport.websocket.PriceWebSocketHandler;
 import org.springframework.context.annotation.Bean;
@@ -36,8 +37,13 @@ public class WebSocketConfig implements WebSocketConfigurer {
     }
 
     @Bean
-    public ChatWebSocketHandler chatWebSocketHandler() {
-        return new ChatWebSocketHandler(chatService, authService, matchingRoomMemberRepository);
+    public GroupChatBroadcaster groupChatBroadcaster() {
+        return new GroupChatBroadcaster();
+    }
+
+    @Bean
+    public ChatWebSocketHandler chatWebSocketHandler(GroupChatBroadcaster groupChatBroadcaster) {
+        return new ChatWebSocketHandler(chatService, authService, matchingRoomMemberRepository, groupChatBroadcaster);
     }
 
     @Bean

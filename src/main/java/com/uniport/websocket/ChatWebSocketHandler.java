@@ -10,11 +10,9 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -32,15 +30,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final ChatService chatService;
     private final AuthService authService;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
-
-    /** groupId -> 해당 그룹에 연결된 WebSocket 세션들 */
-    private final Map<String, java.util.Set<WebSocketSession>> groupSessions = new ConcurrentHashMap<>();
+    private final GroupChatBroadcaster groupChatBroadcaster;
 
     public ChatWebSocketHandler(ChatService chatService, AuthService authService,
-                                MatchingRoomMemberRepository matchingRoomMemberRepository) {
+                                MatchingRoomMemberRepository matchingRoomMemberRepository,
+                                GroupChatBroadcaster groupChatBroadcaster) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
+        this.groupChatBroadcaster = groupChatBroadcaster;
     }
 
     @Override
@@ -57,7 +55,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
-        groupSessions.computeIfAbsent(groupId, k -> java.util.concurrent.ConcurrentHashMap.newKeySet()).add(session);
+        groupChatBroadcaster.addSession(groupId, session);
     }
 
     @Override
@@ -81,11 +79,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 broadcast.put("message", saved.getMessage());
                 broadcast.put("timestamp", saved.getCreatedAt().toString());
                 broadcast.put("tradeData", null);
-                broadcastToGroup(groupId, toJson(broadcast));
+                groupChatBroadcaster.broadcast(groupId, toJson(broadcast));
                 return;
             }
         }
-        broadcastToGroup(groupId, payload);
+        groupChatBroadcaster.broadcast(groupId, payload);
     }
 
     private static Long extractLong(Pattern p, String s) {
@@ -130,14 +128,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        String groupId = extractGroupId(session);
-        if (groupId != null) {
-            java.util.Set<WebSocketSession> set = groupSessions.get(groupId);
-            if (set != null) {
-                set.remove(session);
-                if (set.isEmpty()) groupSessions.remove(groupId);
-            }
-        }
+        groupChatBroadcaster.removeSession(session);
     }
 
     @Override
@@ -173,20 +164,4 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         return null;
     }
 
-    /** 같은 그룹에 연결된 모든 세션(발신자 포함)에 메시지 브로드캐스트 */
-    private void broadcastToGroup(String groupId, String message) {
-        java.util.Set<WebSocketSession> set = groupSessions.get(groupId);
-        if (set == null) return;
-        TextMessage msg = new TextMessage(message);
-        set.stream()
-                .filter(WebSocketSession::isOpen)
-                .forEach(s -> sendSafe(s, msg));
-    }
-
-    private void sendSafe(WebSocketSession session, TextMessage message) {
-        try {
-            session.sendMessage(message);
-        } catch (IOException e) {
-        }
-    }
 }
