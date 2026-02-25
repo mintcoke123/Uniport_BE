@@ -56,12 +56,9 @@ public class MatchingRoomService {
                 });
     }
 
-    /** 방 목록. PUBLIC만 반환(비공개는 목록에 노출하지 않음). user가 있으면 각 방에 isJoined 포함. */
+    /** 방 목록. PUBLIC/PRIVATE 모두 반환. user가 있으면 각 방에 isJoined 포함. 비공개 방은 목록에 보이지만 참가는 초대코드로만 가능. */
     public List<Map<String, Object>> list(User user) {
-        List<MatchingRoom> all = matchingRoomRepository.findAllByOrderByCreatedAtDesc();
-        List<MatchingRoom> rooms = all.stream()
-                .filter(r -> r.getVisibility() == null || VISIBILITY_PUBLIC.equals(r.getVisibility()))
-                .collect(Collectors.toList());
+        List<MatchingRoom> rooms = matchingRoomRepository.findAllByOrderByCreatedAtDesc();
         if (user == null) {
             return rooms.stream().map(this::toMap).collect(Collectors.toList());
         }
