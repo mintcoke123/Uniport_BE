@@ -14,6 +14,8 @@ import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import com.uniport.service.kisws.PriceCache;
 import com.uniport.service.kisws.PriceSnapshot;
+import com.uniport.websocket.GroupChatBroadcaster;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +56,8 @@ public class VoteService {
     private final PriceCache priceCache;
     private final KisApiService kisApiService;
     private final ChatService chatService;
+    private final GroupChatBroadcaster groupChatBroadcaster;
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public VoteService(VoteRepository voteRepository,
                        VoteParticipantRepository voteParticipantRepository,
@@ -63,7 +67,8 @@ public class VoteService {
                        UserRepository userRepository,
                        PriceCache priceCache,
                        KisApiService kisApiService,
-                       ChatService chatService) {
+                       ChatService chatService,
+                       GroupChatBroadcaster groupChatBroadcaster) {
         this.voteRepository = voteRepository;
         this.voteParticipantRepository = voteParticipantRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
@@ -73,6 +78,7 @@ public class VoteService {
         this.priceCache = priceCache;
         this.kisApiService = kisApiService;
         this.chatService = chatService;
+        this.groupChatBroadcaster = groupChatBroadcaster;
     }
 
     @Transactional
@@ -297,6 +303,7 @@ public class VoteService {
         }
 
         Vote updated = voteRepository.findById(voteId).orElse(vote);
+        broadcastVoteUpdate(groupId, voteId);
         return Map.of(
                 "success", true,
                 "message", "투표가 반영되었습니다.",
@@ -323,7 +330,21 @@ public class VoteService {
         }
         vote.setStatus(STATUS_CANCELLED);
         voteRepository.save(vote);
+        broadcastVoteUpdate(groupId, voteId);
         return Map.of("success", true, "message", "대기가 취소되었습니다.", "vote", Map.<String, Object>of("id", voteId, "status", STATUS_CANCELLED));
+    }
+
+    /** 찬성/반대·취소 등 투표 갱신 시 같은 방 WebSocket 클라이언트에 실시간 알림 (프론트에서 투표 목록 재조회) */
+    private void broadcastVoteUpdate(Long groupId, Long voteId) {
+        if (groupId == null || voteId == null || groupChatBroadcaster == null) return;
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "vote_update");
+            payload.put("groupId", groupId);
+            payload.put("voteId", voteId);
+            groupChatBroadcaster.broadcast(String.valueOf(groupId), OBJECT_MAPPER.writeValueAsString(payload));
+        } catch (Exception ignored) {
+        }
     }
 
     /** 종목코드 6자리 정규화 (캐시 키 등에 사용) */
