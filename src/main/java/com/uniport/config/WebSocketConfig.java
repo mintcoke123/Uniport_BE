@@ -26,23 +26,26 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final AuthService authService;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final PriceBroadcaster priceBroadcaster;
+    private final GroupChatBroadcaster groupChatBroadcaster;
 
     public WebSocketConfig(ChatService chatService, AuthService authService,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
-                           PriceBroadcaster priceBroadcaster) {
+                           PriceBroadcaster priceBroadcaster,
+                           GroupChatBroadcaster groupChatBroadcaster) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.priceBroadcaster = priceBroadcaster;
+        this.groupChatBroadcaster = groupChatBroadcaster;
     }
 
     @Bean
-    public GroupChatBroadcaster groupChatBroadcaster() {
+    public static GroupChatBroadcaster groupChatBroadcaster() {
         return new GroupChatBroadcaster();
     }
 
     @Bean
-    public ChatWebSocketHandler chatWebSocketHandler(GroupChatBroadcaster groupChatBroadcaster) {
+    public ChatWebSocketHandler chatWebSocketHandler() {
         return new ChatWebSocketHandler(chatService, authService, matchingRoomMemberRepository, groupChatBroadcaster);
     }
 
