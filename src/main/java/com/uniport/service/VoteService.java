@@ -289,7 +289,7 @@ public class VoteService {
                     voteRepository.save(vote);
                 }
             }
-        } else if (all.size() >= totalMembers && disagree >= majority) {
+        } else if (disagree >= majority) {
             vote.setStatus("rejected");
             voteRepository.save(vote);
         } else {
