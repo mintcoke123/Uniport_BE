@@ -32,7 +32,9 @@ public class ChatService {
     @Transactional
     public ChatMessage saveMessage(Long roomId, Long userId, String userNickname, String message) {
         ChatMessage msg = ChatMessage.of(roomId, userId, userNickname, message != null ? message : "");
-        return chatMessageRepository.save(msg);
+        ChatMessage saved = chatMessageRepository.save(msg);
+        broadcastToGroup(roomId, saved);
+        return saved;
     }
 
     /** 매수/매도 체결 완료 알림용: type=execution, executionData 저장. 채팅 목록에 "OOO 매수 체결 완료" 형태로 표시 */
@@ -87,9 +89,20 @@ public class ChatService {
             String message = OBJECT_MAPPER.writeValueAsString(payload);
             ChatMessage msg = ChatMessage.of(roomId, userId, userNickname, message);
             msg.setVoteId(voteId);
-            return chatMessageRepository.save(msg);
+            ChatMessage saved = chatMessageRepository.save(msg);
+            broadcastToGroup(roomId, saved);
+            return saved;
         } catch (Exception e) {
             throw new RuntimeException("Failed to save trade message", e);
+        }
+    }
+
+    /** 저장된 메시지를 같은 방 WebSocket 연결된 클라이언트에 실시간 전달 (채팅·투표 공유 시) */
+    private void broadcastToGroup(Long roomId, ChatMessage saved) {
+        try {
+            Map<String, Object> payload = toMap(saved);
+            groupChatBroadcaster.broadcast(String.valueOf(roomId), OBJECT_MAPPER.writeValueAsString(payload));
+        } catch (Exception ignored) {
         }
     }
 
