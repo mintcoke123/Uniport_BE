@@ -44,15 +44,31 @@ public class MatchingRoom {
     @Builder.Default
     private String status = "waiting";  // waiting, started
 
+    /** PUBLIC(목록 노출, roomId join 가능) | PRIVATE(목록 비노출, 초대코드로만 입장) */
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private String visibility = "PUBLIC";
+
+    /** 6~8자리 Base62 랜덤. UNIQUE. 비공개 방 입장용. */
+    @Column(name = "invite_code", unique = true, length = 8)
+    private String inviteCode;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
     public static MatchingRoom create(String name) {
+        return create(name, 3);
+    }
+
+    /** capacity 1=개인, 3=팀 등 */
+    public static MatchingRoom create(String name, int capacity) {
+        int cap = capacity <= 0 ? 3 : (capacity > 10 ? 10 : capacity);
         return MatchingRoom.builder()
                 .name(name != null && !name.isBlank() ? name : "새 매칭방")
-                .capacity(3)
+                .capacity(cap)
                 .memberCount(0)
                 .status("waiting")
+                .visibility("PUBLIC")
                 .createdAt(Instant.now())
                 .build();
     }

@@ -45,11 +45,33 @@ public class MatchingRoomController {
 
     @PostMapping
     public ResponseEntity<Map<String, Object>> create(
-            @RequestBody(required = false) Map<String, String> body,
+            @RequestBody(required = false) Map<String, Object> body,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        String name = body != null && body.containsKey("name") ? body.get("name") : "새 매칭방";
+        String name = body != null && body.get("name") != null ? body.get("name").toString() : "새 매칭방";
+        String visibility = body != null && body.get("visibility") != null ? body.get("visibility").toString() : null;
+        Integer capacity = null;
+        if (body != null && body.get("capacity") != null) {
+            Object c = body.get("capacity");
+            if (c instanceof Number) {
+                capacity = ((Number) c).intValue();
+            } else {
+                try {
+                    capacity = Integer.parseInt(c.toString());
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
         User creator = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
-        return ResponseEntity.ok(matchingRoomService.create(name, creator));
+        return ResponseEntity.ok(matchingRoomService.create(name, visibility, capacity, creator));
+    }
+
+    @PostMapping("/join-by-code")
+    public ResponseEntity<Map<String, Object>> joinByCode(
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String inviteCode = body != null ? body.get("inviteCode") : null;
+        User user = authService.getUserFromToken(authorization != null ? authorization : "");
+        return ResponseEntity.ok(matchingRoomService.joinByCode(inviteCode, user));
     }
 
     @PostMapping("/{roomId}/join")

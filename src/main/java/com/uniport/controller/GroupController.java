@@ -10,6 +10,7 @@ import com.uniport.repository.TeamHoldingRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import com.uniport.service.KisApiService;
+import com.uniport.service.MatchingRoomService;
 import com.uniport.service.VoteService;
 import com.uniport.service.kisws.KisWsSubscriptionManager;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +51,7 @@ public class GroupController {
     private final KisApiService kisApiService;
     private final VoteService voteService;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
+    private final MatchingRoomService matchingRoomService;
 
     public GroupController(ChatService chatService, AuthService authService,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
@@ -58,7 +60,8 @@ public class GroupController {
                            MatchingRoomRepository matchingRoomRepository,
                            KisApiService kisApiService,
                            VoteService voteService,
-                           KisWsSubscriptionManager kisWsSubscriptionManager) {
+                           KisWsSubscriptionManager kisWsSubscriptionManager,
+                           MatchingRoomService matchingRoomService) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
@@ -68,6 +71,7 @@ public class GroupController {
         this.kisApiService = kisApiService;
         this.voteService = voteService;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
+        this.matchingRoomService = matchingRoomService;
     }
 
     @GetMapping("/{groupId}")
@@ -179,6 +183,7 @@ public class GroupController {
     public ResponseEntity<?> getChatMessages(
             @PathVariable Long groupId,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
+        matchingRoomService.assertTeamRoom(groupId);
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         if (user == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
@@ -195,6 +200,7 @@ public class GroupController {
             @PathVariable Long groupId,
             @RequestBody Map<String, Object> body,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
+        matchingRoomService.assertTeamRoom(groupId);
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         if (user == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
@@ -216,6 +222,7 @@ public class GroupController {
     /** §8: 투표 목록 (DB 저장된 투표 반환) */
     @GetMapping("/{groupId}/votes")
     public ResponseEntity<List<Map<String, Object>>> getVotes(@PathVariable Long groupId) {
+        matchingRoomService.assertTeamRoom(groupId);
         return ResponseEntity.ok(voteService.getVotesByRoomId(groupId));
     }
 
@@ -225,6 +232,7 @@ public class GroupController {
             @PathVariable Long groupId,
             @RequestBody Map<String, Object> body,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
+        matchingRoomService.assertTeamRoom(groupId);
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         if (user == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
@@ -264,6 +272,7 @@ public class GroupController {
             @PathVariable Long voteId,
             @RequestBody Map<String, String> body,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
+        matchingRoomService.assertTeamRoom(groupId);
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         if (user == null || user.getId() == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
@@ -279,6 +288,7 @@ public class GroupController {
             @PathVariable Long groupId,
             @PathVariable Long voteId,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
+        matchingRoomService.assertTeamRoom(groupId);
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         if (user == null || user.getId() == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));

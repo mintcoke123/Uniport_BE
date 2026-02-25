@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,6 +25,12 @@ import java.util.stream.Collectors;
 public class MatchingRoomService {
 
     private static final String ROOM_ID_PREFIX = "room-";
+    private static final String VISIBILITY_PUBLIC = "PUBLIC";
+    private static final String VISIBILITY_PRIVATE = "PRIVATE";
+    private static final String BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    private static final int INVITE_CODE_LENGTH = 8;
+    private static final int INVITE_CODE_MAX_RETRIES = 10;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final MatchingRoomRepository matchingRoomRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
@@ -37,9 +44,24 @@ public class MatchingRoomService {
         this.userRepository = userRepository;
     }
 
-    /** 방 목록. user가 있으면 각 방에 isJoined(현재 사용자 참가 여부) 포함. */
+    /**
+     * 개인방(capacity=1)에서는 채팅/투표를 사용할 수 없도록 가드.
+     * groupId = MatchingRoom.id 에 대해 capacity == 1 이면 ApiException(403) 발생.
+     */
+    public void assertTeamRoom(Long groupId) {
+        matchingRoomRepository.findById(groupId)
+                .filter(room -> room.getCapacity() == 1)
+                .ifPresent(room -> {
+                    throw new ApiException("개인방에서는 채팅/투표를 사용할 수 없습니다.", HttpStatus.FORBIDDEN);
+                });
+    }
+
+    /** 방 목록. PUBLIC만 반환(비공개는 목록에 노출하지 않음). user가 있으면 각 방에 isJoined 포함. */
     public List<Map<String, Object>> list(User user) {
-        List<MatchingRoom> rooms = matchingRoomRepository.findAllByOrderByCreatedAtDesc();
+        List<MatchingRoom> all = matchingRoomRepository.findAllByOrderByCreatedAtDesc();
+        List<MatchingRoom> rooms = all.stream()
+                .filter(r -> r.getVisibility() == null || VISIBILITY_PUBLIC.equals(r.getVisibility()))
+                .collect(Collectors.toList());
         if (user == null) {
             return rooms.stream().map(this::toMap).collect(Collectors.toList());
         }
@@ -64,14 +86,23 @@ public class MatchingRoomService {
                 .collect(Collectors.toList());
     }
 
-    /** 방 생성. creator가 있으면 해당 멤버를 방에 자동 추가. 이미 참가 중인 방이 있으면 생성 불가. */
+    /** 방 생성. visibility 없으면 PUBLIC. capacity 없으면 3(팀). creator가 있으면 해당 멤버를 방에 자동 추가. */
     @Transactional
-    public Map<String, Object> create(String name, User creator) {
+    public Map<String, Object> create(String name, String visibility, Integer capacity, User creator) {
         if (creator != null && !matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(creator.getId()).isEmpty()) {
             throw new ApiException("이미 참가 중인 방이 있습니다. 새 방을 만들려면 먼저 방을 나가세요.", HttpStatus.BAD_REQUEST);
         }
-        MatchingRoom room = MatchingRoom.create(name);
+        String vis = (visibility != null && !visibility.isBlank()) ? visibility.trim() : VISIBILITY_PUBLIC;
+        if (!VISIBILITY_PUBLIC.equals(vis) && !VISIBILITY_PRIVATE.equals(vis)) {
+            vis = VISIBILITY_PUBLIC;
+        }
+        int cap = (capacity != null && capacity >= 1 && capacity <= 10) ? capacity : 3;
+        MatchingRoom room = MatchingRoom.create(name, cap);
+        room.setVisibility(vis);
         room = matchingRoomRepository.save(room);
+        String code = generateUniqueInviteCode();
+        room.setInviteCode(code);
+        matchingRoomRepository.save(room);
         if (creator != null) {
             matchingRoomMemberRepository.save(MatchingRoomMember.of(room, creator));
             room.setMemberCount((int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId()));
@@ -87,6 +118,24 @@ public class MatchingRoomService {
     @Transactional
     public Map<String, Object> join(String roomId, User user) {
         MatchingRoom room = findRoomByApiId(roomId);
+        if (VISIBILITY_PRIVATE.equals(room.getVisibility())) {
+            throw new ApiException("비공개 방은 초대코드로만 입장 가능합니다.", HttpStatus.FORBIDDEN);
+        }
+        return doJoin(room, user);
+    }
+
+    /** 초대코드로 입장. PUBLIC/PRIVATE 모두 허용(코드 입력 한 가지로 통일). */
+    @Transactional
+    public Map<String, Object> joinByCode(String inviteCode, User user) {
+        if (inviteCode == null || inviteCode.isBlank()) {
+            throw new ApiException("초대코드를 입력해 주세요.", HttpStatus.BAD_REQUEST);
+        }
+        MatchingRoom room = matchingRoomRepository.findByInviteCode(inviteCode.trim())
+                .orElseThrow(() -> new ApiException("유효하지 않은 초대코드입니다.", HttpStatus.NOT_FOUND));
+        return doJoin(room, user);
+    }
+
+    private Map<String, Object> doJoin(MatchingRoom room, User user) {
         if (matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())) {
             throw new ApiException("이미 참가 중인 방입니다.", HttpStatus.BAD_REQUEST);
         }
@@ -126,6 +175,18 @@ public class MatchingRoomService {
     @Transactional
     public Map<String, Object> start(String roomId) {
         MatchingRoom room = findRoomByApiId(roomId);
+        long memberCount = matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
+        if (memberCount == 0) {
+            throw new ApiException("방에 멤버가 없어 시작할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+        if ("started".equals(room.getStatus())) {
+            return Map.of(
+                    "success", true,
+                    "message", "Started",
+                    "teamId", "team-" + room.getId(),
+                    "competitionId", 1
+            );
+        }
         room.setStatus("started");
         matchingRoomRepository.save(room);
         // 방이 시작되면 이 방 멤버들의 팀을 이 방으로 고정 → 주문/보유가 이 팀(groupId)에 쌓임
@@ -214,6 +275,20 @@ public class MatchingRoomService {
         }
     }
 
+    private String generateUniqueInviteCode() {
+        for (int i = 0; i < INVITE_CODE_MAX_RETRIES; i++) {
+            StringBuilder sb = new StringBuilder(INVITE_CODE_LENGTH);
+            for (int j = 0; j < INVITE_CODE_LENGTH; j++) {
+                sb.append(BASE62.charAt(RANDOM.nextInt(BASE62.length())));
+            }
+            String code = sb.toString();
+            if (matchingRoomRepository.findByInviteCode(code).isEmpty()) {
+                return code;
+            }
+        }
+        throw new ApiException("초대코드 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.", HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
     private Map<String, Object> toMap(MatchingRoom room) {
         int memberCount = (int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
         List<Map<String, Object>> membersList = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId()).stream()
@@ -232,6 +307,8 @@ public class MatchingRoomService {
         map.put("memberCount", memberCount);
         map.put("members", membersList);
         map.put("status", room.getStatus());
+        map.put("visibility", room.getVisibility() != null ? room.getVisibility() : VISIBILITY_PUBLIC);
+        map.put("inviteCode", room.getInviteCode());
         map.put("createdAt", room.getCreatedAt().toString());
         return map;
     }

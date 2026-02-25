@@ -251,9 +251,9 @@ public class VoteService {
         List<VoteParticipant> all = voteParticipantRepository.findByVote_IdOrderById(voteId);
         long agree = all.stream().filter(p -> "찬성".equals(p.getVoteChoice())).count();
         long disagree = all.stream().filter(p -> "반대".equals(p.getVoteChoice())).count();
-        int totalMembers = Math.max(1, vote.getTotalMembers());
-        int majority = (totalMembers / 2) + 1;
-        boolean passed = agree >= 2 || (totalMembers == 1 && agree >= 1);
+        int totalMembers = vote.getTotalMembers();
+        int majority = totalMembers > 0 ? (totalMembers / 2) + 1 : 0;
+        boolean passed = isVotePassedByRatio(agree, totalMembers);
         if (passed) {
             vote.setStatus(STATUS_PASSED);
             voteRepository.save(vote);
@@ -332,6 +332,17 @@ public class VoteService {
         voteRepository.save(vote);
         broadcastVoteUpdate(groupId, voteId);
         return Map.of("success", true, "message", "대기가 취소되었습니다.", "vote", Map.<String, Object>of("id", voteId, "status", STATUS_CANCELLED));
+    }
+
+    /**
+     * 투표 통과 여부: (agreeCount / totalMembers) > 0.5.
+     * 동점(0.5)은 미통과. totalMembers가 0이면 미통과.
+     */
+    static boolean isVotePassedByRatio(long agreeCount, int totalMembers) {
+        if (totalMembers <= 0) {
+            return false;
+        }
+        return ((double) agreeCount / totalMembers) > 0.5;
     }
 
     /** 찬성/반대·취소 등 투표 갱신 시 같은 방 WebSocket 클라이언트에 실시간 알림 (프론트에서 투표 목록 재조회) */

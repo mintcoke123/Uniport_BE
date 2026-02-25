@@ -1,6 +1,7 @@
 package com.uniport.config;
 
 import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import com.uniport.websocket.ChatWebSocketHandler;
@@ -25,16 +26,19 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final ChatService chatService;
     private final AuthService authService;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
+    private final MatchingRoomRepository matchingRoomRepository;
     private final PriceBroadcaster priceBroadcaster;
     private final GroupChatBroadcaster groupChatBroadcaster;
 
     public WebSocketConfig(ChatService chatService, AuthService authService,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
+                           MatchingRoomRepository matchingRoomRepository,
                            PriceBroadcaster priceBroadcaster,
                            GroupChatBroadcaster groupChatBroadcaster) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
+        this.matchingRoomRepository = matchingRoomRepository;
         this.priceBroadcaster = priceBroadcaster;
         this.groupChatBroadcaster = groupChatBroadcaster;
     }
@@ -46,7 +50,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Bean
     public ChatWebSocketHandler chatWebSocketHandler() {
-        return new ChatWebSocketHandler(chatService, authService, matchingRoomMemberRepository, groupChatBroadcaster);
+        return new ChatWebSocketHandler(chatService, authService, matchingRoomMemberRepository, matchingRoomRepository, groupChatBroadcaster);
     }
 
     @Bean

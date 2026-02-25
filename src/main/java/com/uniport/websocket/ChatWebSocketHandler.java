@@ -3,6 +3,7 @@ package com.uniport.websocket;
 import com.uniport.entity.ChatMessage;
 import com.uniport.entity.User;
 import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import org.springframework.web.socket.CloseStatus;
@@ -10,6 +11,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,17 +29,22 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private static final Pattern NICKNAME = Pattern.compile("\"nickname\"\\s*:\\s*\"([^\"]*)\"|\"userNickname\"\\s*:\\s*\"([^\"]*)\"");
     private static final Pattern MESSAGE = Pattern.compile("\"message\"\\s*:\\s*\"([^\"]*)\"");
 
+    private static final String SOLO_ROOM_ERROR = "{\"error\":\"개인방에서는 채팅/투표를 사용할 수 없습니다.\"}";
+
     private final ChatService chatService;
     private final AuthService authService;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
+    private final MatchingRoomRepository matchingRoomRepository;
     private final GroupChatBroadcaster groupChatBroadcaster;
 
     public ChatWebSocketHandler(ChatService chatService, AuthService authService,
                                 MatchingRoomMemberRepository matchingRoomMemberRepository,
+                                MatchingRoomRepository matchingRoomRepository,
                                 GroupChatBroadcaster groupChatBroadcaster) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
+        this.matchingRoomRepository = matchingRoomRepository;
         this.groupChatBroadcaster = groupChatBroadcaster;
     }
 
@@ -55,6 +62,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
+        if (matchingRoomRepository.findById(roomId).filter(r -> r.getCapacity() == 1).isPresent()) {
+            try {
+                if (session.isOpen()) session.sendMessage(new TextMessage(SOLO_ROOM_ERROR));
+            } catch (IOException ignored) {}
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
         groupChatBroadcaster.addSession(groupId, session);
     }
 
@@ -62,8 +76,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String groupId = extractGroupId(session);
         if (groupId == null) return;
-        String payload = message.getPayload();
         Long roomIdLong = parseRoomId(groupId);
+        if (roomIdLong != null && matchingRoomRepository.findById(roomIdLong).filter(r -> r.getCapacity() == 1).isPresent()) {
+            try {
+                if (session.isOpen()) session.sendMessage(new TextMessage(SOLO_ROOM_ERROR));
+            } catch (IOException ignored) {}
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
+        String payload = message.getPayload();
         if (roomIdLong != null) {
             Long userId = extractLong(USER_ID, payload);
             String nickname = extractString(NICKNAME, payload);
