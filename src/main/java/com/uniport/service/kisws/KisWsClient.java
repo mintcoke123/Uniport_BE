@@ -178,7 +178,7 @@ public class KisWsClient {
                         @Override
                         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
                             webSocketRef = null;
-                            kisWsSubscriptionManager.clearSubscribedCodes();
+                            kisWsSubscriptionManager.onWsDisconnected();
                             log.info("KIS WS close statusCode={} reason={}", statusCode, reason);
                             scheduleReconnect();
                             return CompletableFuture.completedFuture(null);
@@ -187,6 +187,9 @@ public class KisWsClient {
                         @Override
                         public void onError(WebSocket webSocket, Throwable error) {
                             log.warn("KIS WS error: {}", error != null ? error.toString() : "");
+                            webSocketRef = null;
+                            kisWsSubscriptionManager.onWsDisconnected();
+                            scheduleReconnect();
                         }
                     })
                     .whenComplete((ws, ex) -> {
@@ -204,6 +207,24 @@ public class KisWsClient {
     /** 연결 여부. 구독 요청은 연결된 경우에만 유효. */
     public boolean isConnected() {
         return webSocketRef != null;
+    }
+
+    /**
+     * 강제 재연결 (예: 매일 07:59:50 KST). 기존 scheduleReconnect 흐름 재사용.
+     * ref가 있으면 abort 후 scheduleReconnect.
+     */
+    public void forceReconnect(String reason) {
+        log.info("KIS WS force reconnect: {}", reason);
+        WebSocket ws = webSocketRef;
+        webSocketRef = null;
+        if (ws != null) {
+            try {
+                ws.abort();
+            } catch (Exception e) {
+                log.debug("KIS WS abort: {}", e.getMessage());
+            }
+        }
+        scheduleReconnect();
     }
 
     /**

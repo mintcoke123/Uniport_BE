@@ -67,7 +67,16 @@ public class KisWsSubscriptionManager {
         }
     }
 
-    /** 연결 종료 시 호출. 재연결 후 재구독 가능하도록 set 비움. */
+    /**
+     * 연결 종료 시 호출. subscribed → pending으로 옮겨 재연결 후 onWsConnected drain으로 자동 재구독.
+     * pending은 clear하지 않음.
+     */
+    public void onWsDisconnected() {
+        pendingCodes.addAll(subscribedCodes);
+        subscribedCodes.clear();
+    }
+
+    /** 연결 종료 시 호출. 재연결 후 재구독 가능하도록 set 비움. (외부에서 전체 초기화 필요 시 사용) */
     public void clearSubscribedCodes() {
         subscribedCodes.clear();
         pendingCodes.clear();
