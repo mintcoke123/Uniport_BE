@@ -49,6 +49,14 @@ kis:
     appsecret: ${KIS_API_APPSECRET:}
     use-mock: ${KIS_API_USE_MOCK:false}
 
+# 종목 마스터 매일 자동 갱신 (Postgres advisory lock 사용, 다중 인스턴스 중 1개만 실행)
+stock:
+  master:
+    import:
+      enabled: ${STOCK_MASTER_IMPORT_ENABLED:false}
+      cron: ${STOCK_MASTER_IMPORT_CRON:0 30 7 * * *}
+      zone: ${STOCK_MASTER_IMPORT_ZONE:Asia/Seoul}
+
 # 시드/어드민 (env: UNIPORT_ADMIN_EMAIL, UNIPORT_ADMIN_PASSWORD, UNIPORT_SEED_TEST_USER_ENABLED)
 uniport:
   admin:
