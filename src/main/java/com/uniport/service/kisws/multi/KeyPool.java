@@ -227,7 +227,7 @@ public class KeyPool {
         return null;
     }
 
-    /** excludeKeyId 제외한 키 중 available 이면서 구독 여유(41 미만) 있는 키. 70종목 등 분산용. */
+    /** excludeKeyId 제외한 키 중 available 이면서 구독 여유(40 미만) 있는 키. 70종목 등 분산용. */
     private KeyContext pickFallbackWithCapacityExcluding(String stockCode, String excludeKeyId) {
         if (contexts.isEmpty()) return null;
         int hash = (stockCode == null || stockCode.isBlank()) ? 0 : stockCode.hashCode();
@@ -242,8 +242,8 @@ public class KeyPool {
     }
 
     /**
-     * 구독 보장. primary 사용, 비가용 또는 41건 초과 시 여유 있는 다른 키로 fallback.
-     * KIS 공지: 1세션당 41건 제한. 70종목 등은 2키 이상이면 정상 분산.
+     * 구독 보장. primary 사용, 비가용 또는 40건 초과 시 여유 있는 다른 키로 fallback.
+     * KIS 공지: 1세션당 41건 제한. 방어적으로 40건으로 제한. 70종목 등은 2키 이상이면 정상 분산.
      */
     public void ensureSubscribed(String stockCode) {
         if (stockCode == null || stockCode.isBlank()) {

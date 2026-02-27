@@ -31,8 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class KeyContext {
 
-    /** KIS 공지: 1세션(앱키)당 실시간 등록 가능 건수. 초과 시 다른 키로 분산 필요. */
-    public static final int MAX_SUBSCRIPTIONS_PER_SESSION = 41;
+    /** KIS 공지: 1세션당 41건. 방어적으로 40으로 제한해 여유 확보. */
+    public static final int MAX_SUBSCRIPTIONS_PER_SESSION = 40;
 
     private static final Logger log = LoggerFactory.getLogger(KeyContext.class);
     private static final long RECONNECT_DELAY_MS = 5_000L;
@@ -104,12 +104,12 @@ public class KeyContext {
         return new HashSet<>(subscribedCodes);
     }
 
-    /** 현재 구독 수. KIS 41건/세션 제한 판단용. */
+    /** 현재 구독 수. 세션당 40건 제한 판단용. */
     public int getSubscribedCount() {
         return subscribedCodes.size();
     }
 
-    /** 이 세션에 구독 1건 더 받을 수 있는지(41 미만). */
+    /** 이 세션에 구독 1건 더 받을 수 있는지(40 미만). */
     public boolean canAcceptMore() {
         return subscribedCodes.size() < MAX_SUBSCRIPTIONS_PER_SESSION;
     }
