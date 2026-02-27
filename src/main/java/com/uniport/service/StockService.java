@@ -6,6 +6,7 @@ import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.HoldingRepository;
+import com.uniport.repository.StockMasterRepository;
 import com.uniport.repository.TeamHoldingRepository;
 import com.uniport.service.kisws.KisWsSubscriptionManager;
 import org.springframework.context.annotation.Lazy;
@@ -27,14 +28,17 @@ public class StockService {
     private final HoldingRepository holdingRepository;
     private final TeamHoldingRepository teamHoldingRepository;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
+    private final StockMasterRepository stockMasterRepository;
 
     public StockService(KisApiService kisApiService, HoldingRepository holdingRepository,
                         TeamHoldingRepository teamHoldingRepository,
-                        @Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
+                        @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
+                        StockMasterRepository stockMasterRepository) {
         this.kisApiService = kisApiService;
         this.holdingRepository = holdingRepository;
         this.teamHoldingRepository = teamHoldingRepository;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
+        this.stockMasterRepository = stockMasterRepository;
     }
 
     private static Long parseTeamId(User user) {
@@ -143,8 +147,12 @@ public class StockService {
         news.add(NewsItemDTO.builder().id(1L).title("종목 소식").source("뉴스").date("2025-02-01").summary("요약").build());
 
         String displayName = price.getStockName() != null ? price.getStockName().trim() : "";
-        if (displayName.isEmpty() || displayName.equals(code) || displayName.matches("\\d{6}")) {
-            displayName = "종목_" + code;
+        if (displayName.isEmpty() || displayName.equals(code) || displayName.matches("\\d{6}")
+                || displayName.equals("종목_" + code)) {
+            displayName = stockMasterRepository.findById(code)
+                    .map(m -> m.getNameKr() != null ? m.getNameKr().trim() : "")
+                    .filter(n -> !n.isEmpty())
+                    .orElse("종목_" + code);
         }
         return StockDetailDTO.builder()
                 .id(idLong)
