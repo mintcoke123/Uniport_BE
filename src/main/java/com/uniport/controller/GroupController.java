@@ -219,20 +219,20 @@ public class GroupController {
         return ResponseEntity.ok(Map.of("success", true, "messageId", saved.getId()));
     }
 
-    /** §8: 투표 목록 (DB 저장된 투표 반환) */
+    /** §8: 투표 목록 (DB 저장된 투표 반환). 개인방도 허용(지정가 대기 목록 조회용). */
     @GetMapping("/{groupId}/votes")
     public ResponseEntity<List<Map<String, Object>>> getVotes(@PathVariable Long groupId) {
-        matchingRoomService.assertTeamRoom(groupId);
         return ResponseEntity.ok(voteService.getVotesByRoomId(groupId));
     }
 
-    /** §8: 투표 생성 (투자계획 공유 시 호출). body: type, stockName, quantity, proposedPrice, reason */
+    /** §8: 투표 생성 (투자계획 공유 시 호출). body: type, stockName, quantity, proposedPrice, reason. 개인방은 지정가/조건부만 허용. */
     @PostMapping("/{groupId}/votes")
     public ResponseEntity<Map<String, Object>> createVote(
             @PathVariable Long groupId,
             @RequestBody Map<String, Object> body,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        matchingRoomService.assertTeamRoom(groupId);
+        String orderStrategy = body != null && body.containsKey("orderStrategy") ? String.valueOf(body.get("orderStrategy")).trim() : null;
+        matchingRoomService.assertTeamRoomForVoteCreate(groupId, orderStrategy);
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         if (user == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
@@ -252,7 +252,6 @@ public class GroupController {
         java.math.BigDecimal proposedPrice = body != null && body.containsKey("proposedPrice")
                 ? new java.math.BigDecimal(String.valueOf(body.get("proposedPrice"))) : java.math.BigDecimal.ZERO;
         String reason = body != null && body.containsKey("reason") ? String.valueOf(body.get("reason")) : "";
-        String orderStrategy = body != null && body.containsKey("orderStrategy") ? String.valueOf(body.get("orderStrategy")).trim() : null;
         BigDecimal limitPrice = parseBigDecimalFromMap(body, "limitPrice");
         BigDecimal triggerPrice = parseBigDecimalFromMap(body, "triggerPrice");
         String triggerDirection = body != null && body.containsKey("triggerDirection") ? String.valueOf(body.get("triggerDirection")).trim() : null;
@@ -265,14 +264,13 @@ public class GroupController {
         return ResponseEntity.ok(result);
     }
 
-    /** §8: 투표 제출 (찬성/반대/보류) */
+    /** §8: 투표 제출 (찬성/반대/보류). 개인방도 허용(지정가 자동 찬성용). */
     @PostMapping("/{groupId}/votes/{voteId}")
     public ResponseEntity<Map<String, Object>> submitVote(
             @PathVariable Long groupId,
             @PathVariable Long voteId,
             @RequestBody Map<String, String> body,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        matchingRoomService.assertTeamRoom(groupId);
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         if (user == null || user.getId() == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
@@ -282,13 +280,12 @@ public class GroupController {
         return ResponseEntity.ok(voteService.submitVote(groupId, voteId, user, voteValue));
     }
 
-    /** 대기 중인 조건주문 취소. 제안자만 가능. */
+    /** 대기 중인 조건주문 취소. 제안자만 가능. 개인방도 허용. */
     @PostMapping("/{groupId}/votes/{voteId}/cancel")
     public ResponseEntity<Map<String, Object>> cancelPendingVote(
             @PathVariable Long groupId,
             @PathVariable Long voteId,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        matchingRoomService.assertTeamRoom(groupId);
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         if (user == null || user.getId() == null) {
             return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));

@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -54,6 +55,21 @@ public class MatchingRoomService {
                 .ifPresent(room -> {
                     throw new ApiException("개인방에서는 채팅/투표를 사용할 수 없습니다.", HttpStatus.FORBIDDEN);
                 });
+    }
+
+    /**
+     * 투표 생성용: 개인방(capacity=1)에서는 지정가/조건부만 허용. 시장가 투표는 assertTeamRoom과 동일하게 403.
+     */
+    public void assertTeamRoomForVoteCreate(Long groupId, String orderStrategy) {
+        java.util.Optional<MatchingRoom> roomOpt = matchingRoomRepository.findById(groupId);
+        if (roomOpt.isEmpty()) return;
+        MatchingRoom room = roomOpt.get();
+        if (room.getCapacity() != 1) return;
+        String strategy = (orderStrategy != null && !orderStrategy.isBlank()) ? orderStrategy.trim().toUpperCase() : "MARKET";
+        if ("LIMIT".equals(strategy) || "CONDITIONAL".equals(strategy)) {
+            return;
+        }
+        throw new ApiException("개인방에서는 채팅/투표를 사용할 수 없습니다.", HttpStatus.FORBIDDEN);
     }
 
     /** 방 목록. PUBLIC/PRIVATE 모두 반환. user가 있으면 각 방에 isJoined 포함. 비공개 방은 목록에 보이지만 참가는 초대코드로만 가능. */
