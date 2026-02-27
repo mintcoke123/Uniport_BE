@@ -58,7 +58,7 @@ public class StockMasterImporterService {
         this.parser = parser;
     }
 
-    public ImportResult importAll() {
+    public ImportResult importAll() throws Exception {
         ImportResult total = ImportResult.empty();
         try {
             ImportResult kospi = importKospi();

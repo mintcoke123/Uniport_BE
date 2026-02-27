@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -27,13 +26,10 @@ public class ZipExtractor {
     public Path extractMst(Path zipPath, Path targetDir) throws IOException {
         Files.createDirectories(targetDir);
         try (ZipFile zip = new ZipFile(zipPath.toFile(), ZipFile.OPEN_READ, java.nio.charset.StandardCharsets.ISO_8859_1)) {
-            Optional<ZipEntry> mstEntry = zip.stream()
+            ZipEntry entry = zip.stream()
                     .filter(e -> !e.isDirectory() && e.getName().toLowerCase().endsWith(".mst"))
-                    .findFirst();
-            if (mstEntry.isEmpty()) {
-                throw new IOException("No .mst file in zip: " + zipPath);
-            }
-            ZipEntry entry = mstEntry.get();
+                    .findFirst()
+                    .orElseThrow(() -> new IOException("No .mst file in zip: " + zipPath));
             String fileName = Path.of(entry.getName()).getFileName().toString();
             Path mstPath = targetDir.resolve(fileName);
             try (InputStream in = zip.getInputStream(entry)) {
