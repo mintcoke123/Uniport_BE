@@ -41,6 +41,7 @@ jwt:
   expiration-ms: ${JWT_EXPIRATION_MS:86400000} # 24시간
 
 # KIS Open API (env: KIS_API_APPKEY, KIS_API_APPSECRET. 설정 시에만 시세/거래량 API 사용)
+# WS 멀티키: kis.keys 배열. 비어 있으면 kis.api 단일 키로 WS 1개 동작(default).
 kis:
   api:
     base-url: ${KIS_API_BASE_URL:https://openapi.koreainvestment.com:9443}
@@ -48,6 +49,13 @@ kis:
     appkey: ${KIS_API_APPKEY:}
     appsecret: ${KIS_API_APPSECRET:}
     use-mock: ${KIS_API_USE_MOCK:false}
+  keys:
+    - id: k1
+      appkey: ${KIS_APPKEY_1:}
+      appsecret: ${KIS_APPSECRET_1:}
+    - id: k2
+      appkey: ${KIS_APPKEY_2:}
+      appsecret: ${KIS_APPSECRET_2:}
 
 # 종목 마스터 매일 자동 갱신 (Postgres advisory lock 사용, 다중 인스턴스 중 1개만 실행)
 stock:

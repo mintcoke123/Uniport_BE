@@ -10,6 +10,8 @@ import com.uniport.exception.ApiException;
 import com.uniport.service.kisws.PriceCache;
 import com.uniport.service.kisws.PriceSnapshot;
 import com.uniport.service.kisws.KisWsSubscriptionManager;
+import com.uniport.service.kisws.multi.KisRestClient;
+import com.uniport.service.kisws.multi.KeyPool;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpEntity;
@@ -82,6 +84,7 @@ public class KisApiService {
     private final RestTemplate restTemplate;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final PriceCache priceCache;
+    private final KeyPool keyPool;
     /** HTTP 현재가 조회 결과 캐시(종목코드 -> (DTO, 만료시각)). 시장가 고정 구간에서 동일 가격 재사용. */
     private final ConcurrentHashMap<String, CachedHttpPriceEntry> httpPriceCache = new ConcurrentHashMap<>();
 
@@ -108,10 +111,12 @@ public class KisApiService {
 
     public KisApiService(RestTemplate restTemplate,
                          @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
-                         PriceCache priceCache) {
+                         PriceCache priceCache,
+                         @Lazy KeyPool keyPool) {
         this.restTemplate = restTemplate;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.priceCache = priceCache;
+        this.keyPool = keyPool;
     }
 
     private String getBaseUrl() {
@@ -122,8 +127,11 @@ public class KisApiService {
         return appkey != null && !appkey.isBlank() && appsecret != null && !appsecret.isBlank();
     }
 
-    /** KIS appkey/appsecret 설정 여부. GET /api/config/kis-status 등에서 사용. */
+    /** KIS 설정 여부. Step3: keyPool.hasAnyRestClient() 이면 true, 아니면 단일키(isConfigured) 기준. */
     public boolean isKisConfigured() {
+        if (keyPool != null && keyPool.hasAnyRestClient()) {
+            return true;
+        }
         return isConfigured();
     }
 
@@ -133,11 +141,15 @@ public class KisApiService {
     }
 
     /**
-     * KIS OAuth2 접근토큰 발급. POST /oauth2/tokenP (인증-001).
-     * access_token + 만료시간 메모리 캐시, 만료 60초 전까지 재사용.
-     * 동시 요청 시 락으로 1회만 발급(배포 시 레이트리밋/지연 방지).
+     * KIS OAuth2 접근토큰 발급. Step3: keyPool 있으면 default/첫 restClient로 위임.
      */
     public String getAccessToken() {
+        if (keyPool != null) {
+            KisRestClient c = keyPool.getDefaultOrFirstRestClient();
+            if (c != null) {
+                return c.getAccessToken();
+            }
+        }
         String key = appkey != null ? appkey.trim() : "";
         String secret = appsecret != null ? appsecret.trim() : "";
         if (key.isBlank() || secret.isBlank()) {
@@ -211,10 +223,16 @@ public class KisApiService {
     }
 
     /**
-     * KIS 접근토큰 폐기. POST /oauth2/revokeP, body JSON { appkey, appsecret, token }.
-     * 폐기 후 캐시된 토큰을 비우며, 다음 API 호출 시 새 토큰을 발급받습니다.
+     * KIS 접근토큰 폐기. Step3: keyPool 있으면 default/첫 restClient로 위임.
      */
     public void revokeAccessToken() {
+        if (keyPool != null) {
+            KisRestClient c = keyPool.getDefaultOrFirstRestClient();
+            if (c != null) {
+                c.revokeAccessToken();
+                return;
+            }
+        }
         String key = appkey != null ? appkey.trim() : "";
         String secret = appsecret != null ? appsecret.trim() : "";
         if (key.isBlank() || secret.isBlank()) {
@@ -239,16 +257,20 @@ public class KisApiService {
             restTemplate.exchange(
                     url, HttpMethod.POST, request, new ParameterizedTypeReference<Map<String, Object>>() {});
         } catch (RestClientException e) {
-            // 폐기 요청 실패해도 캐시는 이미 비워둠. 다음 발급 시 새 토큰 사용.
+            // 폐기 요청 실패해도 캐시는 이미 비워둠.
         }
     }
 
     /**
-     * 실시간(웹소켓) 접속키 발급. POST /oauth2/Approval, body JSON { grant_type, appkey, secretkey }.
-     * KIS 명세: secretkey 필드에 appsecret 값 전달. 응답의 approval_key를 웹소켓 연결 시 사용.
-     * TTL 23시간 캐시, 만료 5분 전까지 재사용. 동시 요청 시 락으로 1회만 발급.
+     * 실시간(웹소켓) 접속키 발급. Step3: keyPool 있으면 default/첫 restClient로 위임.
      */
     public String getWebSocketApprovalKey() {
+        if (keyPool != null) {
+            KisRestClient c = keyPool.getDefaultOrFirstRestClient();
+            if (c != null) {
+                return c.getApprovalKey();
+            }
+        }
         String key = appkey != null ? appkey.trim() : "";
         String secret = appsecret != null ? appsecret.trim() : "";
         if (key.isBlank() || secret.isBlank()) {
@@ -319,7 +341,7 @@ public class KisApiService {
         if (stockCode == null || stockCode.isBlank()) {
             throw new ApiException("Stock code is required", HttpStatus.BAD_REQUEST);
         }
-        if (!isConfigured()) {
+        if (!isKisConfigured()) {
             throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
         }
         String code = stockCode.trim();
@@ -351,6 +373,51 @@ public class KisApiService {
                 .queryParam("FID_INPUT_ISCD", normalized)
                 .build()
                 .toUriString();
+        if (keyPool != null) {
+            if (keyPool.getRestKeyIdsToTry().isEmpty()) {
+                throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
+            }
+            String keyId = keyPool.pickRestKeyIdWithFallback(normalized);
+            ApiException lastEx = null;
+            for (int attempt = 0; attempt < 2; attempt++) {
+                if (keyId == null) break;
+                KisRestClient client = keyPool.getRestClient(keyId);
+                if (client == null) {
+                    keyId = keyPool.pickRestKeyIdWithFallbackExcluding(normalized, keyId);
+                    continue;
+                }
+                try {
+                    ResponseEntity<Map<String, Object>> response = client.exchangeWithAuth(
+                            url, HttpMethod.GET, null, TR_ID_STOCK_PRICE,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
+                    Map<String, Object> body = response.getBody();
+                    if (body == null) {
+                        throw new ApiException("KIS stock price response body is null", HttpStatus.SERVICE_UNAVAILABLE);
+                    }
+                    String rtCd = (String) body.get("rt_cd");
+                    if (rtCd != null && !"0".equals(rtCd)) {
+                        throw new ApiException(kisErrorMessage(body, "stock price"), HttpStatus.BAD_REQUEST);
+                    }
+                    Map<String, Object> outputMap = getStockPriceOutputMap(body);
+                    if (outputMap == null) {
+                        throw new ApiException("KIS stock price output2 is null", HttpStatus.SERVICE_UNAVAILABLE);
+                    }
+                    StockPriceDTO dto = mapToStockPriceDTO(normalized, outputMap);
+                    httpPriceCache.put(normalized, new CachedHttpPriceEntry(dto, now + HTTP_PRICE_CACHE_TTL_MILLIS));
+                    if (log.isDebugEnabled()) {
+                        log.debug("[getStockPrice] stockCode={} source=HTTP keyId={} currentPrice={}", normalized, keyId, dto.getCurrentPrice());
+                    }
+                    return dto;
+                } catch (ApiException e) {
+                    if (e.getStatus() != null && e.getStatus().value() == 400) {
+                        throw e;
+                    }
+                    lastEx = e;
+                    keyId = keyPool.pickRestKeyIdWithFallbackExcluding(normalized, keyId);
+                }
+            }
+            if (lastEx != null) throw lastEx;
+        }
         HttpHeaders headers = buildAuthHeaders(TR_ID_STOCK_PRICE);
         headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
         HttpEntity<Void> request = new HttpEntity<>(headers);
@@ -523,7 +590,7 @@ public class KisApiService {
      */
     @SuppressWarnings("unchecked")
     public List<StockPriceDTO> getVolumeRank() {
-        if (!isConfigured()) {
+        if (!isKisConfigured()) {
             throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
         }
         String url = UriComponentsBuilder.fromUriString(getBaseUrl() + VOLUME_RANK_PATH)
@@ -540,6 +607,44 @@ public class KisApiService {
                 .queryParam("FID_INPUT_DATE_1", "")
                 .build()
                 .toUriString();
+        ApiException lastEx = null;
+        if (keyPool != null) {
+            if (keyPool.getRestKeyIdsToTry().isEmpty()) {
+                throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
+            }
+            for (String keyId : keyPool.getRestKeyIdsToTry()) {
+                KisRestClient client = keyPool.getRestClient(keyId);
+                if (client == null || !client.isAvailable()) continue;
+                try {
+                    ResponseEntity<Map<String, Object>> response = client.exchangeWithAuth(
+                            url, HttpMethod.GET, null, TR_ID_VOLUME_RANK,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
+                    Map<String, Object> body = response.getBody();
+                    if (body == null) {
+                        throw new ApiException("KIS volume rank response body is null", HttpStatus.SERVICE_UNAVAILABLE);
+                    }
+                    String rtCd = body.get("rt_cd") != null ? String.valueOf(body.get("rt_cd")).trim() : "";
+                    if (!rtCd.isEmpty() && !"0".equals(rtCd)) {
+                        throw new ApiException(kisErrorMessage(body, "volume rank"), HttpStatus.BAD_REQUEST);
+                    }
+                    List<Map<String, Object>> outputList = (List<Map<String, Object>>) body.get("output2");
+                    if (outputList == null) outputList = (List<Map<String, Object>>) body.get("Output");
+                    if (outputList == null) outputList = (List<Map<String, Object>>) body.get("output");
+                    List<StockPriceDTO> list = new ArrayList<>();
+                    if (outputList != null) {
+                        for (Map<String, Object> item : outputList) {
+                            String code = getString(item, "mksc_shrn_iscd", getString(item, "iscd", ""));
+                            if (code != null && !code.isBlank()) list.add(mapToStockPriceDTO(code, item));
+                        }
+                    }
+                    return list;
+                } catch (ApiException e) {
+                    if (e.getStatus() != null && e.getStatus().value() == 400) throw e;
+                    lastEx = e;
+                }
+            }
+            if (lastEx != null) throw lastEx;
+        }
         HttpHeaders headers = buildAuthHeaders(TR_ID_VOLUME_RANK);
         headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
         HttpEntity<Void> request = new HttpEntity<>(headers);
@@ -555,19 +660,13 @@ public class KisApiService {
                 throw new ApiException(kisErrorMessage(body, "volume rank"), HttpStatus.BAD_REQUEST);
             }
             List<Map<String, Object>> outputList = (List<Map<String, Object>>) body.get("output2");
-            if (outputList == null) {
-                outputList = (List<Map<String, Object>>) body.get("Output");
-            }
-            if (outputList == null) {
-                outputList = (List<Map<String, Object>>) body.get("output");
-            }
+            if (outputList == null) outputList = (List<Map<String, Object>>) body.get("Output");
+            if (outputList == null) outputList = (List<Map<String, Object>>) body.get("output");
             List<StockPriceDTO> list = new ArrayList<>();
             if (outputList != null) {
                 for (Map<String, Object> item : outputList) {
                     String code = getString(item, "mksc_shrn_iscd", getString(item, "iscd", ""));
-                    if (code != null && !code.isBlank()) {
-                        list.add(mapToStockPriceDTO(code, item));
-                    }
+                    if (code != null && !code.isBlank()) list.add(mapToStockPriceDTO(code, item));
                 }
             }
             return list;
@@ -597,7 +696,7 @@ public class KisApiService {
      * fid_input_iscd: 0001=코스피, 1001=코스닥, 0000=전체.
      */
     private List<StockPriceDTO> callFluctuationRank(String fidRankSortClsCode, String fidPrcClsCode, String fidInputIscd) {
-        if (!isConfigured()) {
+        if (!isKisConfigured()) {
             throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
         }
         String url = UriComponentsBuilder.fromUriString(getBaseUrl() + FLUCTUATION_RANK_PATH)
@@ -617,9 +716,48 @@ public class KisApiService {
                 .queryParam("fid_trgt_exls_cls_code", "0")
                 .build()
                 .toUriString();
-        // tr_id 반드시 랭킹용 FHPST01700000. 코스피/코스닥 지수용(FHPUP02100000)이면 조용히 실패함.
-        String trIdRanking = TR_ID_FLUCTUATION_RANK;
-        HttpHeaders headers = buildAuthHeaders(trIdRanking);
+        ApiException lastEx = null;
+        if (keyPool != null) {
+            if (keyPool.getRestKeyIdsToTry().isEmpty()) {
+                throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
+            }
+            for (String keyId : keyPool.getRestKeyIdsToTry()) {
+                KisRestClient client = keyPool.getRestClient(keyId);
+                if (client == null || !client.isAvailable()) continue;
+                try {
+                    ResponseEntity<Map<String, Object>> response = client.exchangeWithAuth(
+                            url, HttpMethod.GET, null, TR_ID_FLUCTUATION_RANK,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
+                    Map<String, Object> resBody = response.getBody();
+                    if (resBody == null) {
+                        throw new ApiException("KIS fluctuation rank response body is null", HttpStatus.SERVICE_UNAVAILABLE);
+                    }
+                    String rtCd = (String) resBody.get("rt_cd");
+                    if (rtCd != null && !"0".equals(rtCd)) {
+                        throw new ApiException(kisErrorMessage(resBody, "fluctuation rank"), HttpStatus.BAD_REQUEST);
+                    }
+                    Object output = resBody.get("output");
+                    if (output == null) output = resBody.get("output2");
+                    List<StockPriceDTO> list = new ArrayList<>();
+                    if (output instanceof List) {
+                        for (Object o : (List<?>) output) {
+                            if (o instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> item = (Map<String, Object>) o;
+                                String code = getString(item, "stck_shrn_iscd", getString(item, "mksc_shrn_iscd", getString(item, "iscd", "")));
+                                if (code != null && !code.isBlank()) list.add(mapToStockPriceDTO(code, item));
+                            }
+                        }
+                    }
+                    return list;
+                } catch (ApiException e) {
+                    if (e.getStatus() != null && e.getStatus().value() == 400) throw e;
+                    lastEx = e;
+                }
+            }
+            if (lastEx != null) throw lastEx;
+        }
+        HttpHeaders headers = buildAuthHeaders(TR_ID_FLUCTUATION_RANK);
         headers.setContentType(MediaType.parseMediaType("application/json; charset=utf-8"));
         HttpEntity<Void> request = new HttpEntity<>(headers);
         try {
@@ -634,9 +772,7 @@ public class KisApiService {
                 throw new ApiException(kisErrorMessage(resBody, "fluctuation rank"), HttpStatus.BAD_REQUEST);
             }
             Object output = resBody.get("output");
-            if (output == null) {
-                output = resBody.get("output2");
-            }
+            if (output == null) output = resBody.get("output2");
             List<StockPriceDTO> list = new ArrayList<>();
             if (output instanceof List) {
                 for (Object o : (List<?>) output) {
@@ -644,9 +780,7 @@ public class KisApiService {
                         @SuppressWarnings("unchecked")
                         Map<String, Object> item = (Map<String, Object>) o;
                         String code = getString(item, "stck_shrn_iscd", getString(item, "mksc_shrn_iscd", getString(item, "iscd", "")));
-                        if (code != null && !code.isBlank()) {
-                            list.add(mapToStockPriceDTO(code, item));
-                        }
+                        if (code != null && !code.isBlank()) list.add(mapToStockPriceDTO(code, item));
                     }
                 }
             }
@@ -717,7 +851,7 @@ public class KisApiService {
         if (indexCode == null || indexCode.isBlank()) {
             throw new ApiException("Index code is required", HttpStatus.BAD_REQUEST);
         }
-        if (!isConfigured()) {
+        if (!isKisConfigured()) {
             throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
         }
         String fidInputIscd = toIndexFidInputIscd(indexCode);
@@ -726,6 +860,38 @@ public class KisApiService {
                 .queryParam("FID_INPUT_ISCD", fidInputIscd)
                 .build()
                 .toUriString();
+        ApiException lastEx = null;
+        if (keyPool != null) {
+            if (keyPool.getRestKeyIdsToTry().isEmpty()) {
+                throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
+            }
+            for (String keyId : keyPool.getRestKeyIdsToTry()) {
+                KisRestClient client = keyPool.getRestClient(keyId);
+                if (client == null || !client.isAvailable()) continue;
+                try {
+                    ResponseEntity<Map<String, Object>> response = client.exchangeWithAuth(
+                            url, HttpMethod.GET, null, TR_ID_INDEX_PRICE,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
+                    Map<String, Object> body = response.getBody();
+                    if (body == null) {
+                        throw new ApiException("KIS index price response body is null", HttpStatus.SERVICE_UNAVAILABLE);
+                    }
+                    String rtCd = (String) body.get("rt_cd");
+                    if (rtCd != null && !"0".equals(rtCd)) {
+                        throw new ApiException(kisErrorMessage(body, "market index"), HttpStatus.BAD_REQUEST);
+                    }
+                    Object output = body.get("output");
+                    if (output == null) return getMarketIndexStub(indexCode);
+                    Map<String, Object> outputMap = toSingleOutputMap(output);
+                    if (outputMap == null) return getMarketIndexStub(indexCode);
+                    return mapToMarketIndexDTO(indexCode, outputMap);
+                } catch (ApiException e) {
+                    if (e.getStatus() != null && e.getStatus().value() == 400) throw e;
+                    lastEx = e;
+                }
+            }
+            if (lastEx != null) throw lastEx;
+        }
         HttpEntity<Void> request = new HttpEntity<>(buildAuthHeaders(TR_ID_INDEX_PRICE));
         try {
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
@@ -739,13 +905,9 @@ public class KisApiService {
                 throw new ApiException(kisErrorMessage(body, "market index"), HttpStatus.BAD_REQUEST);
             }
             Object output = body.get("output");
-            if (output == null) {
-                return getMarketIndexStub(indexCode);
-            }
+            if (output == null) return getMarketIndexStub(indexCode);
             Map<String, Object> outputMap = toSingleOutputMap(output);
-            if (outputMap == null) {
-                return getMarketIndexStub(indexCode);
-            }
+            if (outputMap == null) return getMarketIndexStub(indexCode);
             return mapToMarketIndexDTO(indexCode, outputMap);
         } catch (ApiException e) {
             throw e;
@@ -769,13 +931,11 @@ public class KisApiService {
         if (!period.matches("^[DWMY]$")) {
             throw new ApiException("period must be D(일봉), W(주봉), M(월봉), or Y(년봉)", HttpStatus.BAD_REQUEST);
         }
-        if (!isConfigured()) {
+        if (!isKisConfigured()) {
             throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
         }
         String fidInputIscd = toIndexFidInputIscd(indexCode);
         String url = getBaseUrl() + INDEX_CHART_PRICE_PATH;
-        HttpHeaders headers = buildAuthHeaders(TR_ID_INDEX_CHART);
-        headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
         Map<String, Object> requestBody = Map.of(
                 "FID_COND_MRKT_DIV_CODE", "U",
                 "FID_INPUT_ISCD", fidInputIscd,
@@ -783,6 +943,51 @@ public class KisApiService {
                 "FID_INPUT_DATE_2", endDate.trim(),
                 "FID_PERIOD_DIV_CODE", period
         );
+        HttpHeaders bodyHeaders = new HttpHeaders();
+        bodyHeaders.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, bodyHeaders);
+        ApiException lastEx = null;
+        if (keyPool != null) {
+            if (keyPool.getRestKeyIdsToTry().isEmpty()) {
+                throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
+            }
+            for (String keyId : keyPool.getRestKeyIdsToTry()) {
+                KisRestClient client = keyPool.getRestClient(keyId);
+                if (client == null || !client.isAvailable()) continue;
+                try {
+                    ResponseEntity<Map<String, Object>> response = client.exchangeWithAuth(
+                            url, HttpMethod.POST, requestEntity, TR_ID_INDEX_CHART,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
+                    Map<String, Object> resBody = response.getBody();
+                    if (resBody == null) {
+                        throw new ApiException("KIS index chart response body is null", HttpStatus.SERVICE_UNAVAILABLE);
+                    }
+                    String rtCd = (String) resBody.get("rt_cd");
+                    if (rtCd != null && !"0".equals(rtCd)) {
+                        throw new ApiException(kisErrorMessage(resBody, "index chart"), HttpStatus.BAD_REQUEST);
+                    }
+                    Object output = resBody.get("output2");
+                    if (output == null) output = resBody.get("output");
+                    List<IndexChartPriceItemDTO> list = new ArrayList<>();
+                    if (output instanceof List) {
+                        for (Object item : (List<?>) output) {
+                            if (item instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> m = (Map<String, Object>) item;
+                                list.add(mapToIndexChartPriceItemDTO(m));
+                            }
+                        }
+                    }
+                    return list;
+                } catch (ApiException e) {
+                    if (e.getStatus() != null && e.getStatus().value() == 400) throw e;
+                    lastEx = e;
+                }
+            }
+            if (lastEx != null) throw lastEx;
+        }
+        HttpHeaders headers = buildAuthHeaders(TR_ID_INDEX_CHART);
+        headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
         try {
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
@@ -796,9 +1001,7 @@ public class KisApiService {
                 throw new ApiException(kisErrorMessage(resBody, "index chart"), HttpStatus.BAD_REQUEST);
             }
             Object output = resBody.get("output2");
-            if (output == null) {
-                output = resBody.get("output");
-            }
+            if (output == null) output = resBody.get("output");
             List<IndexChartPriceItemDTO> list = new ArrayList<>();
             if (output instanceof List) {
                 for (Object item : (List<?>) output) {
