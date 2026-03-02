@@ -41,7 +41,7 @@ public class UniportApplication {
 			AuthService authService,
 			StockService stockService,
 			TradeService tradeService,
-			@Value("${uniport.admin.student-id:25000001}") String adminStudentId,
+			@Value("${uniport.admin.student-id:22011739}") String adminStudentId,
 			@Value("${uniport.admin.password:uniport}") String adminPassword,
 			@Value("${uniport.seed.test-user-enabled:true}") boolean seedTestUserEnabled) {
 		return args -> {
