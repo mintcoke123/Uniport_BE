@@ -16,8 +16,8 @@ import java.math.BigDecimal;
 @Builder
 public class AuthUserDTO {
 
-    private String id;           // 명세: string
-    private String email;
+    private String id;
+    private String studentId;
     private String nickname;
     private BigDecimal totalAssets;
     private BigDecimal investmentAmount;

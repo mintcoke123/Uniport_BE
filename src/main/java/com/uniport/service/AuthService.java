@@ -37,8 +37,8 @@ public class AuthService {
 
     @Transactional
     public AuthResponseDTO registerUser(RegisterRequestDTO dto) {
-        if (dto.getEmail() == null || dto.getEmail().isBlank()) {
-            throw new ApiException("Email is required", HttpStatus.BAD_REQUEST);
+        if (dto.getStudentId() == null || dto.getStudentId().isBlank()) {
+            throw new ApiException("Student ID is required", HttpStatus.BAD_REQUEST);
         }
         if (dto.getPassword() == null || dto.getPassword().isBlank()) {
             throw new ApiException("Password is required", HttpStatus.BAD_REQUEST);
@@ -46,17 +46,24 @@ public class AuthService {
         if (dto.getNickname() == null || dto.getNickname().isBlank()) {
             throw new ApiException("Nickname is required", HttpStatus.BAD_REQUEST);
         }
-        if (userRepository.existsByEmail(dto.getEmail().trim())) {
-            throw new ApiException("Email already exists", HttpStatus.CONFLICT);
+        String studentId = dto.getStudentId().trim();
+        validateStudentId(studentId);
+        if (userRepository.existsByStudentId(studentId)) {
+            throw new ApiException("Student ID already exists", HttpStatus.CONFLICT);
+        }
+        if (userRepository.existsByNickname(dto.getNickname().trim())) {
+            throw new ApiException("Nickname already exists", HttpStatus.CONFLICT);
         }
 
-        String email = dto.getEmail().trim();
+        String phoneNumber = dto.getPhoneNumber() != null && !dto.getPhoneNumber().isBlank()
+                ? dto.getPhoneNumber().trim() : null;
         String encodedPassword = passwordEncoder.encode(dto.getPassword());
         User user = User.builder()
-                .email(email)
-                .username(email)
+                .studentId(studentId)
+                .username(studentId)
                 .password(encodedPassword)
                 .nickname(dto.getNickname().trim())
+                .phoneNumber(phoneNumber)
                 .totalAssets(INITIAL_ASSETS)
                 .investmentAmount(INITIAL_ASSETS)
                 .profitLoss(BigDecimal.ZERO)
@@ -77,18 +84,18 @@ public class AuthService {
     }
 
     public AuthResponseDTO authenticateUser(LoginRequestDTO dto) {
-        if (dto.getEmail() == null || dto.getEmail().isBlank()) {
-            throw new ApiException("Email is required", HttpStatus.BAD_REQUEST);
+        if (dto.getStudentId() == null || dto.getStudentId().isBlank()) {
+            throw new ApiException("Student ID is required", HttpStatus.BAD_REQUEST);
         }
         if (dto.getPassword() == null || dto.getPassword().isBlank()) {
             throw new ApiException("Password is required", HttpStatus.BAD_REQUEST);
         }
 
-        User user = userRepository.findByEmail(dto.getEmail().trim())
-                .orElseThrow(() -> new ApiException("Invalid email or password", HttpStatus.UNAUTHORIZED));
+        User user = userRepository.findByStudentId(dto.getStudentId().trim())
+                .orElseThrow(() -> new ApiException("Invalid studentId or password", HttpStatus.UNAUTHORIZED));
 
         if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
-            throw new ApiException("Invalid email or password", HttpStatus.UNAUTHORIZED);
+            throw new ApiException("Invalid studentId or password", HttpStatus.UNAUTHORIZED);
         }
 
         String token = jwtUtil.createToken(user);
@@ -135,10 +142,23 @@ public class AuthService {
         return u != null ? toAuthUserDTO(u) : null;
     }
 
+    private static void validateStudentId(String studentId) {
+        if (studentId == null || studentId.length() != 8) {
+            throw new ApiException("Student ID must be exactly 8 digits", HttpStatus.BAD_REQUEST);
+        }
+        if (!studentId.matches("\\d+")) {
+            throw new ApiException("Student ID must contain only digits", HttpStatus.BAD_REQUEST);
+        }
+        long value = Long.parseLong(studentId);
+        if (value < 15000000L || value > 25999999L) {
+            throw new ApiException("Student ID must be in range 15000000-25999999", HttpStatus.BAD_REQUEST);
+        }
+    }
+
     private static AuthUserDTO toAuthUserDTO(User u) {
         return AuthUserDTO.builder()
                 .id(u.getId() != null ? String.valueOf(u.getId()) : null)
-                .email(u.getEmail())
+                .studentId(u.getStudentId())
                 .nickname(u.getNickname())
                 .totalAssets(u.getTotalAssets() != null ? u.getTotalAssets() : BigDecimal.ZERO)
                 .investmentAmount(u.getInvestmentAmount() != null ? u.getInvestmentAmount() : BigDecimal.ZERO)

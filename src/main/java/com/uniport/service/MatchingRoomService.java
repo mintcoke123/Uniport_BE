@@ -192,6 +192,9 @@ public class MatchingRoomService {
         if (memberCount == 0) {
             throw new ApiException("방에 멤버가 없어 시작할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
+        if (room.getCapacity() > 1 && memberCount < 2) {
+            throw new ApiException("팀방은 2명 이상 모였을 때 시작할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
         if ("started".equals(room.getStatus())) {
             return Map.of(
                     "success", true,

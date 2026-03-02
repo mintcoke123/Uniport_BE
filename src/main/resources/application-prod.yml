@@ -40,7 +40,7 @@ jwt:
 # 시드/어드민: 프로덕션에서 테스트 유저 시드 비활성화, 어드민 비밀번호 강한 값으로 설정
 uniport:
   admin:
-    email: ${UNIPORT_ADMIN_EMAIL:admin@uniport.com}
+    student-id: ${UNIPORT_ADMIN_STUDENT_ID:25000001}
     password: ${UNIPORT_ADMIN_PASSWORD:}
   seed:
     test-user-enabled: ${UNIPORT_SEED_TEST_USER_ENABLED:false}

@@ -151,7 +151,7 @@ public class AdminController {
                 .map(u -> {
                     Map<String, Object> m = new HashMap<>();
                     m.put("id", u.getId() != null ? String.valueOf(u.getId()) : null);
-                    m.put("email", u.getEmail());
+                    m.put("studentId", u.getStudentId());
                     m.put("nickname", u.getNickname());
                     m.put("teamId", u.getTeamId());
                     m.put("role", u.getRole() != null ? u.getRole() : "user");

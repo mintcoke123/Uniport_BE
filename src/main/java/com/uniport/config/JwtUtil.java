@@ -34,7 +34,7 @@ public class JwtUtil {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expirationMs);
         return Jwts.builder()
-                .subject(user.getEmail() != null ? user.getEmail() : user.getUsername())
+                .subject(user.getStudentId() != null ? user.getStudentId() : user.getUsername())
                 .claim("userId", user.getId())
                 .issuedAt(now)
                 .expiration(expiry)

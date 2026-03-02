@@ -33,10 +33,6 @@ public class UniportApplication {
 		System.out.println("[uniport] spring.profiles.active=" + active + " spring.jpa.hibernate.ddl-auto=" + ddlAuto);
 	}
 
-	/**
-	 * 기동 시 샘플 사용자 생성 및 간단한 통합 테스트 시나리오 실행.
-	 * 명세 §1: email 로그인. 로그인 → 시세 조회 → 주문 요청 순서로 결과를 콘솔에 출력.
-	 */
 	@Bean
 	public CommandLineRunner startupRunner(
 			UserRepository userRepository,
@@ -45,7 +41,7 @@ public class UniportApplication {
 			AuthService authService,
 			StockService stockService,
 			TradeService tradeService,
-			@Value("${uniport.admin.email:admin@uniport.com}") String adminEmail,
+			@Value("${uniport.admin.student-id:25000001}") String adminStudentId,
 			@Value("${uniport.admin.password:uniport}") String adminPassword,
 			@Value("${uniport.seed.test-user-enabled:true}") boolean seedTestUserEnabled) {
 		return args -> {
@@ -60,13 +56,13 @@ public class UniportApplication {
 			}
 
 			if (seedTestUserEnabled) {
-				String testEmail = "test@example.com";
+				String testStudentId = "25000002";
 				String testPassword = "password";
-				User testUser = userRepository.findByEmail(testEmail).orElse(null);
+				User testUser = userRepository.findByStudentId(testStudentId).orElse(null);
 				if (testUser == null) {
 					testUser = User.builder()
-							.email(testEmail)
-							.username(testEmail)
+							.studentId(testStudentId)
+							.username(testStudentId)
 							.password(passwordEncoder.encode(testPassword))
 							.nickname("Test User")
 							.totalAssets(new BigDecimal("10000000"))
@@ -84,7 +80,7 @@ public class UniportApplication {
 				}
 
 				try {
-					LoginRequestDTO loginRequest = new LoginRequestDTO(testEmail, testPassword);
+					LoginRequestDTO loginRequest = new LoginRequestDTO(testStudentId, testPassword);
 					authService.authenticateUser(loginRequest);
 				} catch (Exception e) {
 				}
@@ -95,7 +91,7 @@ public class UniportApplication {
 				}
 
 				try {
-					User user = userRepository.findByEmail(testEmail).orElseThrow();
+					User user = userRepository.findByStudentId(testStudentId).orElseThrow();
 					PlaceOrderRequestDTO orderRequest = PlaceOrderRequestDTO.builder()
 							.stockCode("005930")
 							.quantity(1)
@@ -107,13 +103,12 @@ public class UniportApplication {
 				}
 			}
 
-			// 어드민 계정 (env: UNIPORT_ADMIN_EMAIL, UNIPORT_ADMIN_PASSWORD)
-			if (adminEmail != null && !adminEmail.isBlank() && adminPassword != null && !adminPassword.isBlank()) {
-				User adminUser = userRepository.findByEmail(adminEmail).orElse(null);
+			if (adminStudentId != null && !adminStudentId.isBlank() && adminPassword != null && !adminPassword.isBlank()) {
+				User adminUser = userRepository.findByStudentId(adminStudentId).orElse(null);
 				if (adminUser == null) {
 					adminUser = User.builder()
-							.email(adminEmail)
-							.username(adminEmail)
+							.studentId(adminStudentId)
+							.username(adminStudentId)
 							.password(passwordEncoder.encode(adminPassword))
 							.nickname("Admin")
 							.totalAssets(BigDecimal.ZERO)

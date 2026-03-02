@@ -29,15 +29,19 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 로그인·회원가입 식별자 (명세 §1) */
-    @Column(nullable = false, unique = true, length = 255)
+    @Column(nullable = true, unique = true, length = 255)
     private String email;
+
+    @Column(nullable = false, unique = true, length = 20)
+    private String studentId;
+
+    @Column(length = 50)
+    private String phoneNumber;
 
     @Column(nullable = false, length = 255)
     private String password;
 
-    /** 표시명 (명세 §1) */
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, unique = true, length = 100)
     private String nickname;
 
     /** 총 자산 (명세 §1) */
@@ -64,7 +68,6 @@ public class User {
     @Column(length = 20)
     private String role;
 
-    /** 하위 호환: username (내부적으로 email과 동일하게 사용 가능) */
     @Column(unique = true, length = 255)
     private String username;
 }

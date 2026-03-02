@@ -65,10 +65,10 @@ stock:
       cron: ${STOCK_MASTER_IMPORT_CRON:0 30 7 * * *}
       zone: ${STOCK_MASTER_IMPORT_ZONE:Asia/Seoul}
 
-# 시드/어드민 (env: UNIPORT_ADMIN_EMAIL, UNIPORT_ADMIN_PASSWORD, UNIPORT_SEED_TEST_USER_ENABLED)
+# 시드/어드민 (env: UNIPORT_ADMIN_STUDENT_ID, UNIPORT_ADMIN_PASSWORD, UNIPORT_SEED_TEST_USER_ENABLED)
 uniport:
   admin:
-    email: ${UNIPORT_ADMIN_EMAIL:admin@uniport.com}
+    student-id: ${UNIPORT_ADMIN_STUDENT_ID:25000001}
     password: ${UNIPORT_ADMIN_PASSWORD:uniport}
   seed:
     test-user-enabled: ${UNIPORT_SEED_TEST_USER_ENABLED:true}
