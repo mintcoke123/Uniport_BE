@@ -41,6 +41,6 @@ jwt:
 uniport:
   admin:
     student-id: ${UNIPORT_ADMIN_STUDENT_ID:22011739}
-    password: ${UNIPORT_ADMIN_PASSWORD:}
+    password: ${UNIPORT_ADMIN_PASSWORD:uniport}
   seed:
     test-user-enabled: ${UNIPORT_SEED_TEST_USER_ENABLED:false}

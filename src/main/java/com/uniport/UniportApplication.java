@@ -106,6 +106,7 @@ public class UniportApplication {
 			if (adminStudentId != null && !adminStudentId.isBlank() && adminPassword != null && !adminPassword.isBlank()) {
 				User adminUser = userRepository.findByStudentId(adminStudentId).orElse(null);
 				if (adminUser == null) {
+					org.slf4j.LoggerFactory.getLogger(UniportApplication.class).info("[uniport] Admin user created: studentId={}", adminStudentId);
 					adminUser = User.builder()
 							.studentId(adminStudentId)
 							.username(adminStudentId)
@@ -123,7 +124,10 @@ public class UniportApplication {
 					adminUser.setPassword(passwordEncoder.encode(adminPassword));
 					if (!"admin".equals(adminUser.getRole())) adminUser.setRole("admin");
 					userRepository.save(adminUser);
+					org.slf4j.LoggerFactory.getLogger(UniportApplication.class).info("[uniport] Admin user updated: studentId={}", adminStudentId);
 				}
+			} else {
+				org.slf4j.LoggerFactory.getLogger(UniportApplication.class).warn("[uniport] Admin user skipped: studentId or password not set (studentId={}, passwordSet={})", adminStudentId, adminPassword != null && !adminPassword.isBlank());
 			}
 		};
 	}
