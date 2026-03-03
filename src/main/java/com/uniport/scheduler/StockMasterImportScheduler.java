@@ -33,7 +33,7 @@ public class StockMasterImportScheduler {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @Scheduled(cron = "${stock.master.import.cron:0 30 7 * * *}", zone = "${stock.master.import.zone:Asia/Seoul}")
+    @Scheduled(cron = "${stock.master.import.cron:0 22 9 * * *}", zone = "${stock.master.import.zone:Asia/Seoul}")
     @Transactional
     public void run() {
         if (!enabled) {
