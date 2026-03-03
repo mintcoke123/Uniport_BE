@@ -119,6 +119,11 @@ public class KeyContext {
         return stockCode != null && subscribedCodes.contains(stockCode);
     }
 
+    /** 구독 완료 또는 대기(pending) 중이면 true. 중복 구독 방지용. */
+    public boolean hasSubscriptionOrPending(String stockCode) {
+        return stockCode != null && (subscribedCodes.contains(stockCode) || pendingCodes.contains(stockCode));
+    }
+
     public void markFailure(String reason) {
         circuitBreaker.onFailure(reason);
     }

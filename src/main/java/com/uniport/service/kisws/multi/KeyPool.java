@@ -244,10 +244,16 @@ public class KeyPool {
     /**
      * 구독 보장. primary 사용, 비가용 또는 40건 초과 시 여유 있는 다른 키로 fallback.
      * KIS 공지: 1세션당 41건 제한. 방어적으로 40건으로 제한. 70종목 등은 2키 이상이면 정상 분산.
+     * 이미 어떤 키에서든 해당 종목을 구독 중이거나 대기 중이면 요청 무시(중복 구독 방지).
      */
     public void ensureSubscribed(String stockCode) {
         if (stockCode == null || stockCode.isBlank()) {
             return;
+        }
+        for (KeyContext ctx : contexts) {
+            if (ctx.hasSubscriptionOrPending(stockCode)) {
+                return;
+            }
         }
         KeyContext primary = pickPrimary(stockCode);
         KeyContext ctx = null;
