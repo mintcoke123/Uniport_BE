@@ -86,7 +86,7 @@ public class MarketService {
         }
     }
 
-    /** 명세 §3-1: 시장 지수 배열 (id, name, value, change, changeRate) */
+    /** 명세 §3-1: 시장 지수 배열 (id, name, value, change, changeRate). 목데이터 없음, 수신 실패 시 예외. */
     public List<MarketIndexItemDTO> getIndicesForApi() {
         List<MarketIndexItemDTO> list = new ArrayList<>();
         try {
@@ -106,9 +106,10 @@ public class MarketService {
                     .change(kosdaq.getChangeAmount() != null ? kosdaq.getChangeAmount() : BigDecimal.ZERO)
                     .changeRate(kosdaq.getChangeRate() != null ? kosdaq.getChangeRate() : BigDecimal.ZERO)
                     .build());
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
-            list.add(MarketIndexItemDTO.builder().id(1L).name("KOSPI").value(BigDecimal.valueOf(2500)).change(BigDecimal.ZERO).changeRate(BigDecimal.ZERO).build());
-            list.add(MarketIndexItemDTO.builder().id(2L).name("KOSDAQ").value(BigDecimal.valueOf(800)).change(BigDecimal.ZERO).changeRate(BigDecimal.ZERO).build());
+            throw new ApiException("시장 지수(코스피/코스닥)를 불러오지 못했습니다. " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
         }
         return list;
     }
