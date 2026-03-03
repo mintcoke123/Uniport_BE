@@ -12,6 +12,7 @@ import com.uniport.service.ChatService;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
+import com.uniport.service.VoteService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,11 +48,12 @@ public class AdminController {
     private final CompetitionService competitionService;
     private final RankingService rankingService;
     private final ChatService chatService;
+    private final VoteService voteService;
 
     public AdminController(AuthService authService, UserRepository userRepository,
                            OrderRepository orderRepository, HoldingRepository holdingRepository,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
-                           MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService) {
+                           MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService, VoteService voteService) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
@@ -61,6 +63,7 @@ public class AdminController {
         this.competitionService = competitionService;
         this.rankingService = rankingService;
         this.chatService = chatService;
+        this.voteService = voteService;
     }
 
     private User requireAdmin(String authorization) {
@@ -144,6 +147,31 @@ public class AdminController {
             @PathVariable Long userId) {
         requireAdmin(authorization);
         return ResponseEntity.ok(matchingRoomService.removeMemberByAdmin(roomId, userId));
+    }
+
+    /** 팀(방)별 거래내역 로그: 해당 방의 투표(체결 포함) 목록. roomId: "room-1" 또는 "1" */
+    @GetMapping("/matching-rooms/{roomId}/votes")
+    public ResponseEntity<List<Map<String, Object>>> getRoomVotes(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String roomId) {
+        requireAdmin(authorization);
+        Long groupId = parseRoomIdToGroupId(roomId);
+        return ResponseEntity.ok(voteService.getVotesByRoomId(groupId));
+    }
+
+    private static Long parseRoomIdToGroupId(String roomId) {
+        if (roomId == null || roomId.trim().isEmpty()) {
+            throw new ApiException("방 ID가 필요합니다.", HttpStatus.BAD_REQUEST);
+        }
+        String s = roomId.trim();
+        if (s.startsWith("room-")) {
+            s = s.substring(5);
+        }
+        try {
+            return Long.parseLong(s);
+        } catch (NumberFormatException e) {
+            throw new ApiException("잘못된 방 ID입니다.", HttpStatus.BAD_REQUEST);
+        }
     }
 
     /** 팀별 피드백 전송: 입력한 방들에 피드백 메시지 브로드캐스트 및 해당 방 채팅 비활성화 */
