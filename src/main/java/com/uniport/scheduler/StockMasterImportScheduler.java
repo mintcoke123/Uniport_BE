@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 매일 지정 시각(KST 07:30 기본)에 종목 마스터 자동 갱신.
+ * 종목 마스터 자동 갱신: 서버 기동 시 1회 + 매일 지정 시각(KST 07:30 기본).
  * stock.master.import.enabled=true 일 때만 실행. Postgres advisory lock으로 다중 인스턴스 중 1개만 실행.
  * 예외는 로그만 남기고 전파하지 않음.
  */
@@ -33,7 +33,7 @@ public class StockMasterImportScheduler {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @Scheduled(cron = "${stock.master.import.cron:0 30 11 * * *}", zone = "${stock.master.import.zone:Asia/Seoul}")
+    @Scheduled(cron = "${stock.master.import.cron:0 30 7 * * *}", zone = "${stock.master.import.zone:Asia/Seoul}")
     @Transactional
     public void run() {
         if (!enabled) {
