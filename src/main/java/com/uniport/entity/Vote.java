@@ -99,6 +99,10 @@ public class Vote {
     @Column(name = "executed_at")
     private Instant executedAt;
 
+    /** 실제 체결가 (체결 시점에 저장, 이후 변경되지 않음) */
+    @Column(name = "execution_price", precision = 19, scale = 4)
+    private BigDecimal executionPrice;
+
     @OneToMany(mappedBy = "vote", fetch = FetchType.LAZY, orphanRemoval = true)
     @Builder.Default
     private List<VoteParticipant> participants = new ArrayList<>();

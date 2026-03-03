@@ -182,7 +182,9 @@ public class VoteService {
         map.put("proposerName", v.getProposerName());
         map.put("quantity", v.getQuantity());
         map.put("proposedPrice", v.getProposedPrice());
-        if (v.getStockCode() != null && !v.getStockCode().isBlank()) {
+        if (v.getExecutionPrice() != null) {
+            map.put("executionPrice", v.getExecutionPrice());
+        } else if (v.getStockCode() != null && !v.getStockCode().isBlank()) {
             LocalDateTime voteCreated = LocalDateTime.ofInstant(v.getCreatedAt(), ZoneId.systemDefault());
             orderRepository.findByTeamIdAndStockCodeOrderByOrderDateDesc(v.getRoomId(), v.getStockCode())
                     .stream()
@@ -430,10 +432,11 @@ public class VoteService {
                 .build();
         User proposer = userRepository.findById(vote.getProposerId()).orElse(null);
         tradeService.placeOrderForTeam(request, vote.getRoomId(), proposer);
+        BigDecimal execPrice = currentPrice != null && currentPrice.compareTo(BigDecimal.ZERO) > 0 ? currentPrice : BigDecimal.ONE;
         vote.setStatus(STATUS_EXECUTED);
         vote.setExecutedAt(Instant.now());
+        vote.setExecutionPrice(execPrice);
         voteRepository.save(vote);
-        BigDecimal execPrice = currentPrice != null && currentPrice.compareTo(BigDecimal.ZERO) > 0 ? currentPrice : BigDecimal.ONE;
         String nickname = proposer != null && proposer.getNickname() != null ? proposer.getNickname() : "팀";
         try {
             chatService.saveExecutionMessage(vote.getRoomId(), vote.getProposerId(), nickname, vote.getType(), vote.getStockName(), vote.getQuantity(), execPrice);

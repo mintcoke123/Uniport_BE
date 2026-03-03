@@ -8,6 +8,7 @@ ALTER TABLE votes ADD COLUMN IF NOT EXISTS trigger_price numeric(19,4);
 ALTER TABLE votes ADD COLUMN IF NOT EXISTS trigger_direction varchar(10);
 ALTER TABLE votes ADD COLUMN IF NOT EXISTS execution_expires_at timestamptz;
 ALTER TABLE votes ADD COLUMN IF NOT EXISTS executed_at timestamptz;
+ALTER TABLE votes ADD COLUMN IF NOT EXISTS execution_price numeric(19,4);
 
 -- 채팅 메시지-투표 1:1 매칭 (중복 카드 방지). chat_messages 테이블에 vote_id 추가.
 ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS vote_id bigint;
