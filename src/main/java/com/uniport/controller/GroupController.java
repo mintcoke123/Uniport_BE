@@ -1,5 +1,6 @@
 package com.uniport.controller;
 
+import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.TeamAccount;
 import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
@@ -173,9 +174,17 @@ public class GroupController {
 
     @GetMapping("/{groupId}/members")
     public ResponseEntity<List<Map<String, Object>>> getMembers(@PathVariable Long groupId) {
-        return ResponseEntity.ok(List.of(
-                Map.<String, Object>of("id", 1, "nickname", "멤버1")
-        ));
+        List<MatchingRoomMember> members = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(groupId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (MatchingRoomMember m : members) {
+            User u = m.getUser();
+            if (u == null) continue;
+            result.add(Map.<String, Object>of(
+                    "id", u.getId() != null ? u.getId() : 0L,
+                    "nickname", u.getNickname() != null ? u.getNickname() : ""
+            ));
+        }
+        return ResponseEntity.ok(result);
     }
 
     /** §7: 채팅 메시지 목록 (해당 그룹 멤버만 조회 가능) */
