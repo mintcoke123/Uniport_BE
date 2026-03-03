@@ -1026,7 +1026,7 @@ public class KisApiService {
 
     /**
      * 국내주식 기간별시세(일/주/월/년). KIS inquire-daily-itemchartprice API.
-     * FID_PERIOD_DIV_CODE: D=일봉, W=주봉, M=월봉, Y=년봉. 최대 200건.
+     * 명세: GET, Query Parameter. FID_PERIOD_DIV_CODE: D=일봉, W=주봉, M=월봉, Y=년봉. 1회 최대 100건.
      */
     public List<IndexChartPriceItemDTO> getStockDailyChartPrice(String stockCode, String startDate, String endDate, String periodDivCode) {
         if (stockCode == null || stockCode.isBlank()) {
@@ -1043,17 +1043,18 @@ public class KisApiService {
             throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
         }
         String normalized = stockCode.trim().length() >= 6 ? stockCode.trim() : String.format("%6s", stockCode.trim()).replace(' ', '0');
-        String url = getBaseUrl() + STOCK_DAILY_CHART_PATH;
-        Map<String, Object> requestBody = Map.of(
-                "FID_COND_MRKT_DIV_CODE", "J",
-                "FID_INPUT_ISCD", normalized,
-                "FID_INPUT_DATE_1", startDate.trim(),
-                "FID_INPUT_DATE_2", endDate.trim(),
-                "FID_PERIOD_DIV_CODE", period
-        );
-        HttpHeaders bodyHeaders = new HttpHeaders();
-        bodyHeaders.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
-        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, bodyHeaders);
+        String url = UriComponentsBuilder.fromUriString(getBaseUrl() + STOCK_DAILY_CHART_PATH)
+                .queryParam("FID_COND_MRKT_DIV_CODE", "J")
+                .queryParam("FID_INPUT_ISCD", normalized)
+                .queryParam("FID_INPUT_DATE_1", startDate.trim())
+                .queryParam("FID_INPUT_DATE_2", endDate.trim())
+                .queryParam("FID_PERIOD_DIV_CODE", period)
+                .queryParam("FID_ORG_ADJ_PRC", "0")
+                .build()
+                .toUriString();
+        HttpHeaders headers = buildAuthHeaders(TR_ID_STOCK_DAILY_CHART);
+        headers.setContentType(MediaType.parseMediaType("application/json; charset=utf-8"));
+        HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
         ApiException lastEx = null;
         if (keyPool != null) {
             if (keyPool.getRestKeyIdsToTry().isEmpty()) {
@@ -1064,7 +1065,7 @@ public class KisApiService {
                 if (client == null || !client.isAvailable()) continue;
                 try {
                     ResponseEntity<Map<String, Object>> response = client.exchangeWithAuth(
-                            url, HttpMethod.POST, requestEntity, TR_ID_STOCK_DAILY_CHART,
+                            url, HttpMethod.GET, requestEntity, TR_ID_STOCK_DAILY_CHART,
                             new ParameterizedTypeReference<Map<String, Object>>() {});
                     Map<String, Object> resBody = response.getBody();
                     if (resBody == null) {
@@ -1094,12 +1095,9 @@ public class KisApiService {
             }
             if (lastEx != null) throw lastEx;
         }
-        HttpHeaders headers = buildAuthHeaders(TR_ID_STOCK_DAILY_CHART);
-        headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
         try {
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                    url, HttpMethod.POST, request, new ParameterizedTypeReference<Map<String, Object>>() {});
+                    url, HttpMethod.GET, requestEntity, new ParameterizedTypeReference<Map<String, Object>>() {});
             Map<String, Object> resBody = response.getBody();
             if (resBody == null) {
                 throw new ApiException("KIS stock daily chart response body is null", HttpStatus.SERVICE_UNAVAILABLE);

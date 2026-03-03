@@ -36,7 +36,7 @@ public class OhlcvController {
         if (code == null || code.isBlank()) {
             return ResponseEntity.ok(List.of());
         }
-        int limit = count != null && count > 0 && count <= 200 ? count : 200;
+        int limit = count != null && count > 0 && count <= 100 ? count : 100;
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusDays(limit - 1);
         String period = "1D".equalsIgnoreCase(tf) || "D".equalsIgnoreCase(tf) ? "D"
