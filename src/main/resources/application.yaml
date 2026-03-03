@@ -61,7 +61,7 @@ kis:
 stock:
   master:
     import:
-      enabled: ${STOCK_MASTER_IMPORT_ENABLED:false}
+      enabled: ${STOCK_MASTER_IMPORT_ENABLED:true
       cron: ${STOCK_MASTER_IMPORT_CRON:0 30 11 * * *}
       zone: ${STOCK_MASTER_IMPORT_ZONE:Asia/Seoul}
 
