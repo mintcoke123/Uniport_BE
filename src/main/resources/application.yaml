@@ -61,8 +61,8 @@ kis:
 stock:
   master:
     import:
-      enabled: ${STOCK_MASTER_IMPORT_ENABLED:true
-      cron: ${STOCK_MASTER_IMPORT_CRON:0 30 11 * * *}
+      enabled: ${STOCK_MASTER_IMPORT_ENABLED:true}
+      cron: ${STOCK_MASTER_IMPORT_CRON:0 30 7 * * *}
       zone: ${STOCK_MASTER_IMPORT_ZONE:Asia/Seoul}
 
 # 시드/어드민 (env: UNIPORT_ADMIN_STUDENT_ID, UNIPORT_ADMIN_PASSWORD, UNIPORT_SEED_TEST_USER_ENABLED)
