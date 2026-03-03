@@ -61,6 +61,8 @@ public class KisApiService {
     private static final String INDEX_PRICE_PATH = "/uapi/domestic-stock/v1/quotations/inquire-index-price";
     /** 지수 일/주/월/년 차트 시세 */
     private static final String INDEX_CHART_PRICE_PATH = "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice";
+    /** 국내주식 기간별시세(일/주/월/년) */
+    private static final String STOCK_DAILY_CHART_PATH = "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice";
     private static final String TR_ID_STOCK_PRICE = "FHKST01010100";
     /** 거래량 순위 조회 전용 tr_id (현재가 조회 FHKST01010100과 구분) */
     private static final String TR_ID_VOLUME_RANK = "FHPST01710000";
@@ -69,6 +71,8 @@ public class KisApiService {
     private static final String TR_ID_INDEX_PRICE = "FHPUP02100000";
     /** 지수 차트 시세 tr_id */
     private static final String TR_ID_INDEX_CHART = "FHKUP03500100";
+    /** 국내주식 기간별시세 tr_id */
+    private static final String TR_ID_STOCK_DAILY_CHART = "FHKST03010100";
     private static final int TOKEN_REFRESH_BUFFER_SECONDS = 60;
     /** approval_key TTL 23시간 */
     private static final long APPROVAL_KEY_TTL_MILLIS = 23L * 60 * 60 * 1000;
@@ -1017,6 +1021,110 @@ public class KisApiService {
             throw e;
         } catch (RestClientException e) {
             throw new ApiException("KIS index chart request failed: " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    /**
+     * 국내주식 기간별시세(일/주/월/년). KIS inquire-daily-itemchartprice API.
+     * FID_PERIOD_DIV_CODE: D=일봉, W=주봉, M=월봉, Y=년봉. 최대 200건.
+     */
+    public List<IndexChartPriceItemDTO> getStockDailyChartPrice(String stockCode, String startDate, String endDate, String periodDivCode) {
+        if (stockCode == null || stockCode.isBlank()) {
+            throw new ApiException("Stock code is required", HttpStatus.BAD_REQUEST);
+        }
+        if (startDate == null || startDate.isBlank() || endDate == null || endDate.isBlank()) {
+            throw new ApiException("Start date and end date are required (yyyyMMdd)", HttpStatus.BAD_REQUEST);
+        }
+        String period = periodDivCode != null ? periodDivCode.trim().toUpperCase() : "D";
+        if (!period.matches("^[DWMY]$")) {
+            throw new ApiException("period must be D(일봉), W(주봉), M(월봉), or Y(년봉)", HttpStatus.BAD_REQUEST);
+        }
+        if (!isKisConfigured()) {
+            throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
+        }
+        String normalized = stockCode.trim().length() >= 6 ? stockCode.trim() : String.format("%6s", stockCode.trim()).replace(' ', '0');
+        String url = getBaseUrl() + STOCK_DAILY_CHART_PATH;
+        Map<String, Object> requestBody = Map.of(
+                "FID_COND_MRKT_DIV_CODE", "J",
+                "FID_INPUT_ISCD", normalized,
+                "FID_INPUT_DATE_1", startDate.trim(),
+                "FID_INPUT_DATE_2", endDate.trim(),
+                "FID_PERIOD_DIV_CODE", period
+        );
+        HttpHeaders bodyHeaders = new HttpHeaders();
+        bodyHeaders.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, bodyHeaders);
+        ApiException lastEx = null;
+        if (keyPool != null) {
+            if (keyPool.getRestKeyIdsToTry().isEmpty()) {
+                throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
+            }
+            for (String keyId : keyPool.getRestKeyIdsToTry()) {
+                KisRestClient client = keyPool.getRestClient(keyId);
+                if (client == null || !client.isAvailable()) continue;
+                try {
+                    ResponseEntity<Map<String, Object>> response = client.exchangeWithAuth(
+                            url, HttpMethod.POST, requestEntity, TR_ID_STOCK_DAILY_CHART,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
+                    Map<String, Object> resBody = response.getBody();
+                    if (resBody == null) {
+                        throw new ApiException("KIS stock daily chart response body is null", HttpStatus.SERVICE_UNAVAILABLE);
+                    }
+                    String rtCd = (String) resBody.get("rt_cd");
+                    if (rtCd != null && !"0".equals(rtCd)) {
+                        throw new ApiException(kisErrorMessage(resBody, "stock daily chart"), HttpStatus.BAD_REQUEST);
+                    }
+                    Object output = resBody.get("output2");
+                    if (output == null) output = resBody.get("output");
+                    List<IndexChartPriceItemDTO> list = new ArrayList<>();
+                    if (output instanceof List) {
+                        for (Object item : (List<?>) output) {
+                            if (item instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> m = (Map<String, Object>) item;
+                                list.add(mapToIndexChartPriceItemDTO(m));
+                            }
+                        }
+                    }
+                    return list;
+                } catch (ApiException e) {
+                    if (e.getStatus() != null && e.getStatus().value() == 400) throw e;
+                    lastEx = e;
+                }
+            }
+            if (lastEx != null) throw lastEx;
+        }
+        HttpHeaders headers = buildAuthHeaders(TR_ID_STOCK_DAILY_CHART);
+        headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+        try {
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    url, HttpMethod.POST, request, new ParameterizedTypeReference<Map<String, Object>>() {});
+            Map<String, Object> resBody = response.getBody();
+            if (resBody == null) {
+                throw new ApiException("KIS stock daily chart response body is null", HttpStatus.SERVICE_UNAVAILABLE);
+            }
+            String rtCd = (String) resBody.get("rt_cd");
+            if (rtCd != null && !"0".equals(rtCd)) {
+                throw new ApiException(kisErrorMessage(resBody, "stock daily chart"), HttpStatus.BAD_REQUEST);
+            }
+            Object output = resBody.get("output2");
+            if (output == null) output = resBody.get("output");
+            List<IndexChartPriceItemDTO> list = new ArrayList<>();
+            if (output instanceof List) {
+                for (Object item : (List<?>) output) {
+                    if (item instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> m = (Map<String, Object>) item;
+                        list.add(mapToIndexChartPriceItemDTO(m));
+                    }
+                }
+            }
+            return list;
+        } catch (ApiException e) {
+            throw e;
+        } catch (RestClientException e) {
+            throw new ApiException("KIS stock daily chart request failed: " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
         }
     }
 
