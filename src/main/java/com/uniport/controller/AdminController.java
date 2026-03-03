@@ -8,6 +8,7 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.OrderRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.AuthService;
+import com.uniport.service.ChatService;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,11 +46,12 @@ public class AdminController {
     private final MatchingRoomService matchingRoomService;
     private final CompetitionService competitionService;
     private final RankingService rankingService;
+    private final ChatService chatService;
 
     public AdminController(AuthService authService, UserRepository userRepository,
                            OrderRepository orderRepository, HoldingRepository holdingRepository,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
-                           MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService) {
+                           MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
@@ -57,6 +60,7 @@ public class AdminController {
         this.matchingRoomService = matchingRoomService;
         this.competitionService = competitionService;
         this.rankingService = rankingService;
+        this.chatService = chatService;
     }
 
     private User requireAdmin(String authorization) {
@@ -140,6 +144,50 @@ public class AdminController {
             @PathVariable Long userId) {
         requireAdmin(authorization);
         return ResponseEntity.ok(matchingRoomService.removeMemberByAdmin(roomId, userId));
+    }
+
+    /** 팀별 피드백 전송: 입력한 방들에 피드백 메시지 브로드캐스트 및 해당 방 채팅 비활성화 */
+    @PostMapping("/chat/feedback")
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<Map<String, Object>> sendFeedbackToRooms(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody Map<String, Object> body) {
+        requireAdmin(authorization);
+        Object deliveriesObj = body != null ? body.get("deliveries") : null;
+        List<Map<String, Object>> deliveries = deliveriesObj instanceof List ? (List<Map<String, Object>>) deliveriesObj : null;
+        if (deliveries == null || deliveries.isEmpty()) {
+            throw new ApiException("deliveries is required and must be non-empty", HttpStatus.BAD_REQUEST);
+        }
+        List<String> errors = new ArrayList<>();
+        for (Map<String, Object> d : deliveries) {
+            Object roomIdObj = d.get("roomId");
+            String content = d.containsKey("content") ? String.valueOf(d.get("content")) : "";
+            Long roomId = null;
+            if (roomIdObj instanceof Number) {
+                roomId = ((Number) roomIdObj).longValue();
+            } else if (roomIdObj instanceof String) {
+                String s = (String) roomIdObj;
+                if (s.startsWith("room-")) s = s.substring(5);
+                try {
+                    roomId = Long.parseLong(s.trim());
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            if (roomId == null || roomId < 1) {
+                errors.add("Invalid roomId: " + roomIdObj);
+                continue;
+            }
+            try {
+                chatService.saveFeedbackMessage(roomId, content);
+            } catch (Exception e) {
+                errors.add("room " + roomId + ": " + e.getMessage());
+            }
+        }
+        if (!errors.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                    .body(Map.of("success", false, "message", String.join("; ", errors)));
+        }
+        return ResponseEntity.ok(Map.of("success", true, "message", "Feedback sent to selected rooms."));
     }
 
     /** §10-6: 유저 목록 (관리자용) */

@@ -97,6 +97,34 @@ public class ChatService {
         }
     }
 
+    /** 어드민 팀별 피드백: DB 저장 후 해당 방에 브로드캐스트, 채팅 비활성화 플래그 포함 */
+    @Transactional
+    public ChatMessage saveFeedbackMessage(Long roomId, String content) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", "feedback");
+            payload.put("content", content != null ? content : "");
+            payload.put("chatDisabled", true);
+            String message = OBJECT_MAPPER.writeValueAsString(payload);
+            ChatMessage msg = ChatMessage.of(roomId, 0L, "관리자", message);
+            msg = chatMessageRepository.save(msg);
+            Map<String, Object> broadcast = new HashMap<>();
+            broadcast.put("id", msg.getId());
+            broadcast.put("userId", 0);
+            broadcast.put("userNickname", "관리자");
+            broadcast.put("timestamp", msg.getCreatedAt() != null ? msg.getCreatedAt().toString() : "");
+            broadcast.put("type", "feedback");
+            broadcast.put("feedbackContent", content != null ? content : "");
+            broadcast.put("chatDisabled", true);
+            broadcast.put("message", null);
+            broadcast.put("tradeData", null);
+            groupChatBroadcaster.broadcast(String.valueOf(roomId), OBJECT_MAPPER.writeValueAsString(broadcast));
+            return msg;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to save feedback message", e);
+        }
+    }
+
     /** 저장된 메시지를 같은 방 WebSocket 연결된 클라이언트에 실시간 전달 (채팅·투표 공유 시) */
     private void broadcastToGroup(Long roomId, ChatMessage saved) {
         try {
@@ -133,6 +161,14 @@ public class ChatService {
                 if ("execution".equals(parsed.get("type")) && parsed.containsKey("executionData")) {
                     map.put("type", "execution");
                     map.put("executionData", parsed.get("executionData"));
+                    map.put("message", null);
+                    map.put("tradeData", null);
+                    return map;
+                }
+                if ("feedback".equals(parsed.get("type")) && parsed.containsKey("content")) {
+                    map.put("type", "feedback");
+                    map.put("feedbackContent", parsed.get("content"));
+                    map.put("chatDisabled", Boolean.TRUE.equals(parsed.get("chatDisabled")));
                     map.put("message", null);
                     map.put("tradeData", null);
                     return map;
