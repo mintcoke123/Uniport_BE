@@ -45,7 +45,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/favicon.ico").permitAll()
-                        .requestMatchers("/", "/api/auth/**", "/api/me/**", "/api/market/**", "/api/stocks/**", "/api/trades", "/api/competitions/**", "/api/ranking/**", "/api/groups/**", "/api/matching-rooms/**", "/api/admin/**", "/api/config/**", "/api/health", "/auth/**", "/stock/**", "/market/**", "/trade/**", "/h2-console/**", "/error").permitAll()
+                        .requestMatchers("/", "/api/auth/**", "/api/me/**", "/api/market/**", "/api/stocks/**", "/api/ohlcv", "/api/trades", "/api/competitions/**", "/api/ranking/**", "/api/groups/**", "/api/matching-rooms/**", "/api/admin/**", "/api/config/**", "/api/health", "/auth/**", "/stock/**", "/market/**", "/trade/**", "/h2-console/**", "/error").permitAll()
                         .requestMatchers("/groups/*/chat", "/prices").permitAll()
                         .anyRequest().authenticated())
                 .headers(h -> h.frameOptions(f -> f.sameOrigin()))
