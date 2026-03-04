@@ -240,13 +240,11 @@ public class MatchingRoomService {
             throw new ApiException("해당 팀에 속한 멤버가 아닙니다.", HttpStatus.NOT_FOUND);
         }
         matchingRoomMemberRepository.deleteByMatchingRoomIdAndUserId(room.getId(), userId);
+        // 해당 방에서 제거된 유저는 팀 소속 해제(teamId=null). 포맷(team-/room-) 관계없이 무조건 해제.
         User kickedUser = userRepository.findById(userId).orElse(null);
-        if (kickedUser != null && room.getId() != null) {
-            String roomTeamId = ROOM_ID_PREFIX + room.getId();
-            if (roomTeamId.equals(kickedUser.getTeamId())) {
-                kickedUser.setTeamId(null);
-                userRepository.save(kickedUser);
-            }
+        if (kickedUser != null) {
+            kickedUser.setTeamId(null);
+            userRepository.saveAndFlush(kickedUser);
         }
         int newCount = (int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
         room.setMemberCount(newCount);
