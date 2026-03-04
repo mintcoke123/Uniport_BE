@@ -150,8 +150,8 @@ public class AuthService {
             throw new ApiException("Student ID must contain only digits", HttpStatus.BAD_REQUEST);
         }
         long value = Long.parseLong(studentId);
-        if (value < 15000000L || value > 25999999L) {
-            throw new ApiException("Student ID must be in range 15000000-25999999", HttpStatus.BAD_REQUEST);
+        if (value < 15000000L || value > 26999999L) {
+            throw new ApiException("Student ID must be in range 15000000-26999999", HttpStatus.BAD_REQUEST);
         }
     }
 
