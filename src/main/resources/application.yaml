@@ -56,6 +56,12 @@ kis:
     - id: k2
       appkey: ${KIS_APPKEY_2:}
       appsecret: ${KIS_APPSECRET_2:}
+    - id: k3
+      appkey: ${KIS_APPKEY_3:}
+      appsecret: ${KIS_APPSECRET_3:}
+    - id: k4
+      appkey: ${KIS_APPKEY_4:}
+      appsecret: ${KIS_APPSECRET_4:}
 
 # 종목 마스터 매일 자동 갱신 (Postgres advisory lock 사용, 다중 인스턴스 중 1개만 실행)
 stock:

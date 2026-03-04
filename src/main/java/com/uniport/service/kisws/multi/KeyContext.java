@@ -186,11 +186,11 @@ public class KeyContext {
                                         String payload = recvstr.length >= 4 ? recvstr[3] : recvstr[2];
                                         String[] fields = payload.split("\\^", -1);
                                         if (fields.length > IDX_CHANGE_RATE) {
-                                            String stockCode = safeTrim(fields[IDX_STOCK_CODE]);
-                                            BigDecimal currentPrice = parseBigDecimal(fields[IDX_CURRENT_PRICE]);
-                                            BigDecimal change = parseBigDecimal(fields[IDX_CHANGE]);
-                                            BigDecimal changeRate = parseBigDecimal(fields[IDX_CHANGE_RATE]);
-                                            Long volume = fields.length > IDX_ACML_VOL ? parseLong(fields[IDX_ACML_VOL]) : 0L;
+                                            String stockCode = safeTrim(getField(fields, IDX_STOCK_CODE));
+                                            BigDecimal currentPrice = parseBigDecimal(getField(fields, IDX_CURRENT_PRICE));
+                                            BigDecimal change = parseBigDecimal(getField(fields, IDX_CHANGE));
+                                            BigDecimal changeRate = parseBigDecimal(getField(fields, IDX_CHANGE_RATE));
+                                            Long volume = parseLong(getField(fields, IDX_ACML_VOL));
                                             if (stockCode != null && currentPrice != null) {
                                                 long now = System.currentTimeMillis();
                                                 lastMessageAtMillis = now;
@@ -210,7 +210,11 @@ public class KeyContext {
                                         }
                                     }
                                 } catch (Exception e) {
-                                    log.warn("KIS WS H0STCNT0 parse failed keyId={}", keyId);
+                                    if (log.isDebugEnabled()) {
+                                        log.debug("KIS WS H0STCNT0 parse failed keyId={} reason={} sample={}", keyId, e.getMessage(), text.length() > 200 ? text.substring(0, 200) + "..." : text);
+                                    } else {
+                                        log.warn("KIS WS H0STCNT0 parse failed keyId={} reason={}", keyId, e.getMessage());
+                                    }
                                 }
                             }
                             if (isPingPong) {
@@ -460,6 +464,13 @@ public class KeyContext {
             reconnectExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
+    }
+
+    /** 배열 인덱스가 범위 내면 해당 값, 아니면 빈 문자열(파싱 시 null 반환). H0STCNT0 필드 개수 차이 대응. */
+    private static String getField(String[] fields, int index) {
+        if (fields == null || index < 0 || index >= fields.length) return "";
+        String v = fields[index];
+        return v != null ? v : "";
     }
 
     private static String safeTrim(String s) {

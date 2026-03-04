@@ -57,7 +57,7 @@ class StockMasterParserTest {
     }
 
     @Test
-    void normalizeCode_1~5자리_왼쪽0패딩() {
+    void normalizeCode_1to5자리_왼쪽0패딩() {
         assertEquals("005930", StockMasterParser.normalizeCode("5930"));
         assertEquals("000001", StockMasterParser.normalizeCode("1"));
     }
