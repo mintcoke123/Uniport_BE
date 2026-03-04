@@ -38,21 +38,21 @@ public class AuthService {
     @Transactional
     public AuthResponseDTO registerUser(RegisterRequestDTO dto) {
         if (dto.getStudentId() == null || dto.getStudentId().isBlank()) {
-            throw new ApiException("Student ID is required", HttpStatus.BAD_REQUEST);
+            throw new ApiException("학번을 입력해 주세요.", HttpStatus.BAD_REQUEST);
         }
         if (dto.getPassword() == null || dto.getPassword().isBlank()) {
-            throw new ApiException("Password is required", HttpStatus.BAD_REQUEST);
+            throw new ApiException("비밀번호를 입력해 주세요.", HttpStatus.BAD_REQUEST);
         }
         if (dto.getNickname() == null || dto.getNickname().isBlank()) {
-            throw new ApiException("Nickname is required", HttpStatus.BAD_REQUEST);
+            throw new ApiException("닉네임을 입력해 주세요.", HttpStatus.BAD_REQUEST);
         }
         String studentId = dto.getStudentId().trim();
         validateStudentId(studentId);
         if (userRepository.existsByStudentId(studentId)) {
-            throw new ApiException("Student ID already exists", HttpStatus.CONFLICT);
+            throw new ApiException("이미 사용 중인 학번입니다.", HttpStatus.CONFLICT);
         }
         if (userRepository.existsByNickname(dto.getNickname().trim())) {
-            throw new ApiException("Nickname already exists", HttpStatus.CONFLICT);
+            throw new ApiException("이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT);
         }
 
         String phoneNumber = dto.getPhoneNumber() != null && !dto.getPhoneNumber().isBlank()
@@ -144,14 +144,14 @@ public class AuthService {
 
     private static void validateStudentId(String studentId) {
         if (studentId == null || studentId.length() != 8) {
-            throw new ApiException("Student ID must be exactly 8 digits", HttpStatus.BAD_REQUEST);
+            throw new ApiException("학번은 숫자 8자리로 입력해 주세요.", HttpStatus.BAD_REQUEST);
         }
         if (!studentId.matches("\\d+")) {
-            throw new ApiException("Student ID must contain only digits", HttpStatus.BAD_REQUEST);
+            throw new ApiException("학번은 숫자만 입력해 주세요.", HttpStatus.BAD_REQUEST);
         }
         long value = Long.parseLong(studentId);
         if (value < 15000000L || value > 26999999L) {
-            throw new ApiException("Student ID must be in range 15000000-26999999", HttpStatus.BAD_REQUEST);
+            throw new ApiException("학번은 15000000~26999999 범위여야 합니다.", HttpStatus.BAD_REQUEST);
         }
     }
 

@@ -11,6 +11,8 @@ import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -36,6 +38,24 @@ public class PriceBroadcaster {
 
     public PriceBroadcaster(@Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
+    }
+
+    /** 특정 세션이 구독 중인 종목코드 (없으면 빈 집합, 스냅샷 복사) */
+    public Set<String> getSubscribedCodes(WebSocketSession session) {
+        if (session == null) return Set.of();
+        Set<String> codes = sessionToCodes.get(session);
+        return codes == null ? Set.of() : Set.copyOf(codes);
+    }
+
+    /** 세션 ID(키)별 구독 종목 목록 스냅샷. 키: session.getId(), 값: 해당 세션이 구독 중인 종목코드 집합 */
+    public Map<String, Set<String>> getSubscriptionSummaryBySessionId() {
+        Map<String, Set<String>> out = new ConcurrentHashMap<>();
+        sessionToCodes.forEach((session, codes) -> {
+            if (session != null && codes != null) {
+                out.put(session.getId(), Set.copyOf(codes));
+            }
+        });
+        return Collections.unmodifiableMap(out);
     }
 
     /** /prices 세션 전체가 구독 중인 종목코드 합집합 (KIS 동기화용) */
