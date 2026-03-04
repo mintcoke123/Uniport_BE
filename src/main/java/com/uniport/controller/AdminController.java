@@ -165,14 +165,14 @@ public class AdminController {
         return ResponseEntity.ok(matchingRoomService.removeMemberByAdmin(roomId, userId));
     }
 
-    /** 팀(방)별 거래내역 로그: 해당 방의 투표(체결 포함) 목록. roomId: "room-1" 또는 "1" */
+    /** 팀(방)별 거래내역 로그: 해당 방의 투표(Vote) + 바로 체결(Order) 합산, 일시 역순. roomId: "room-1" 또는 "1" */
     @GetMapping("/matching-rooms/{roomId}/votes")
     public ResponseEntity<List<Map<String, Object>>> getRoomVotes(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String roomId) {
         requireAdmin(authorization);
         Long groupId = parseRoomIdToGroupId(roomId);
-        return ResponseEntity.ok(voteService.getVotesByRoomId(groupId));
+        return ResponseEntity.ok(voteService.getVotesAndOrdersByRoomId(groupId));
     }
 
     private static Long parseRoomIdToGroupId(String roomId) {

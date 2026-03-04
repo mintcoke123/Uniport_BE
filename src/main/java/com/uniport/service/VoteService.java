@@ -2,7 +2,9 @@ package com.uniport.service;
 
 import com.uniport.dto.PlaceOrderRequestDTO;
 import com.uniport.dto.StockPriceDTO;
+import com.uniport.entity.Order;
 import com.uniport.entity.OrderType;
+import com.uniport.entity.OrderStatus;
 import com.uniport.entity.User;
 import com.uniport.entity.Vote;
 import com.uniport.entity.VoteParticipant;
@@ -25,6 +27,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -170,6 +173,59 @@ public class VoteService {
     public List<Map<String, Object>> getVotesByRoomId(Long groupId) {
         List<Vote> votes = voteRepository.findByRoomIdOrderByCreatedAtDesc(groupId);
         return votes.stream().map(this::toMap).collect(Collectors.toList());
+    }
+
+    /** 팀(방)별 거래내역: 투표(Vote) + 바로 체결(Order) 합쳐서 일시 역순. 관리자 로그용 */
+    public List<Map<String, Object>> getVotesAndOrdersByRoomId(Long groupId) {
+        List<Map<String, Object>> voteMaps = getVotesByRoomId(groupId);
+        for (Map<String, Object> m : voteMaps) {
+            String exec = (String) m.get("executedAt");
+            String created = (String) m.get("createdAt");
+            try {
+                Instant instant = exec != null && !exec.isEmpty()
+                        ? Instant.parse(exec)
+                        : Instant.parse(created);
+                m.put("_ts", instant.toEpochMilli());
+            } catch (Exception e) {
+                m.put("_ts", 0L);
+            }
+        }
+        List<Order> orders = orderRepository.findByTeamIdOrderByOrderDateDesc(groupId);
+        List<Map<String, Object>> orderMaps = orders.stream()
+                .map(this::orderToLogMap)
+                .collect(Collectors.toList());
+        List<Map<String, Object>> merged = new ArrayList<>(voteMaps);
+        merged.addAll(orderMaps);
+        merged.sort((a, b) -> {
+            long ta = ((Number) a.get("_ts")).longValue();
+            long tb = ((Number) b.get("_ts")).longValue();
+            return Long.compare(tb, ta);
+        });
+        merged.forEach(m -> m.remove("_ts"));
+        return merged;
+    }
+
+    private Map<String, Object> orderToLogMap(Order o) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", "order-" + o.getId());
+        map.put("type", o.getOrderType() == OrderType.BUY ? "매수" : "매도");
+        map.put("stockName", null);
+        map.put("stockCode", o.getStockCode() != null ? o.getStockCode() : "");
+        map.put("quantity", o.getQuantity());
+        map.put("proposedPrice", o.getPrice());
+        map.put("executionPrice", o.getPrice());
+        String dateStr = o.getOrderDate() != null
+                ? o.getOrderDate().atZone(ZoneId.systemDefault()).toInstant().toString()
+                : Instant.now().toString();
+        map.put("createdAt", dateStr);
+        map.put("executedAt", dateStr);
+        map.put("status", o.getStatus() == OrderStatus.COMPLETED ? "executed"
+                : o.getStatus() == OrderStatus.PENDING ? "pending"
+                : "cancelled");
+        map.put("_ts", o.getOrderDate() != null
+                ? o.getOrderDate().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                : 0L);
+        return map;
     }
 
     private Map<String, Object> toMap(Vote v) {
