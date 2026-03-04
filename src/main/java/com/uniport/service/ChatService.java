@@ -97,7 +97,7 @@ public class ChatService {
         }
     }
 
-    /** 어드민 팀별 피드백: DB 저장 후 해당 방에 브로드캐스트, 채팅 비활성화 플래그 포함 */
+    /** 어드민 팀별 피드백: 방당 1건만 유지(멱등). 기존 피드백이 있으면 내용만 갱신 후 브로드캐스트, 없으면 새로 저장. */
     @Transactional
     public ChatMessage saveFeedbackMessage(Long roomId, String content) {
         try {
@@ -105,9 +105,32 @@ public class ChatService {
             payload.put("type", "feedback");
             payload.put("content", content != null ? content : "");
             payload.put("chatDisabled", true);
-            String message = OBJECT_MAPPER.writeValueAsString(payload);
-            ChatMessage msg = ChatMessage.of(roomId, 0L, "관리자", message);
-            msg = chatMessageRepository.save(msg);
+            String messageJson = OBJECT_MAPPER.writeValueAsString(payload);
+
+            List<ChatMessage> roomMessages = chatMessageRepository.findByRoomIdOrderByCreatedAtAsc(roomId);
+            ChatMessage existingFeedback = null;
+            for (int i = roomMessages.size() - 1; i >= 0; i--) {
+                ChatMessage m = roomMessages.get(i);
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> parsed = OBJECT_MAPPER.readValue(m.getMessage(), Map.class);
+                    if ("feedback".equals(parsed.get("type"))) {
+                        existingFeedback = m;
+                        break;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+
+            ChatMessage msg;
+            if (existingFeedback != null) {
+                existingFeedback.setMessage(messageJson);
+                msg = chatMessageRepository.save(existingFeedback);
+            } else {
+                msg = ChatMessage.of(roomId, 0L, "관리자", messageJson);
+                msg = chatMessageRepository.save(msg);
+            }
+
             Map<String, Object> broadcast = new HashMap<>();
             broadcast.put("id", msg.getId());
             broadcast.put("userId", 0);
