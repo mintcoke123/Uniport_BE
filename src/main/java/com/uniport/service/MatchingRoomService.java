@@ -232,7 +232,7 @@ public class MatchingRoomService {
         return Map.of("success", true, "message", "팀(매칭방)이 삭제되었습니다.");
     }
 
-    /** 관리자: 팀(매칭방)에서 멤버 강제 제거. */
+    /** 관리자: 팀(매칭방)에서 멤버 강제 제거. 제거된 유저의 teamId도 해제하여 방 정보가 남지 않도록 함. */
     @Transactional
     public Map<String, Object> removeMemberByAdmin(String roomId, Long userId) {
         MatchingRoom room = findRoomByApiIdFlexible(roomId);
@@ -240,6 +240,14 @@ public class MatchingRoomService {
             throw new ApiException("해당 팀에 속한 멤버가 아닙니다.", HttpStatus.NOT_FOUND);
         }
         matchingRoomMemberRepository.deleteByMatchingRoomIdAndUserId(room.getId(), userId);
+        User kickedUser = userRepository.findById(userId).orElse(null);
+        if (kickedUser != null && room.getId() != null) {
+            String roomTeamId = ROOM_ID_PREFIX + room.getId();
+            if (roomTeamId.equals(kickedUser.getTeamId())) {
+                kickedUser.setTeamId(null);
+                userRepository.save(kickedUser);
+            }
+        }
         int newCount = (int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
         room.setMemberCount(newCount);
         matchingRoomRepository.save(room);
