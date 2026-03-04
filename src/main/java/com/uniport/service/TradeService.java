@@ -21,6 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +33,10 @@ import java.util.stream.Collectors;
 public class TradeService {
 
     private static final BigDecimal INITIAL_TEAM_BALANCE = new BigDecimal("10000000");
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
+    private static final LocalTime MARKET_OPEN = LocalTime.of(9, 0);
+    private static final LocalTime MARKET_CLOSE = LocalTime.of(15, 30);
+    public static final String TRADING_HOURS_MESSAGE = "15시 30분 이후로는 거래를 할 수 없습니다.";
 
     private final OrderRepository orderRepository;
     private final KisApiService kisApiService;
@@ -43,6 +50,14 @@ public class TradeService {
         this.kisApiService = kisApiService;
         this.teamAccountRepository = teamAccountRepository;
         this.teamHoldingRepository = teamHoldingRepository;
+    }
+
+    /** 한국 시간 기준 거래 가능 여부. 09:00 ~ 15:30 미만만 허용. */
+    private static void assertTradingHours() {
+        LocalTime now = ZonedDateTime.now(KOREA_ZONE).toLocalTime();
+        if (now.isBefore(MARKET_OPEN) || !now.isBefore(MARKET_CLOSE)) {
+            throw new ApiException(TRADING_HOURS_MESSAGE, HttpStatus.FORBIDDEN);
+        }
     }
 
     /** User.teamId (예: "team-123")에서 팀 PK 추출 */
@@ -60,6 +75,7 @@ public class TradeService {
 
     @Transactional
     public OrderResponseDTO placeOrder(PlaceOrderRequestDTO request, User user) {
+        assertTradingHours();
         if (request.getStockCode() == null || request.getStockCode().isBlank()) {
             throw new ApiException("Stock code is required", HttpStatus.BAD_REQUEST);
         }
@@ -83,6 +99,7 @@ public class TradeService {
     /** 팀 지정 주문 (투표 통과 시 사용). teamId = 방(그룹) ID. */
     @Transactional
     public OrderResponseDTO placeOrderForTeam(PlaceOrderRequestDTO request, Long teamId, User orderUser) {
+        assertTradingHours();
         if (request.getStockCode() == null || request.getStockCode().isBlank()) {
             throw new ApiException("Stock code is required", HttpStatus.BAD_REQUEST);
         }
