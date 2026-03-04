@@ -29,6 +29,8 @@ public class PriceBroadcaster {
     private final ConcurrentHashMap<String, Set<WebSocketSession>> codeToSessions = new ConcurrentHashMap<>();
     /** 세션 -> 구독 중인 종목코드들 (연결 종료 시 정리용) */
     private final ConcurrentHashMap<WebSocketSession, Set<String>> sessionToCodes = new ConcurrentHashMap<>();
+    /** 세션별 send 직렬화용 락 (키: session.getId()). 동시 sendMessage로 인한 TEXT_PARTIAL_WRITING 방지. */
+    private final ConcurrentHashMap<String, Object> sessionLocks = new ConcurrentHashMap<>();
 
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
 
@@ -85,6 +87,7 @@ public class PriceBroadcaster {
         }
         Set<String> globalAfter = globalSubscribedCodes();
         syncKisSubscriptions(globalBefore, globalAfter);
+        sessionLocks.remove(session.getId());
     }
 
     /** 전역 구독 집합 변동만 KIS에 반영: 빠진 종목은 unsubscribe, 새로 생긴 종목은 subscribe */
@@ -144,10 +147,17 @@ public class PriceBroadcaster {
     }
 
     private void sendSafe(WebSocketSession session, TextMessage message) {
-        try {
-            session.sendMessage(message);
-        } catch (IOException e) {
-            log.debug("Price broadcast send failed: {}", e.getMessage());
+        if (session == null || !session.isOpen()) return;
+        Object lock = sessionLocks.computeIfAbsent(session.getId(), k -> new Object());
+        synchronized (lock) {
+            try {
+                if (!session.isOpen()) return;
+                session.sendMessage(message);
+            } catch (IOException e) {
+                log.debug("Price broadcast send failed: {}", e.getMessage());
+            } catch (IllegalStateException e) {
+                log.debug("Price broadcast send failed (state): {}", e.getMessage());
+            }
         }
     }
 }
