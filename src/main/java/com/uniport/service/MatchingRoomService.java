@@ -310,8 +310,10 @@ public class MatchingRoomService {
         List<Map<String, Object>> membersList = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId()).stream()
                 .map(m -> {
                     var u = m.getUser();
+                    String uid = u.getId() != null ? u.getId().toString() : "";
                     return Map.<String, Object>of(
-                            "id", u.getId() != null ? u.getId().toString() : "",
+                            "id", uid,
+                            "userId", uid,
                             "nickname", u.getNickname() != null ? u.getNickname() : ""
                     );
                 })
