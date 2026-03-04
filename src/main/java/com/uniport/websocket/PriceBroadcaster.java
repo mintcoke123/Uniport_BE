@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -35,6 +36,16 @@ public class PriceBroadcaster {
     private final ConcurrentHashMap<String, Object> sessionLocks = new ConcurrentHashMap<>();
 
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
+
+    /** 구독 메트릭: 병목/용량 판정용. (41*키개수) 대비 peak_unique_codes, 분당 add/remove peak */
+    private final Object metricsLock = new Object();
+    private long metricsMinuteBucket = -1L;
+    private int addThisMinute = 0;
+    private int removeThisMinute = 0;
+    private final AtomicInteger peakUniqueCodes = new AtomicInteger(0);
+    private final AtomicInteger peakAddPerMin = new AtomicInteger(0);
+    private final AtomicInteger peakRemovePerMin = new AtomicInteger(0);
+    private int metricsLastDay = -1;
 
     public PriceBroadcaster(@Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
@@ -116,6 +127,9 @@ public class PriceBroadcaster {
     private void syncKisSubscriptions(Set<String> before, Set<String> after) {
         Set<String> toRemove = before.stream().filter(c -> !after.contains(c)).collect(Collectors.toSet());
         Set<String> toAdd = after.stream().filter(c -> !before.contains(c)).collect(Collectors.toSet());
+
+        recordSubscriptionMetrics(after.size(), toAdd.size(), toRemove.size());
+
         for (String code : toRemove) {
             try {
                 kisWsSubscriptionManager.removeSubscription(code);
@@ -131,6 +145,41 @@ public class PriceBroadcaster {
             } catch (Exception e) {
                 log.debug("Price WS KIS subscribe failed {}: {}", code, e.getMessage());
             }
+        }
+    }
+
+    /**
+     * 구독 변동 메트릭 누적 및 분 단위 peak 로깅.
+     * 판정: peak_unique_codes가 (41*키개수) 대비 여유 있으면 확장 여유, peak_add/remove_per_min이 크면 순간 과부하 위험.
+     */
+    private void recordSubscriptionMetrics(int uniqueCodesNow, int addCount, int removeCount) {
+        synchronized (metricsLock) {
+            long now = System.currentTimeMillis();
+            long minuteBucket = now / 60_000L;
+            int today = (int) (now / 86400_000L);
+
+            if (today != metricsLastDay) {
+                metricsLastDay = today;
+                peakUniqueCodes.set(0);
+                peakAddPerMin.set(0);
+                peakRemovePerMin.set(0);
+            }
+
+            if (minuteBucket != metricsMinuteBucket) {
+                if (metricsMinuteBucket >= 0) {
+                    peakAddPerMin.updateAndGet(curr -> Math.max(curr, addThisMinute));
+                    peakRemovePerMin.updateAndGet(curr -> Math.max(curr, removeThisMinute));
+                    log.info("Price WS metrics peak_unique_codes={} peak_add_per_min={} peak_remove_per_min={} (current_unique={})",
+                            peakUniqueCodes.get(), peakAddPerMin.get(), peakRemovePerMin.get(), uniqueCodesNow);
+                }
+                metricsMinuteBucket = minuteBucket;
+                addThisMinute = 0;
+                removeThisMinute = 0;
+            }
+
+            addThisMinute += addCount;
+            removeThisMinute += removeCount;
+            peakUniqueCodes.updateAndGet(curr -> Math.max(curr, uniqueCodesNow));
         }
     }
 
