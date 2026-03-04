@@ -266,13 +266,13 @@ public class AdminController {
         return ResponseEntity.ok(list);
     }
 
-    /** 유저 삭제 (관리자 전용). 본인·다른 관리자 계정은 삭제 불가. FK 제약으로 주문·보유·매칭방멤버를 먼저 삭제. */
+    /** 유저 삭제 (admin/SISU-admin). 본인·전체관리자(admin) 계정은 삭제 불가. FK 제약으로 주문·보유·매칭방멤버를 먼저 삭제. */
     @Transactional
     @DeleteMapping("/users/{userId}")
     public ResponseEntity<Map<String, Object>> deleteUser(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable Long userId) {
-        User admin = requireAdmin(authorization);
+        User admin = requireAdminOrSisuAdmin(authorization);
         User target = userRepository.findById(userId)
                 .orElseThrow(() -> new ApiException("User not found", HttpStatus.NOT_FOUND));
         if (target.getId().equals(admin.getId())) {
