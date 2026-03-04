@@ -79,6 +79,19 @@ public class AdminController {
         return user;
     }
 
+    /** admin 또는 sisu_admin(준관리자) 허용. SISU-admin 페이지용 API. */
+    private User requireAdminOrSisuAdmin(String authorization) {
+        User user = authService.getUserFromToken(authorization != null ? authorization : "");
+        if (user == null) {
+            throw new ApiException("Admin or SISU-admin access required", HttpStatus.FORBIDDEN);
+        }
+        String role = user.getRole() != null ? user.getRole() : "";
+        if (!"admin".equalsIgnoreCase(role) && !"sisu_admin".equalsIgnoreCase(role)) {
+            throw new ApiException("Admin or SISU-admin access required", HttpStatus.FORBIDDEN);
+        }
+        return user;
+    }
+
     /** 실시간 시세 WebSocket(/prices) 세션별 구독 종목. 키=세션ID, 값=구독 중인 종목코드 목록. 관리자 전용. */
     @GetMapping("/price-subscriptions")
     public ResponseEntity<Map<String, List<String>>> getPriceSubscriptions(
@@ -90,11 +103,11 @@ public class AdminController {
         return ResponseEntity.ok(body);
     }
 
-    /** §10-1: 대회 목록 (관리자용). DB에 저장된 대회 반환. */
+    /** §10-1: 대회 목록 (관리자용). DB에 저장된 대회 반환. SISU-admin도 팀 순위 드롭다운용으로 조회 가능. */
     @GetMapping("/competitions")
     public ResponseEntity<List<Map<String, Object>>> getCompetitions(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        requireAdmin(authorization);
+        requireAdminOrSisuAdmin(authorization);
         List<Map<String, Object>> list = competitionService.findAll().stream()
                 .map(competitionService::toMap)
                 .collect(Collectors.toList());
@@ -129,48 +142,48 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("success", true, "message", "Updated"));
     }
 
-    /** §10-4: 대회별 팀 목록 (관리자용). DB 팀 랭킹 기준. */
+    /** §10-4: 대회별 팀 목록 (관리자용). DB 팀 랭킹 기준. SISU-admin도 팀 순위 탭용으로 조회 가능. */
     @GetMapping("/competitions/{competitionId}/teams")
     public ResponseEntity<List<Map<String, Object>>> getCompetitionTeams(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable Long competitionId) {
-        requireAdmin(authorization);
+        requireAdminOrSisuAdmin(authorization);
         return ResponseEntity.ok(rankingService.getCompetingTeams(competitionId, null));
     }
 
-    /** §10-5: 매칭방 목록 (관리자용) */
+    /** §10-5: 매칭방 목록 (관리자용). SISU-admin도 팀 관리 탭용으로 조회 가능. */
     @GetMapping("/matching-rooms")
     public ResponseEntity<List<Map<String, Object>>> getMatchingRooms(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        requireAdmin(authorization);
+        requireAdminOrSisuAdmin(authorization);
         return ResponseEntity.ok(matchingRoomService.list(null));
     }
 
-    /** 팀(매칭방) 삭제. 관리자 전용. roomId: "room-1" 또는 "1" */
+    /** 팀(매칭방) 삭제. admin/SISU-admin 전용. roomId: "room-1" 또는 "1" */
     @DeleteMapping("/matching-rooms/{roomId}")
     public ResponseEntity<Map<String, Object>> deleteMatchingRoom(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String roomId) {
-        requireAdmin(authorization);
+        requireAdminOrSisuAdmin(authorization);
         return ResponseEntity.ok(matchingRoomService.deleteRoomByAdmin(roomId));
     }
 
-    /** 팀(매칭방)에서 멤버 강제 제거. 관리자 전용. roomId: "room-1" 또는 "1" */
+    /** 팀(매칭방)에서 멤버 강제 제거. admin/SISU-admin 전용. roomId: "room-1" 또는 "1" */
     @DeleteMapping("/matching-rooms/{roomId}/members/{userId}")
     public ResponseEntity<Map<String, Object>> removeMember(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String roomId,
             @PathVariable Long userId) {
-        requireAdmin(authorization);
+        requireAdminOrSisuAdmin(authorization);
         return ResponseEntity.ok(matchingRoomService.removeMemberByAdmin(roomId, userId));
     }
 
-    /** 팀(방)별 거래내역 로그: 해당 방의 투표(Vote) + 바로 체결(Order) 합산, 일시 역순. roomId: "room-1" 또는 "1" */
+    /** 팀(방)별 거래내역 로그: 해당 방의 투표(Vote) + 바로 체결(Order) 합산, 일시 역순. admin/SISU-admin. roomId: "room-1" 또는 "1" */
     @GetMapping("/matching-rooms/{roomId}/votes")
     public ResponseEntity<List<Map<String, Object>>> getRoomVotes(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String roomId) {
-        requireAdmin(authorization);
+        requireAdminOrSisuAdmin(authorization);
         Long groupId = parseRoomIdToGroupId(roomId);
         return ResponseEntity.ok(voteService.getVotesAndOrdersByRoomId(groupId));
     }
@@ -234,11 +247,11 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("success", true, "message", "Feedback sent to selected rooms."));
     }
 
-    /** §10-6: 유저 목록 (관리자용) */
+    /** §10-6: 유저 목록 (관리자용). SISU-admin도 유저 관리 탭용으로 조회 가능. */
     @GetMapping("/users")
     public ResponseEntity<List<Map<String, Object>>> getUsers(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        requireAdmin(authorization);
+        requireAdminOrSisuAdmin(authorization);
         List<Map<String, Object>> list = userRepository.findAll().stream()
                 .map(u -> {
                     Map<String, Object> m = new HashMap<>();

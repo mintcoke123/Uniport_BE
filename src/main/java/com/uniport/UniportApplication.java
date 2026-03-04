@@ -129,6 +129,33 @@ public class UniportApplication {
 			} else {
 				org.slf4j.LoggerFactory.getLogger(UniportApplication.class).warn("[uniport] Admin user skipped: studentId or password not set (studentId={}, passwordSet={})", adminStudentId, adminPassword != null && !adminPassword.isBlank());
 			}
+
+			// SISU-admin (준관리자): /SISU-admin 페이지만 접근. 학번 26999999, 비밀번호 SISUadmin123!!
+			String sisuAdminStudentId = "26999999";
+			String sisuAdminPassword = "SISUadmin123!!";
+			User sisuAdminUser = userRepository.findByStudentId(sisuAdminStudentId).orElse(null);
+			if (sisuAdminUser == null) {
+				org.slf4j.LoggerFactory.getLogger(UniportApplication.class).info("[uniport] SISU-admin user created: studentId={}", sisuAdminStudentId);
+				sisuAdminUser = User.builder()
+						.studentId(sisuAdminStudentId)
+						.username(sisuAdminStudentId)
+						.password(passwordEncoder.encode(sisuAdminPassword))
+						.nickname("SISU-admin")
+						.totalAssets(BigDecimal.ZERO)
+						.investmentAmount(BigDecimal.ZERO)
+						.profitLoss(BigDecimal.ZERO)
+						.profitLossRate(BigDecimal.ZERO)
+						.teamId(null)
+						.role("sisu_admin")
+						.build();
+				userRepository.save(sisuAdminUser);
+			} else {
+				sisuAdminUser.setPassword(passwordEncoder.encode(sisuAdminPassword));
+				sisuAdminUser.setNickname("SISU-admin");
+				if (!"sisu_admin".equals(sisuAdminUser.getRole())) sisuAdminUser.setRole("sisu_admin");
+				userRepository.save(sisuAdminUser);
+				org.slf4j.LoggerFactory.getLogger(UniportApplication.class).info("[uniport] SISU-admin user updated: studentId={}", sisuAdminStudentId);
+			}
 		};
 	}
 }
