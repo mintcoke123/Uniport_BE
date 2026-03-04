@@ -13,6 +13,7 @@ import com.uniport.service.CompetitionService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
 import com.uniport.service.VoteService;
+import com.uniport.websocket.PriceBroadcaster;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -49,11 +51,13 @@ public class AdminController {
     private final RankingService rankingService;
     private final ChatService chatService;
     private final VoteService voteService;
+    private final PriceBroadcaster priceBroadcaster;
 
     public AdminController(AuthService authService, UserRepository userRepository,
                            OrderRepository orderRepository, HoldingRepository holdingRepository,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
-                           MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService, VoteService voteService) {
+                           MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService, VoteService voteService,
+                           PriceBroadcaster priceBroadcaster) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
@@ -64,6 +68,7 @@ public class AdminController {
         this.rankingService = rankingService;
         this.chatService = chatService;
         this.voteService = voteService;
+        this.priceBroadcaster = priceBroadcaster;
     }
 
     private User requireAdmin(String authorization) {
@@ -72,6 +77,17 @@ public class AdminController {
             throw new ApiException("Admin access required", HttpStatus.FORBIDDEN);
         }
         return user;
+    }
+
+    /** 실시간 시세 WebSocket(/prices) 세션별 구독 종목. 키=세션ID, 값=구독 중인 종목코드 목록. 관리자 전용. */
+    @GetMapping("/price-subscriptions")
+    public ResponseEntity<Map<String, List<String>>> getPriceSubscriptions(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        requireAdmin(authorization);
+        Map<String, Set<String>> summary = priceBroadcaster.getSubscriptionSummaryBySessionId();
+        Map<String, List<String>> body = new HashMap<>();
+        summary.forEach((sessionId, codes) -> body.put(sessionId, new ArrayList<>(codes)));
+        return ResponseEntity.ok(body);
     }
 
     /** §10-1: 대회 목록 (관리자용). DB에 저장된 대회 반환. */

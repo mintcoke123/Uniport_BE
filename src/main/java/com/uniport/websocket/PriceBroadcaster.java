@@ -90,6 +90,7 @@ public class PriceBroadcaster {
         }
         Set<String> globalAfter = globalSubscribedCodes();
         syncKisSubscriptions(globalBefore, globalAfter);
+        log.info("Price WS subscribe sessionId={} codes={}", session.getId(), normalized);
     }
 
     /** 세션 연결 해제 시 호출. 그 세션만 구독하던 종목은 전역에서 빠지면 KIS 구독 해제. */
@@ -98,6 +99,7 @@ public class PriceBroadcaster {
         Set<String> globalBefore = globalSubscribedCodes();
         Set<String> codes = sessionToCodes.remove(session);
         if (codes != null) {
+            log.info("Price WS removeSession sessionId={} wasSubscribedTo={}", session.getId(), codes);
             for (String code : codes) {
                 Set<WebSocketSession> set = codeToSessions.get(code);
                 if (set != null) {
