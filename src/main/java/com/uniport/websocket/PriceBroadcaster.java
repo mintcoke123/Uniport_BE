@@ -210,11 +210,15 @@ public class PriceBroadcaster {
             }
         });
         for (String code : due) {
+            Long scheduledTime = pendingUnsubscribe.get(code);
+            if (scheduledTime == null) continue;
+            long ageMs = now - scheduledTime;
             pendingUnsubscribe.remove(code);
             if (!globalSubscribedCodes().contains(code)) {
+                boolean currentGlobalContains = globalSubscribedCodes().contains(code);
                 try {
                     kisWsSubscriptionManager.removeSubscription(code);
-                    log.debug("Price WS KIS unsubscribe (TTL): {}", code);
+                    log.info("Price WS TTL unsubscribe code={} ageMs={} currentGlobalContains={}", code, ageMs, currentGlobalContains);
                 } catch (Exception e) {
                     log.debug("Price WS KIS unsubscribe failed {}: {}", code, e.getMessage());
                 }
