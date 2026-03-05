@@ -9,14 +9,25 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
+import jakarta.annotation.PreDestroy;
+
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+
+import org.springframework.scheduling.annotation.Scheduled;
 
 /**
  * 실시간 시세 푸시: KIS WS 수신 시 구독 중인 클라이언트에게 브로드캐스트.
@@ -28,6 +39,9 @@ public class PriceBroadcaster {
 
     private static final Logger log = LoggerFactory.getLogger(PriceBroadcaster.class);
 
+    private static final long UNSUBSCRIBE_TTL_MS = 30_000L;
+    private static final long SYNC_BATCH_DELAY_MS = 300L;
+
     /** 종목코드 -> 해당 종목을 구독한 세션들 */
     private final ConcurrentHashMap<String, Set<WebSocketSession>> codeToSessions = new ConcurrentHashMap<>();
     /** 세션 -> 구독 중인 종목코드들 (연결 종료 시 정리용) */
@@ -36,6 +50,18 @@ public class PriceBroadcaster {
     private final ConcurrentHashMap<String, Object> sessionLocks = new ConcurrentHashMap<>();
 
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
+
+    /** Unsubscribe TTL: key=stockCode, value=unsubscribe 예약 시각(ms). 30초 후 실제 KIS unsubscribe. */
+    private final ConcurrentHashMap<String, Long> pendingUnsubscribe = new ConcurrentHashMap<>();
+    /** 300ms 배치용 스케줄러 */
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "price-sync-batch");
+        t.setDaemon(true);
+        return t;
+    });
+    private final AtomicBoolean syncScheduled = new AtomicBoolean(false);
+    /** 마지막 sync 시점의 전역 구독 스냅샷. scheduleSync()에서 before로 사용 */
+    private final AtomicReference<Set<String>> lastGlobalSnapshot = new AtomicReference<>(Set.of());
 
     /** 구독 메트릭: 병목/용량 판정용. (41*키개수) 대비 peak_unique_codes, 분당 add/remove peak */
     private final Object metricsLock = new Object();
@@ -49,6 +75,19 @@ public class PriceBroadcaster {
 
     public PriceBroadcaster(@Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** 특정 세션이 구독 중인 종목코드 (없으면 빈 집합, 스냅샷 복사) */
@@ -86,7 +125,6 @@ public class PriceBroadcaster {
                 normalized.add(code);
             }
         }
-        Set<String> globalBefore = globalSubscribedCodes();
         Set<String> prev = sessionToCodes.put(session, normalized);
         if (prev != null) {
             for (String code : prev) {
@@ -99,15 +137,13 @@ public class PriceBroadcaster {
         for (String code : normalized) {
             codeToSessions.computeIfAbsent(code, k -> ConcurrentHashMap.newKeySet()).add(session);
         }
-        Set<String> globalAfter = globalSubscribedCodes();
-        syncKisSubscriptions(globalBefore, globalAfter);
+        scheduleSync();
         log.info("Price WS subscribe sessionId={} codes={}", session.getId(), normalized);
     }
 
     /** 세션 연결 해제 시 호출. 그 세션만 구독하던 종목은 전역에서 빠지면 KIS 구독 해제. */
     public void removeSession(WebSocketSession session) {
         if (session == null) return;
-        Set<String> globalBefore = globalSubscribedCodes();
         Set<String> codes = sessionToCodes.remove(session);
         if (codes != null) {
             log.info("Price WS removeSession sessionId={} wasSubscribedTo={}", session.getId(), codes);
@@ -118,32 +154,70 @@ public class PriceBroadcaster {
                 }
             }
         }
-        Set<String> globalAfter = globalSubscribedCodes();
-        syncKisSubscriptions(globalBefore, globalAfter);
+        scheduleSync();
         sessionLocks.remove(session.getId());
     }
 
-    /** 전역 구독 집합 변동만 KIS에 반영: 빠진 종목은 unsubscribe, 새로 생긴 종목은 subscribe */
+    /**
+     * 300ms 후 한 번만 sync 실행. 그 사이 호출된 subscribe/removeSession 변경을 모아서 한 번에 반영.
+     */
+    private void scheduleSync() {
+        if (!syncScheduled.getAndSet(true)) {
+            scheduler.schedule(() -> {
+                try {
+                    Set<String> before = lastGlobalSnapshot.get();
+                    Set<String> after = globalSubscribedCodes();
+                    syncKisSubscriptions(before, after);
+                    lastGlobalSnapshot.set(after);
+                } finally {
+                    syncScheduled.set(false);
+                }
+            }, SYNC_BATCH_DELAY_MS, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /** 전역 구독 집합 변동만 KIS에 반영: toRemove는 30초 TTL로 예약, toAdd는 즉시 subscribe 및 TTL 취소 */
     private void syncKisSubscriptions(Set<String> before, Set<String> after) {
         Set<String> toRemove = before.stream().filter(c -> !after.contains(c)).collect(Collectors.toSet());
         Set<String> toAdd = after.stream().filter(c -> !before.contains(c)).collect(Collectors.toSet());
 
+        log.info("Price WS sync unique={} add={} remove={}", after.size(), toAdd.size(), toRemove.size());
         recordSubscriptionMetrics(after.size(), toAdd.size(), toRemove.size());
 
+        long now = System.currentTimeMillis();
         for (String code : toRemove) {
-            try {
-                kisWsSubscriptionManager.removeSubscription(code);
-                log.debug("Price WS KIS unsubscribe (no /prices clients): {}", code);
-            } catch (Exception e) {
-                log.debug("Price WS KIS unsubscribe failed {}: {}", code, e.getMessage());
-            }
+            pendingUnsubscribe.put(code, now);
         }
         for (String code : toAdd) {
+            pendingUnsubscribe.remove(code);
             try {
                 kisWsSubscriptionManager.ensureSubscribed(code);
                 log.debug("Price WS KIS subscribe (/prices client): {}", code);
             } catch (Exception e) {
                 log.debug("Price WS KIS subscribe failed {}: {}", code, e.getMessage());
+            }
+        }
+    }
+
+    /** 5초마다 실행. 30초 TTL 경과한 pendingUnsubscribe만 실제 KIS unsubscribe */
+    @Scheduled(fixedDelay = 5000)
+    public void processPendingUnsubscribes() {
+        long now = System.currentTimeMillis();
+        List<String> due = new ArrayList<>();
+        pendingUnsubscribe.forEach((code, scheduledTime) -> {
+            if (now - scheduledTime >= UNSUBSCRIBE_TTL_MS) {
+                due.add(code);
+            }
+        });
+        for (String code : due) {
+            pendingUnsubscribe.remove(code);
+            if (!globalSubscribedCodes().contains(code)) {
+                try {
+                    kisWsSubscriptionManager.removeSubscription(code);
+                    log.debug("Price WS KIS unsubscribe (TTL): {}", code);
+                } catch (Exception e) {
+                    log.debug("Price WS KIS unsubscribe failed {}: {}", code, e.getMessage());
+                }
             }
         }
     }
