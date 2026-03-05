@@ -63,14 +63,17 @@ public class PriceBroadcaster {
     /** 마지막 sync 시점의 전역 구독 스냅샷. scheduleSync()에서 before로 사용 */
     private final AtomicReference<Set<String>> lastGlobalSnapshot = new AtomicReference<>(Set.of());
 
-    /** 구독 메트릭: 병목/용량 판정용. (41*키개수) 대비 peak_unique_codes, 분당 add/remove peak */
+    /** 구독 메트릭: pending_remove(=toRemove put), ttl_unsubscribe(=실제 KIS unsubscribe 호출) 분리 */
     private final Object metricsLock = new Object();
     private long metricsMinuteBucket = -1L;
     private int addThisMinute = 0;
-    private int removeThisMinute = 0;
+    private int pendingRemoveThisMinute = 0;
+    private int ttlUnsubscribeThisMinute = 0;
     private final AtomicInteger peakUniqueCodes = new AtomicInteger(0);
     private final AtomicInteger peakAddPerMin = new AtomicInteger(0);
-    private final AtomicInteger peakRemovePerMin = new AtomicInteger(0);
+    private final AtomicInteger peakPendingRemovePerMin = new AtomicInteger(0);
+    private final AtomicInteger peakTtlUnsubscribePerMin = new AtomicInteger(0);
+    private final AtomicInteger lastKnownUniqueCodes = new AtomicInteger(0);
     private int metricsLastDay = -1;
 
     public PriceBroadcaster(@Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
@@ -182,7 +185,7 @@ public class PriceBroadcaster {
         Set<String> toAdd = after.stream().filter(c -> !before.contains(c)).collect(Collectors.toSet());
 
         log.info("Price WS sync unique={} add={} remove={}", after.size(), toAdd.size(), toRemove.size());
-        recordSubscriptionMetrics(after.size(), toAdd.size(), toRemove.size());
+        recordSubscriptionMetrics(after.size(), toAdd.size(), toRemove.size()); // toRemove.size() = pending_remove
 
         long now = System.currentTimeMillis();
         for (String code : toRemove) {
@@ -209,6 +212,7 @@ public class PriceBroadcaster {
                 due.add(code);
             }
         });
+        int ttlUnsubscribeCount = 0;
         for (String code : due) {
             Long scheduledTime = pendingUnsubscribe.get(code);
             if (scheduledTime == null) continue;
@@ -218,20 +222,25 @@ public class PriceBroadcaster {
                 boolean currentGlobalContains = globalSubscribedCodes().contains(code);
                 try {
                     kisWsSubscriptionManager.removeSubscription(code);
+                    ttlUnsubscribeCount++;
                     log.info("Price WS TTL unsubscribe code={} ageMs={} currentGlobalContains={}", code, ageMs, currentGlobalContains);
                 } catch (Exception e) {
                     log.debug("Price WS KIS unsubscribe failed {}: {}", code, e.getMessage());
                 }
             }
         }
+        if (ttlUnsubscribeCount > 0) {
+            recordTtlUnsubscribeMetrics(ttlUnsubscribeCount);
+        }
     }
 
     /**
      * 구독 변동 메트릭 누적 및 분 단위 peak 로깅.
-     * 판정: peak_unique_codes가 (41*키개수) 대비 여유 있으면 확장 여유, peak_add/remove_per_min이 크면 순간 과부하 위험.
+     * pending_remove = toRemove 발생(pendingUnsubscribe put), ttl_unsubscribe = 실제 KIS unsubscribe 호출 횟수.
      */
-    private void recordSubscriptionMetrics(int uniqueCodesNow, int addCount, int removeCount) {
+    private void recordSubscriptionMetrics(int uniqueCodesNow, int addCount, int pendingRemoveCount) {
         synchronized (metricsLock) {
+            lastKnownUniqueCodes.set(uniqueCodesNow);
             long now = System.currentTimeMillis();
             long minuteBucket = now / 60_000L;
             int today = (int) (now / 86400_000L);
@@ -240,24 +249,49 @@ public class PriceBroadcaster {
                 metricsLastDay = today;
                 peakUniqueCodes.set(0);
                 peakAddPerMin.set(0);
-                peakRemovePerMin.set(0);
+                peakPendingRemovePerMin.set(0);
+                peakTtlUnsubscribePerMin.set(0);
             }
 
-            if (minuteBucket != metricsMinuteBucket) {
-                if (metricsMinuteBucket >= 0) {
-                    peakAddPerMin.updateAndGet(curr -> Math.max(curr, addThisMinute));
-                    peakRemovePerMin.updateAndGet(curr -> Math.max(curr, removeThisMinute));
-                    log.info("Price WS metrics peak_unique_codes={} peak_add_per_min={} peak_remove_per_min={} (current_unique={})",
-                            peakUniqueCodes.get(), peakAddPerMin.get(), peakRemovePerMin.get(), uniqueCodesNow);
-                }
-                metricsMinuteBucket = minuteBucket;
-                addThisMinute = 0;
-                removeThisMinute = 0;
-            }
+            maybeRollMetricsBucket(now, minuteBucket);
 
             addThisMinute += addCount;
-            removeThisMinute += removeCount;
+            pendingRemoveThisMinute += pendingRemoveCount;
             peakUniqueCodes.updateAndGet(curr -> Math.max(curr, uniqueCodesNow));
+        }
+    }
+
+    /** TTL 구간에서 실제 KIS unsubscribe 호출한 횟수 집계. 1분 peak 로그는 maybeRollMetricsBucket에서 통합 출력. */
+    private void recordTtlUnsubscribeMetrics(int count) {
+        synchronized (metricsLock) {
+            long now = System.currentTimeMillis();
+            long minuteBucket = now / 60_000L;
+            int today = (int) (now / 86400_000L);
+            if (today != metricsLastDay) {
+                metricsLastDay = today;
+                peakUniqueCodes.set(0);
+                peakAddPerMin.set(0);
+                peakPendingRemovePerMin.set(0);
+                peakTtlUnsubscribePerMin.set(0);
+            }
+            maybeRollMetricsBucket(now, minuteBucket);
+            ttlUnsubscribeThisMinute += count;
+        }
+    }
+
+    private void maybeRollMetricsBucket(long now, long minuteBucket) {
+        if (minuteBucket != metricsMinuteBucket) {
+            if (metricsMinuteBucket >= 0) {
+                peakAddPerMin.updateAndGet(curr -> Math.max(curr, addThisMinute));
+                peakPendingRemovePerMin.updateAndGet(curr -> Math.max(curr, pendingRemoveThisMinute));
+                peakTtlUnsubscribePerMin.updateAndGet(curr -> Math.max(curr, ttlUnsubscribeThisMinute));
+                log.info("Price WS metrics peak_unique_codes={} peak_add_per_min={} peak_pending_remove_per_min={} peak_ttl_unsubscribe_per_min={} (current_unique={})",
+                        peakUniqueCodes.get(), peakAddPerMin.get(), peakPendingRemovePerMin.get(), peakTtlUnsubscribePerMin.get(), lastKnownUniqueCodes.get());
+            }
+            metricsMinuteBucket = minuteBucket;
+            addThisMinute = 0;
+            pendingRemoveThisMinute = 0;
+            ttlUnsubscribeThisMinute = 0;
         }
     }
 
