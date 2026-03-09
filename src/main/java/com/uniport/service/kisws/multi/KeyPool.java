@@ -198,6 +198,18 @@ public class KeyPool {
         return c != null ? c : restClients.values().stream().filter(r -> r != null).findFirst().orElse(null);
     }
 
+    /** 등록된 REST 클라이언트 전체. 매일 08:00 KST 토큰 재발급 스케줄에서 사용. */
+    public List<KisRestClient> getAllRestClients() {
+        return new ArrayList<>(restClients.values());
+    }
+
+    /** 모든 키의 access token 캐시 무효화. 다음 getAccessToken() 시 KIS 재발급. */
+    public void invalidateAllAccessTokenCaches() {
+        for (KisRestClient client : restClients.values()) {
+            if (client != null) client.invalidateAccessTokenCache();
+        }
+    }
+
     /** stockCode 없는 REST 호출용 키 후보: 가용 키만. default 우선, 이후 context 순, 중복 제거. */
     public List<String> getRestKeyIdsToTry() {
         List<String> out = collectAvailableRestKeyIdsExcluding(null);

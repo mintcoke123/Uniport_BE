@@ -226,6 +226,44 @@ public class KisApiService {
         return 86400;
     }
 
+    /** access token 캐시만 비움. 다음 getAccessToken() 시 KIS 재발급. 매일 08:00 KST 스케줄용. */
+    public void invalidateAccessTokenCache() {
+        if (keyPool != null && keyPool.hasAnyRestClient()) {
+            keyPool.invalidateAllAccessTokenCaches();
+            return;
+        }
+        cachedAccessToken.set(null);
+        tokenExpiresAtMillis = 0L;
+    }
+
+    /**
+     * 매일 08:00 KST 스케줄에서 호출. 캐시 무효화 후 즉시 재발급 요청해 새 토큰을 캐시.
+     */
+    public void refreshTokenAt8am() {
+        if (keyPool != null && keyPool.hasAnyRestClient()) {
+            keyPool.invalidateAllAccessTokenCaches();
+            for (KisRestClient client : keyPool.getAllRestClients()) {
+                if (client == null || !client.isConfigured()) continue;
+                try {
+                    client.getAccessToken();
+                    log.debug("KIS token daily refresh success keyId={}", client.getKeyId());
+                } catch (Exception e) {
+                    log.warn("KIS token daily refresh failed keyId={}: {}", client.getKeyId(), e.getMessage());
+                }
+            }
+            return;
+        }
+        if (!isConfigured()) return;
+        cachedAccessToken.set(null);
+        tokenExpiresAtMillis = 0L;
+        try {
+            getAccessToken();
+            log.debug("KIS token daily refresh success (single key)");
+        } catch (Exception e) {
+            log.warn("KIS token daily refresh failed (single key): {}", e.getMessage());
+        }
+    }
+
     /**
      * KIS 접근토큰 폐기. Step3: keyPool 있으면 default/첫 restClient로 위임.
      */

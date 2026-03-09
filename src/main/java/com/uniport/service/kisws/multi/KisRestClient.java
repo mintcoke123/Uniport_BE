@@ -253,6 +253,12 @@ public class KisRestClient {
         }
     }
 
+    /** 캐시만 비움. 다음 getAccessToken() 호출 시 KIS에 재발급 요청. 매일 08:00 KST 스케줄용. */
+    public void invalidateAccessTokenCache() {
+        cachedAccessToken.set(null);
+        tokenExpiresAtMillis = 0L;
+    }
+
     public void revokeAccessToken() {
         if (appkey.isBlank() || appsecret.isBlank()) {
             return;
