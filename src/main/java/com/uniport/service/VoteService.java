@@ -88,6 +88,9 @@ public class VoteService {
     public Vote createVote(Long groupId, User proposer, String type, String stockName, String stockCode,
                            int quantity, BigDecimal proposedPrice, String reason,
                            String orderStrategy, BigDecimal limitPrice, BigDecimal triggerPrice, String triggerDirection) {
+        if (chatService.hasFeedbackMessage(groupId)) {
+            throw new ApiException("대회 종료로 비활성화되었습니다.", HttpStatus.FORBIDDEN);
+        }
         String strategy = (orderStrategy != null && !orderStrategy.isBlank()) ? orderStrategy.trim().toUpperCase() : ORDER_STRATEGY_MARKET;
         if (!ORDER_STRATEGY_MARKET.equals(strategy) && !ORDER_STRATEGY_LIMIT.equals(strategy) && !ORDER_STRATEGY_CONDITIONAL.equals(strategy)) {
             throw new ApiException("orderStrategy must be MARKET, LIMIT, or CONDITIONAL", HttpStatus.BAD_REQUEST);
@@ -277,6 +280,9 @@ public class VoteService {
         if (user == null || user.getId() == null) {
             throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
         }
+        if (chatService.hasFeedbackMessage(groupId)) {
+            throw new ApiException("대회 종료로 비활성화되었습니다.", HttpStatus.FORBIDDEN);
+        }
         Vote vote = voteRepository.findById(voteId)
                 .orElseThrow(() -> new ApiException("투표를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
         if (vote.getRoomId() == null || !vote.getRoomId().equals(groupId)) {
@@ -374,6 +380,9 @@ public class VoteService {
     public Map<String, Object> cancelPendingVote(Long groupId, Long voteId, User user) {
         if (user == null || user.getId() == null) {
             throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
+        }
+        if (chatService.hasFeedbackMessage(groupId)) {
+            throw new ApiException("대회 종료로 비활성화되었습니다.", HttpStatus.FORBIDDEN);
         }
         Vote vote = voteRepository.findById(voteId)
                 .orElseThrow(() -> new ApiException("투표를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));

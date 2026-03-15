@@ -11,10 +11,10 @@ import com.uniport.entity.TeamAccount;
 import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import org.springframework.http.HttpStatus;
 import com.uniport.repository.OrderRepository;
 import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,14 +42,17 @@ public class TradeService {
     private final KisApiService kisApiService;
     private final TeamAccountRepository teamAccountRepository;
     private final TeamHoldingRepository teamHoldingRepository;
+    private final ChatService chatService;
 
     public TradeService(OrderRepository orderRepository, KisApiService kisApiService,
                         TeamAccountRepository teamAccountRepository,
-                        TeamHoldingRepository teamHoldingRepository) {
+                        TeamHoldingRepository teamHoldingRepository,
+                        ChatService chatService) {
         this.orderRepository = orderRepository;
         this.kisApiService = kisApiService;
         this.teamAccountRepository = teamAccountRepository;
         this.teamHoldingRepository = teamHoldingRepository;
+        this.chatService = chatService;
     }
 
     /** 한국 시간 기준 거래 가능 여부. 09:00 ~ 15:30 미만만 허용. */
@@ -93,6 +96,9 @@ public class TradeService {
         if (teamId == null) {
             throw new ApiException("팀에 소속된 후 거래할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
+        if (chatService.hasFeedbackMessage(teamId)) {
+            throw new ApiException("대회 종료로 비활성화되었습니다.", HttpStatus.FORBIDDEN);
+        }
         return executeTeamOrder(request, teamId, user);
     }
 
@@ -114,6 +120,9 @@ public class TradeService {
         }
         if (teamId == null) {
             throw new ApiException("teamId is required", HttpStatus.BAD_REQUEST);
+        }
+        if (chatService.hasFeedbackMessage(teamId)) {
+            throw new ApiException("대회 종료로 비활성화되었습니다.", HttpStatus.FORBIDDEN);
         }
         return executeTeamOrder(request, teamId, orderUser);
     }

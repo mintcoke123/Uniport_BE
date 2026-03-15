@@ -1,6 +1,7 @@
 package com.uniport.controller;
 
 import com.uniport.entity.Competition;
+import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.HoldingRepository;
@@ -142,13 +143,40 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("success", true, "message", "Updated"));
     }
 
-    /** §10-4: 대회별 팀 목록 (관리자용). DB 팀 랭킹 기준. SISU-admin도 팀 순위 탭용으로 조회 가능. */
+    /** §10-4: 대회별 팀 목록 (관리자용). DB 팀 랭킹 기준. members 포함. SISU-admin도 팀 순위 탭용으로 조회 가능. */
     @GetMapping("/competitions/{competitionId}/teams")
     public ResponseEntity<List<Map<String, Object>>> getCompetitionTeams(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable Long competitionId) {
         requireAdminOrSisuAdmin(authorization);
-        return ResponseEntity.ok(rankingService.getCompetingTeams(competitionId, null));
+        List<Map<String, Object>> list = rankingService.getCompetingTeams(competitionId, null);
+        for (Map<String, Object> m : list) {
+            Object teamIdObj = m.get("teamId");
+            if (teamIdObj instanceof String) {
+                String s = (String) teamIdObj;
+                Long roomId = null;
+                if (s.startsWith("team-")) {
+                    try {
+                        roomId = Long.parseLong(s.substring(5));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+                if (roomId != null) {
+                    List<MatchingRoomMember> members = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(roomId);
+                    List<Map<String, Object>> memberList = members.stream()
+                            .map(mem -> {
+                                User u = mem.getUser();
+                                Map<String, Object> mm = new HashMap<>();
+                                mm.put("userId", u != null ? u.getId() : null);
+                                mm.put("nickname", u != null ? (u.getNickname() != null ? u.getNickname() : "") : "");
+                                return mm;
+                            })
+                            .collect(Collectors.toList());
+                    m.put("members", memberList);
+                }
+            }
+        }
+        return ResponseEntity.ok(list);
     }
 
     /** §10-5: 매칭방 목록 (관리자용). SISU-admin도 팀 관리 탭용으로 조회 가능. */
@@ -186,6 +214,16 @@ public class AdminController {
         requireAdminOrSisuAdmin(authorization);
         Long groupId = parseRoomIdToGroupId(roomId);
         return ResponseEntity.ok(voteService.getVotesAndOrdersByRoomId(groupId));
+    }
+
+    /** 팀(방)별 채팅 로그. admin/SISU-admin 전용. roomId: "room-1" 또는 "1" */
+    @GetMapping("/matching-rooms/{roomId}/chat-messages")
+    public ResponseEntity<List<Map<String, Object>>> getRoomChatMessages(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String roomId) {
+        requireAdminOrSisuAdmin(authorization);
+        Long groupId = parseRoomIdToGroupId(roomId);
+        return ResponseEntity.ok(chatService.getMessages(groupId));
     }
 
     private static Long parseRoomIdToGroupId(String roomId) {
