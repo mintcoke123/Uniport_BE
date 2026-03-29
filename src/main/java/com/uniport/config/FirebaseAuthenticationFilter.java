@@ -37,17 +37,21 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
-        boolean protectedRequest = request.getRequestURI() != null
-                && (request.getRequestURI().startsWith("/investment-survey/")
-                || request.getRequestURI().startsWith("/surveys/")
-                || request.getRequestURI().startsWith("/learning/")
-                || request.getRequestURI().startsWith("/api/custom-etfs/")
-                || request.getRequestURI().startsWith("/api/etf-analysis-reports/")
-                || request.getRequestURI().startsWith("/api/mypage")
-                || request.getRequestURI().startsWith("/api/points/")
-                || request.getRequestURI().startsWith("/api/shop/redemptions/")
-                || request.getRequestURI().startsWith("/api/friends/")
-                || (request.getRequestURI().startsWith("/api/community/")
+        String requestUri = request.getRequestURI();
+        boolean protectedRequest = requestUri != null
+                && (requestUri.startsWith("/api/investment-survey/")
+                || requestUri.startsWith("/api/surveys/")
+                || requestUri.startsWith("/api/learning/")
+                || requestUri.startsWith("/investment-survey/")
+                || requestUri.startsWith("/surveys/")
+                || requestUri.startsWith("/learning/")
+                || requestUri.startsWith("/api/custom-etfs/")
+                || requestUri.startsWith("/api/etf-analysis-reports/")
+                || requestUri.startsWith("/api/mypage")
+                || requestUri.startsWith("/api/points/")
+                || requestUri.startsWith("/api/shop/redemptions/")
+                || requestUri.startsWith("/api/friends/")
+                || (requestUri.startsWith("/api/community/")
                 && !"GET".equalsIgnoreCase(request.getMethod())));
 
         if (authorization == null || authorization.isBlank()) {

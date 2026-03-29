@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/investment-survey")
+@RequestMapping({"/api/investment-survey", "/investment-survey"})
 @Tag(name = "Investment Survey", description = "투자 성향 설문 API")
 public class InvestmentSurveyController {
 

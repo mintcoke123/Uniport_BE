@@ -54,7 +54,21 @@ public class SecurityConfig {
                         .requestMatchers("/", "/api/auth/**", "/api/me/**", "/api/market/**", "/api/stocks/**", "/api/ohlcv", "/api/trades", "/api/competitions/**", "/api/ranking/**", "/api/groups/**", "/api/matching-rooms/**", "/api/admin/**", "/api/config/**", "/api/health", "/api/home/group-insights", "/api/etf-discovery/**", "/api/shop/items", "/auth/**", "/stock/**", "/market/**", "/trade/**", "/h2-console/**", "/error", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/community/**").permitAll()
                         .requestMatchers("/groups/*/chat", "/prices").permitAll()
-                        .requestMatchers("/investment-survey/**", "/surveys/**", "/learning/**", "/api/custom-etfs/**", "/api/etf-analysis-reports/**", "/api/community/**", "/api/mypage", "/api/points/**", "/api/shop/redemptions/**", "/api/friends/**").authenticated()
+                        .requestMatchers(
+                                "/api/investment-survey/**",
+                                "/api/surveys/**",
+                                "/api/learning/**",
+                                "/investment-survey/**",
+                                "/surveys/**",
+                                "/learning/**",
+                                "/api/custom-etfs/**",
+                                "/api/etf-analysis-reports/**",
+                                "/api/community/**",
+                                "/api/mypage",
+                                "/api/points/**",
+                                "/api/shop/redemptions/**",
+                                "/api/friends/**"
+                        ).authenticated()
                         .anyRequest().authenticated())
                 .headers(h -> h.frameOptions(f -> f.sameOrigin()))
                 .addFilterBefore(firebaseAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
