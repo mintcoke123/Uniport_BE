@@ -102,6 +102,12 @@ public class MatchingRoomService {
     /** 방 생성. visibility 없으면 PUBLIC. capacity 없으면 3(팀). creator가 있으면 해당 멤버를 방에 자동 추가. */
     @Transactional
     public Map<String, Object> create(String name, String visibility, Integer capacity, User creator) {
+        return create(name, visibility, capacity, null, null, null, creator);
+    }
+
+    @Transactional
+    public Map<String, Object> create(String name, String visibility, Integer capacity,
+                                      String matchType, String marketType, List<Long> inviteeUserIds, User creator) {
         if (creator != null && !matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(creator.getId()).isEmpty()) {
             throw new ApiException("이미 참가 중인 방이 있습니다. 새 방을 만들려면 먼저 방을 나가세요.", HttpStatus.BAD_REQUEST);
         }
@@ -110,8 +116,12 @@ public class MatchingRoomService {
             vis = VISIBILITY_PUBLIC;
         }
         int cap = (capacity != null && capacity >= 1 && capacity <= 10) ? capacity : 3;
+        String resolvedMatchType = normalizeMatchType(matchType);
+        String resolvedMarketType = normalizeMarketType(marketType);
         MatchingRoom room = MatchingRoom.create(name, cap);
         room.setVisibility(vis);
+        room.setMatchType(resolvedMatchType);
+        room.setMarketType(resolvedMarketType);
         room = matchingRoomRepository.save(room);
         String code = generateUniqueInviteCode();
         room.setInviteCode(code);
@@ -124,7 +134,8 @@ public class MatchingRoomService {
         return Map.of(
                 "success", true,
                 "message", "Created",
-                "room", toMap(room)
+                "room", toMap(room),
+                "invitedUserIds", inviteeUserIds != null ? inviteeUserIds : List.of()
         );
     }
 
@@ -332,6 +343,8 @@ public class MatchingRoomService {
         map.put("members", membersList);
         map.put("status", room.getStatus());
         map.put("visibility", room.getVisibility() != null ? room.getVisibility() : VISIBILITY_PUBLIC);
+        map.put("matchType", room.getMatchType() != null ? room.getMatchType() : "RANDOM");
+        map.put("marketType", room.getMarketType() != null ? room.getMarketType() : "KR");
         map.put("inviteCode", room.getInviteCode());
         map.put("createdAt", room.getCreatedAt().toString());
         return map;
@@ -341,6 +354,16 @@ public class MatchingRoomService {
         Map<String, Object> map = new HashMap<>(toMap(room));
         map.put("isJoined", isJoined);
         return map;
+    }
+
+    private static String normalizeMatchType(String matchType) {
+        String resolved = matchType != null ? matchType.trim().toUpperCase() : "RANDOM";
+        return ("FRIEND".equals(resolved) || "RANDOM".equals(resolved)) ? resolved : "RANDOM";
+    }
+
+    private static String normalizeMarketType(String marketType) {
+        String resolved = marketType != null ? marketType.trim().toUpperCase() : "KR";
+        return ("KR".equals(resolved) || "US".equals(resolved)) ? resolved : "KR";
     }
 
     private static String toApiId(Long id) {

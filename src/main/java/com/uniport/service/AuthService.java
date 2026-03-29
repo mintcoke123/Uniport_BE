@@ -26,13 +26,16 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final FirebaseAuthenticationService firebaseAuthenticationService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       JwtUtil jwtUtil) {
+                       JwtUtil jwtUtil,
+                       FirebaseAuthenticationService firebaseAuthenticationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.firebaseAuthenticationService = firebaseAuthenticationService;
     }
 
     @Transactional
@@ -109,37 +112,58 @@ public class AuthService {
     }
 
     public User getUserFromToken(String token) {
-        if (token == null || token.isBlank()) {
-            throw new ApiException("Authorization token is required", HttpStatus.UNAUTHORIZED);
+        User user = resolveUserFromAuthorization(token, false);
+        if (user == null) {
+            throw new ApiException("User not found", HttpStatus.UNAUTHORIZED);
         }
-        String bearer = "Bearer ";
-        if (!token.startsWith(bearer)) {
-            throw new ApiException("Invalid authorization header", HttpStatus.UNAUTHORIZED);
-        }
-        String jwt = token.substring(bearer.length()).trim();
-        Long userId = jwtUtil.getUserIdFromToken(jwt);
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new ApiException("User not found", HttpStatus.UNAUTHORIZED));
+        return user;
     }
 
     /** 토큰이 없거나 잘못되면 null 반환. 401 던지지 않음. (홈 등 미로그인 상태에서 호출 시 사용) */
     public User getUserFromTokenOrNull(String token) {
-        if (token == null || token.isBlank()) return null;
-        String bearer = "Bearer ";
-        if (!token.startsWith(bearer)) return null;
-        String jwt = token.substring(bearer.length()).trim();
-        try {
-            Long userId = jwtUtil.getUserIdFromToken(jwt);
-            return userRepository.findById(userId).orElse(null);
-        } catch (Exception e) {
-            return null;
-        }
+        return resolveUserFromAuthorization(token, true);
     }
 
     /** 토큰으로 현재 사용자 프로필 조회 (teamId 등 DB 최신값 반영). 미로그인 시 null. */
     public AuthUserDTO getCurrentUserDto(String authorization) {
         User u = getUserFromTokenOrNull(authorization != null ? authorization : "");
         return u != null ? toAuthUserDTO(u) : null;
+    }
+
+    private User resolveUserFromAuthorization(String authorization, boolean silent) {
+        if (authorization == null || authorization.isBlank()) {
+            if (silent) return null;
+            throw new ApiException("Authorization token is required", HttpStatus.UNAUTHORIZED);
+        }
+        String bearer = "Bearer ";
+        if (!authorization.startsWith(bearer)) {
+            if (silent) return null;
+            throw new ApiException("Invalid authorization header", HttpStatus.UNAUTHORIZED);
+        }
+        String token = authorization.substring(bearer.length()).trim();
+        if (token.isBlank()) {
+            if (silent) return null;
+            throw new ApiException("Authorization token is required", HttpStatus.UNAUTHORIZED);
+        }
+
+        try {
+            Long userId = jwtUtil.getUserIdFromToken(token);
+            return userRepository.findById(userId).orElse(null);
+        } catch (Exception ignored) {
+        }
+
+        try {
+            return firebaseAuthenticationService.authenticate(token).getUser();
+        } catch (ApiException e) {
+            if (silent) return null;
+            throw e;
+        } catch (IllegalArgumentException e) {
+            if (silent) return null;
+            throw new ApiException(e.getMessage(), HttpStatus.UNAUTHORIZED);
+        } catch (Exception e) {
+            if (silent) return null;
+            throw new ApiException("Authentication failed", HttpStatus.UNAUTHORIZED);
+        }
     }
 
     private static void validateStudentId(String studentId) {

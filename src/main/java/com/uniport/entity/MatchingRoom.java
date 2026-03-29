@@ -49,6 +49,12 @@ public class MatchingRoom {
     @Builder.Default
     private String visibility = "PUBLIC";
 
+    @Column(name = "match_type", length = 20)
+    private String matchType;
+
+    @Column(name = "market_type", length = 20)
+    private String marketType;
+
     /** 6~8자리 Base62 랜덤. UNIQUE. 비공개 방 입장용. */
     @Column(name = "invite_code", unique = true, length = 8)
     private String inviteCode;

@@ -32,6 +32,9 @@ public class User {
     @Column(nullable = true, unique = true, length = 255)
     private String email;
 
+    @Column(unique = true, length = 128)
+    private String firebaseUid;
+
     @Column(nullable = false, unique = true, length = 20)
     private String studentId;
 
@@ -43,6 +46,9 @@ public class User {
 
     @Column(nullable = false, unique = true, length = 100)
     private String nickname;
+
+    @Column(length = 500)
+    private String profileImageUrl;
 
     /** 총 자산 (명세 §1) */
     @Column(precision = 19, scale = 4)
@@ -70,4 +76,7 @@ public class User {
 
     @Column(unique = true, length = 255)
     private String username;
+
+    @Column(length = 50)
+    private String investmentProfileResult;
 }

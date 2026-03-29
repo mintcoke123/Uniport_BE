@@ -1,28 +1,23 @@
 package com.uniport.service;
 
 import com.uniport.dto.StockSearchItemDTO;
+import com.uniport.dto.StockSearchResponseDTO;
 import com.uniport.entity.StockMaster;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.StockMasterRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
-/**
- * stock_master 기반 종목 검색 (읽기 전용). GET /api/stocks/search 전용.
- */
 @Service
 public class StockMasterSearchService {
 
-    private static final Logger log = LoggerFactory.getLogger(StockMasterSearchService.class);
-    private static final int DEFAULT_LIMIT = 20;
-    private static final int MAX_LIMIT = 50;
+    private static final int DEFAULT_SIZE = 10;
+    private static final int MAX_SIZE = 20;
 
     private final StockMasterRepository stockMasterRepository;
 
@@ -30,59 +25,98 @@ public class StockMasterSearchService {
         this.stockMasterRepository = stockMasterRepository;
     }
 
-    /**
-     * name_kr ILIKE 검색. query trim 후 길이 1 미만이면 빈 리스트.
-     * limit 기본 20, 최대 50 clamp. limit 파싱 실패 시 ApiException(400).
-     */
-    public List<StockSearchItemDTO> search(String query, String limitParam) {
-        String q = query != null ? query.trim() : "";
-        if (q.length() < 1) {
-            return List.of();
+    public StockSearchResponseDTO search(String keywordParam,
+                                         Integer pageParam,
+                                         Integer sizeParam,
+                                         String legacyQuery,
+                                         String legacyLimit) {
+        String keyword = resolveKeyword(keywordParam, legacyQuery);
+        int page = resolvePage(pageParam);
+        int size = resolveSize(sizeParam, legacyLimit);
+
+        if (keyword.isBlank()) {
+            return StockSearchResponseDTO.builder()
+                    .items(List.of())
+                    .page(page)
+                    .size(size)
+                    .hasNext(Boolean.FALSE)
+                    .build();
         }
 
-        int limit = parseLimit(limitParam);
+        Pageable pageable = PageRequest.of(page, size + 1);
+        List<StockMaster> list = stockMasterRepository.findByNameKrIlikeOrderByNameKrAsc(keyword, pageable);
+        boolean hasNext = list.size() > size;
 
-        Pageable pageable = PageRequest.of(0, limit);
-        List<StockMaster> list = stockMasterRepository.findByNameKrIlikeOrderByNameKrAsc(q, pageable);
+        List<StockSearchItemDTO> items = list.stream()
+                .limit(size)
+                .map(this::toSearchItem)
+                .filter(item -> item != null)
+                .toList();
 
-        List<StockSearchItemDTO> result = new ArrayList<>();
-        for (StockMaster m : list) {
-            StockSearchItemDTO dto = toSearchItem(m);
-            if (dto != null) {
-                result.add(dto);
+        return StockSearchResponseDTO.builder()
+                .items(items)
+                .page(page)
+                .size(size)
+                .hasNext(hasNext)
+                .build();
+    }
+
+    private String resolveKeyword(String keywordParam, String legacyQuery) {
+        if (keywordParam != null && !keywordParam.isBlank()) {
+            return keywordParam.trim();
+        }
+        return legacyQuery != null ? legacyQuery.trim() : "";
+    }
+
+    private int resolvePage(Integer pageParam) {
+        if (pageParam == null || pageParam < 0) {
+            return 0;
+        }
+        return pageParam;
+    }
+
+    private int resolveSize(Integer sizeParam, String legacyLimit) {
+        if (sizeParam != null) {
+            if (sizeParam < 1) {
+                return DEFAULT_SIZE;
             }
+            return Math.min(sizeParam, MAX_SIZE);
         }
-        return result;
-    }
-
-    private static int parseLimit(String limitParam) {
-        if (limitParam == null || limitParam.isBlank()) {
-            return DEFAULT_LIMIT;
+        if (legacyLimit == null || legacyLimit.isBlank()) {
+            return DEFAULT_SIZE;
         }
         try {
-            int value = Integer.parseInt(limitParam.trim());
-            if (value < 1) return DEFAULT_LIMIT;
-            return Math.min(value, MAX_LIMIT);
-        } catch (NumberFormatException e) {
-            throw new ApiException("Invalid limit", HttpStatus.BAD_REQUEST);
+            int parsed = Integer.parseInt(legacyLimit.trim());
+            if (parsed < 1) {
+                return DEFAULT_SIZE;
+            }
+            return Math.min(parsed, MAX_SIZE);
+        } catch (NumberFormatException ex) {
+            throw new ApiException("Invalid size", HttpStatus.BAD_REQUEST);
         }
     }
 
-    private static StockSearchItemDTO toSearchItem(StockMaster m) {
-        String code = m.getCode();
-        if (code == null || code.isBlank()) return null;
-        long id;
-        try {
-            id = Long.parseLong(code);
-        } catch (NumberFormatException e) {
-            log.warn("StockMaster code is not numeric, skipping: code={}", code);
+    private StockSearchItemDTO toSearchItem(StockMaster stockMaster) {
+        String code = stockMaster.getCode();
+        if (code == null || code.isBlank()) {
             return null;
         }
+
+        String market = stockMaster.getMarket() != null ? stockMaster.getMarket() : "";
         return StockSearchItemDTO.builder()
-                .id(id)
-                .code(code)
-                .name(m.getNameKr() != null ? m.getNameKr() : "")
-                .market(m.getMarket() != null ? m.getMarket() : "")
+                .stockId(buildStockId(market, code))
+                .name(stockMaster.getNameKr() != null ? stockMaster.getNameKr() : "")
+                .symbol(code)
+                .market(market)
+                .logoUrl(null)
                 .build();
+    }
+
+    private String buildStockId(String market, String code) {
+        String normalizedMarket = market.toUpperCase(Locale.ROOT);
+        if (normalizedMarket.contains("KOS")) {
+            return "KRX_" + code;
+        }
+        return "US_" + code;
     }
 }

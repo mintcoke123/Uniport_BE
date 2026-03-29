@@ -1,7 +1,7 @@
 package com.uniport.controller;
 
 import com.uniport.dto.StockDetailDTO;
-import com.uniport.dto.StockSearchItemDTO;
+import com.uniport.dto.StockSearchResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.AuthService;
 import com.uniport.service.StockMasterSearchService;
@@ -14,12 +14,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
-/**
- * 명세 §3-5: 종목 상세. GET /api/stocks/:id
- * 검색: GET /api/stocks/search?query=...&limit=20
- */
 @RestController
 @RequestMapping("/api/stocks")
 public class ApiStockController {
@@ -36,11 +30,14 @@ public class ApiStockController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<StockSearchItemDTO>> search(
+    public ResponseEntity<StockSearchResponseDTO> search(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size,
             @RequestParam(value = "query", required = false) String query,
             @RequestParam(value = "limit", required = false) String limit) {
-        List<StockSearchItemDTO> list = stockMasterSearchService.search(query, limit);
-        return ResponseEntity.ok(list);
+        StockSearchResponseDTO response = stockMasterSearchService.search(keyword, page, size, query, limit);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}")
