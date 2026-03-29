@@ -2,7 +2,7 @@ package com.uniport.controller;
 
 import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.ErrorResponseDTO;
-import com.uniport.dto.MyPageResponseDTO;
+import com.uniport.dto.PointBalanceResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
 import com.uniport.service.MyPageMockService;
@@ -21,31 +21,31 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/mypage")
-@Tag(name = "MyPage", description = "마이페이지 API")
-public class MyPageController {
+@RequestMapping("/api/points")
+@Tag(name = "Points", description = "포인트 API")
+public class PointsController {
 
     private final MyPageMockService myPageMockService;
     private final CurrentUserResolver currentUserResolver;
 
-    public MyPageController(MyPageMockService myPageMockService,
+    public PointsController(MyPageMockService myPageMockService,
                             CurrentUserResolver currentUserResolver) {
         this.myPageMockService = myPageMockService;
         this.currentUserResolver = currentUserResolver;
     }
 
-    @GetMapping
-    @Operation(summary = "마이페이지 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @GetMapping("/balance")
+    @Operation(summary = "보유 포인트 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공",
-                    content = @Content(schema = @Schema(implementation = MyPageResponseDTO.class))),
+                    content = @Content(schema = @Schema(implementation = PointBalanceResponseDTO.class))),
             @ApiResponse(responseCode = "401", description = "인증 실패",
                     content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
     })
-    public ResponseEntity<MyPageResponseDTO> getMyPage(
+    public ResponseEntity<PointBalanceResponseDTO> getPointBalance(
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getMyPage(user));
+        return ResponseEntity.ok(myPageMockService.getPointBalance(user));
     }
 }

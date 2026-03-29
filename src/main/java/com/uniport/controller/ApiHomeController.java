@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/home")
-@Tag(name = "Home", description = "모의투자 홈 요약 API")
+@Tag(name = "Mock Investing Home", description = "모의투자 홈 요약 API")
 public class ApiHomeController {
 
     private final MockInvestingHomeService mockInvestingHomeService;
@@ -51,7 +51,7 @@ public class ApiHomeController {
     }
 
     @GetMapping("/group-insights")
-    @Operation(summary = "상위 그룹 인사이트 조회")
+    @Operation(summary = "상위 그룹 인기 분석 인사이트 조회")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공",
                     content = @Content(schema = @Schema(implementation = GroupInsightsResponseDTO.class)))
