@@ -26,12 +26,10 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final FirebaseAuthenticationService firebaseAuthenticationService;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public FirebaseAuthenticationFilter(FirebaseAuthenticationService firebaseAuthenticationService,
-                                        ObjectMapper objectMapper) {
+    public FirebaseAuthenticationFilter(FirebaseAuthenticationService firebaseAuthenticationService) {
         this.firebaseAuthenticationService = firebaseAuthenticationService;
-        this.objectMapper = objectMapper;
     }
 
     @Override
