@@ -76,10 +76,13 @@ public class GroupController {
     }
 
     @GetMapping("/{groupId}")
-    public ResponseEntity<Map<String, Object>> getGroup(@PathVariable Long groupId) {
+    public ResponseEntity<Map<String, Object>> getGroup(
+            @PathVariable Long groupId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
         String groupName = matchingRoomRepository.findById(groupId)
                 .map(r -> r.getName())
                 .orElse("팀 " + groupId);
+        User currentUser = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
 
         Optional<TeamAccount> accountOpt = teamAccountRepository.findByTeamId(groupId);
         BigDecimal cashBalance = accountOpt.map(TeamAccount::getCashBalance).orElse(INITIAL_TEAM_BALANCE);
@@ -116,6 +119,11 @@ public class GroupController {
             item.put("averagePrice", h.getAveragePurchasePrice());
             item.put("currentPrice", currentPrice);
             item.put("currentValue", value);
+            BigDecimal investedValue = h.getAveragePurchasePrice().multiply(BigDecimal.valueOf(h.getQuantity()));
+            BigDecimal itemProfitLossPercentage = investedValue.compareTo(BigDecimal.ZERO) != 0
+                    ? value.subtract(investedValue).divide(investedValue, 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100))
+                    : BigDecimal.ZERO;
+            item.put("profitLossPercentage", itemProfitLossPercentage);
             holdingsList.add(item);
         }
 
@@ -139,6 +147,7 @@ public class GroupController {
         body.put("profitLoss", profitLoss);
         body.put("profitLossPercentage", profitLossPercentage);
         body.put("holdings", holdingsList);
+        body.put("members", buildMemberSummary(groupId, currentUser));
         return ResponseEntity.ok(body);
     }
 
@@ -312,5 +321,27 @@ public class GroupController {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private List<Map<String, Object>> buildMemberSummary(Long groupId, User currentUser) {
+        List<MatchingRoomMember> members = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(groupId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int i = 0; i < members.size(); i++) {
+            User member = members.get(i).getUser();
+            if (member == null) continue;
+            boolean isMe = currentUser != null && currentUser.getId() != null && currentUser.getId().equals(member.getId());
+            result.add(Map.of(
+                    "userId", member.getId(),
+                    "nickname", member.getNickname() != null ? member.getNickname() : "",
+                    "level", 15,
+                    "investmentProfileLabel", member.getInvestmentProfileResult() != null && !member.getInvestmentProfileResult().isBlank()
+                            ? member.getInvestmentProfileResult()
+                            : "균형잡힌 판다형",
+                    "role", i == 0 ? "HOST" : "MEMBER",
+                    "roleLabel", i == 0 ? "방장" : "팀원",
+                    "isMe", isMe
+            ));
+        }
+        return result;
     }
 }

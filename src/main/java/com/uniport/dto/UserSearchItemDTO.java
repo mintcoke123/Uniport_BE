@@ -25,6 +25,12 @@ public class UserSearchItemDTO {
     @Schema(example = "https://example.com/profile-21.png", nullable = true)
     private String profileImageUrl;
 
+    @Schema(example = "15", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Integer level;
+
+    @Schema(example = "균형잡힌 판다형", nullable = true)
+    private String investmentProfileLabel;
+
     @Schema(example = "false", requiredMode = Schema.RequiredMode.REQUIRED)
     private boolean alreadyInvited;
 

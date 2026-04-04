@@ -40,13 +40,17 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
         String requestUri = request.getRequestURI();
         boolean protectedRequest = requestUri != null
                 && (requestUri.startsWith("/api/investment-survey/")
+                || requestUri.startsWith("/api/onboarding/")
                 || requestUri.startsWith("/api/surveys/")
                 || requestUri.startsWith("/api/learning/")
+                || requestUri.startsWith("/api/chat/")
+                || requestUri.startsWith("/api/matching-rooms/")
                 || requestUri.startsWith("/investment-survey/")
                 || requestUri.startsWith("/surveys/")
                 || requestUri.startsWith("/learning/")
                 || requestUri.startsWith("/api/custom-etfs/")
                 || requestUri.startsWith("/api/etf-analysis-reports/")
+                || (requestUri.startsWith("/api/etf-discovery/") && !"GET".equalsIgnoreCase(request.getMethod()))
                 || requestUri.startsWith("/api/mypage")
                 || requestUri.startsWith("/api/points/")
                 || requestUri.startsWith("/api/shop/redemptions/")

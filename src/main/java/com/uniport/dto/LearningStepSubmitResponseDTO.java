@@ -33,4 +33,10 @@ public class LearningStepSubmitResponseDTO {
 
     @Schema(example = "false", requiredMode = Schema.RequiredMode.REQUIRED)
     private boolean dayCompleted;
+
+    @Schema(example = "정답이에요!", nullable = true)
+    private String resultTitle;
+
+    @Schema(example = "몸통은 시가와 종가의 차이를 의미합니다.", nullable = true)
+    private String resultDescription;
 }

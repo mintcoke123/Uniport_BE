@@ -81,7 +81,13 @@ public class LearningService {
                 .level(state.level)
                 .point(state.point)
                 .todayLearningCompleted(LocalDate.now().equals(state.lastCompletedDate))
-                .course(new LearningHomeCourseDTO(course.id(), course.title(), progressPercent, currentDay, totalDays))
+                .course(new LearningHomeCourseDTO(
+                        course.id(),
+                        course.title(),
+                        progressPercent,
+                        currentDay,
+                        totalDays,
+                        String.format("Day %02d / %02d", currentDay, totalDays)))
                 .roadmap(buildRoadmap(course.id(), totalDays, currentDay, state))
                 .currentContent(new LearningCurrentContentDTO(day.day(), day.title(), "CURRENT"))
                 .build();
@@ -123,6 +129,8 @@ public class LearningService {
                 .submitted(true)
                 .nextStepId(getNextStepId(lookup.day().steps(), stepId))
                 .dayCompleted(dayCompleted)
+                .resultTitle(isCorrect ? "정답이에요!" : "다시 생각해볼까요?")
+                .resultDescription(getExplanation(stepId))
                 .build();
     }
 
@@ -158,6 +166,8 @@ public class LearningService {
                 .streakDays(state.streakDays)
                 .earnedPoint(50)
                 .earnedExp(120)
+                .completionTitle("오늘도 정복 완료!")
+                .completionDescription("고생 많으셨어요")
                 .build();
     }
 
@@ -185,7 +195,10 @@ public class LearningService {
                 .thumbnailUrl(course.thumbnailUrl())
                 .currentDay(currentDay)
                 .totalDays(course.locked() ? null : course.days().size())
+                .progressLabel(course.locked() || currentDay == null ? null : String.format("Day %02d / %02d", currentDay, course.days().size()))
                 .status(status)
+                .statusLabel(toStatusLabel(status))
+                .actionLabel(toActionLabel(status))
                 .isLocked(course.locked())
                 .build();
     }
@@ -196,8 +209,27 @@ public class LearningService {
                 .mapToObj(day -> LearningRoadmapItemDTO.builder()
                         .day(day)
                         .status(completedDays.contains(day) ? "COMPLETED" : day == currentDay ? "CURRENT" : "LOCKED")
+                        .statusLabel(completedDays.contains(day) ? "학습 완료됨" : day == currentDay ? "오늘 학습 진행중" : "잠김")
                         .build())
                 .toList();
+    }
+
+    private String toStatusLabel(String status) {
+        return switch (status) {
+            case "IN_PROGRESS" -> "현재 이수중";
+            case "COMPLETED" -> "학습 완료됨";
+            case "LOCKED" -> "잠김";
+            default -> "잠금 해제됨";
+        };
+    }
+
+    private String toActionLabel(String status) {
+        return switch (status) {
+            case "IN_PROGRESS" -> "퀴즈 풀기";
+            case "COMPLETED" -> "복습하기";
+            case "LOCKED" -> "잠금";
+            default -> "도전하기";
+        };
     }
 
     private boolean isDayReadyToComplete(long courseId, int day, LearningUserState state) {
@@ -215,11 +247,19 @@ public class LearningService {
             case 103 -> 1L;
             case 302 -> 1L;
             case 2002 -> 1L;
+            case 4002 -> 1L;
+            case 5002 -> 1L;
             default -> null;
         };
     }
 
     private String getExplanation(long stepId) {
+        if (stepId == 4002L) {
+            return "매수는 특정 가격에 주식을 사는 행동을 의미합니다.";
+        }
+        if (stepId == 5002L) {
+            return "뉴스는 출처와 날짜를 먼저 확인해야 신뢰도를 판단할 수 있습니다.";
+        }
         return switch ((int) stepId) {
             case 1002 -> "주식은 기업의 소유권 일부를 의미합니다.";
             case 1003 -> "매수 관심 증가는 가격 상승 기대와 더 가까운 신호입니다.";

@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/home")
 @Tag(name = "Mock Investing Home", description = "모의투자 홈 요약 API")
@@ -48,6 +50,15 @@ public class ApiHomeController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(mockInvestingHomeService.getSummary(user));
+    }
+
+    @GetMapping("/group-matching-dashboard")
+    @Operation(summary = "그룹 매칭 홈 대시보드 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    public ResponseEntity<Map<String, Object>> getGroupMatchingDashboard(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(mockInvestingHomeService.getGroupMatchingDashboard(user));
     }
 
     @GetMapping("/group-insights")

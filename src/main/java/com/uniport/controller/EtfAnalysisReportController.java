@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -47,8 +48,9 @@ public class EtfAnalysisReportController {
     public ResponseEntity<EtfAnalysisReportResponseDTO> getAnalysisReport(
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable String reportId) {
+            @PathVariable String reportId,
+            @RequestParam(value = "period", required = false) String period) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.getReport(user, reportId));
+        return ResponseEntity.ok(etfMockService.getReport(user, reportId, period));
     }
 }

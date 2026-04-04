@@ -31,8 +31,17 @@ public class LearningCourseSummaryDTO {
     @Schema(example = "30", nullable = true)
     private Integer totalDays;
 
+    @Schema(example = "Day 02 / 30", nullable = true)
+    private String progressLabel;
+
     @Schema(example = "IN_PROGRESS", requiredMode = Schema.RequiredMode.REQUIRED)
     private String status;
+
+    @Schema(example = "현재 이수중", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String statusLabel;
+
+    @Schema(example = "퀴즈 풀기", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String actionLabel;
 
     @Schema(example = "false", requiredMode = Schema.RequiredMode.REQUIRED)
     private boolean isLocked;

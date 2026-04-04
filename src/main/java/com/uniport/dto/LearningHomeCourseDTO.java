@@ -27,4 +27,7 @@ public class LearningHomeCourseDTO {
 
     @Schema(example = "30", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer totalDays;
+
+    @Schema(example = "Day 02 / 30", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String progressLabel;
 }

@@ -30,4 +30,10 @@ public class LearningDayCompleteResponseDTO {
 
     @Schema(example = "120", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer earnedExp;
+
+    @Schema(example = "오늘도 정복 완료!", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String completionTitle;
+
+    @Schema(example = "고생 많으셨어요", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String completionDescription;
 }

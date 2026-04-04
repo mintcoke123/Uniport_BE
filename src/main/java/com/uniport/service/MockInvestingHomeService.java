@@ -14,6 +14,7 @@ import com.uniport.entity.User;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -23,13 +24,16 @@ public class MockInvestingHomeService {
     private final MatchingRoomService matchingRoomService;
     private final MeService meService;
     private final RankingService rankingService;
+    private final CompetitionService competitionService;
 
     public MockInvestingHomeService(MatchingRoomService matchingRoomService,
                                     MeService meService,
-                                    RankingService rankingService) {
+                                    RankingService rankingService,
+                                    CompetitionService competitionService) {
         this.matchingRoomService = matchingRoomService;
         this.meService = meService;
         this.rankingService = rankingService;
+        this.competitionService = competitionService;
     }
 
     public MockInvestingSummaryResponseDTO getSummary(User user) {
@@ -96,6 +100,56 @@ public class MockInvestingHomeService {
                         .comment("실적 발표 전 기술적 신호에서 매수세가 확인된 전략입니다.")
                         .build())
                 .build();
+    }
+
+    public Map<String, Object> getGroupMatchingDashboard(User user) {
+        List<Map<String, Object>> rankings = rankingService.getAllGroupsRanking();
+        List<Map<String, Object>> rankingPreview = new ArrayList<>();
+        for (int i = 0; i < Math.min(rankings.size(), 5); i++) {
+            Map<String, Object> item = rankings.get(i);
+            rankingPreview.add(Map.of(
+                    "rank", i + 1,
+                    "groupId", item.get("id"),
+                    "groupName", stringValue(item.get("groupName")),
+                    "totalAssets", item.get("currentAssets"),
+                    "profitRate", item.get("profitRate")
+            ));
+        }
+
+        List<Map<String, Object>> upcomingCards = competitionService.findByStatus("upcoming").stream()
+                .limit(3)
+                .map(competition -> Map.<String, Object>of(
+                        "competitionId", competition.getId(),
+                        "name", competition.getName(),
+                        "statusLabel", "참가 신청",
+                        "daysRemaining", Math.max(0, competitionService.daysRemaining(competition.getEndDate())),
+                        "startDate", competition.getStartDate(),
+                        "endDate", competition.getEndDate()
+                ))
+                .toList();
+
+        GroupInsightsResponseDTO insights = getGroupInsights();
+        return Map.of(
+                "heroCards", List.of(
+                        Map.of(
+                                "type", "GROUP_MATCH",
+                                "title", "그룹 매칭",
+                                "description", "관심사 기반 친구 매칭",
+                                "ctaLabel", "함께 시작하기"
+                        ),
+                        Map.of(
+                                "type", "TOURNAMENT",
+                                "title", "토너먼트 대회",
+                                "description", "우승 도전하기",
+                                "ctaLabel", "우승 도전하기"
+                        )
+                ),
+                "topConsensus", insights.getTopConsensus(),
+                "topGroupInsight", insights.getTopGroup(),
+                "upcomingTournaments", upcomingCards,
+                "realtimeRanking", rankingPreview,
+                "myGroupRanking", user != null ? rankingService.getMyGroupRanking(user) : null
+        );
     }
 
     private static String stringValue(Object value) {

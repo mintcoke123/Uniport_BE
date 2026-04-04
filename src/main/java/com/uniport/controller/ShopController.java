@@ -3,6 +3,8 @@ package com.uniport.controller;
 import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.dto.ShopItemsResponseDTO;
+import com.uniport.dto.ShopRedemptionDetailResponseDTO;
+import com.uniport.dto.ShopRedemptionListResponseDTO;
 import com.uniport.dto.ShopRedemptionPreviewResponseDTO;
 import com.uniport.dto.ShopRedemptionRequestDTO;
 import com.uniport.dto.ShopRedemptionResponseDTO;
@@ -21,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -60,6 +63,39 @@ public class ShopController {
             @Parameter(example = "10")
             @RequestParam(value = "size", required = false) Integer size) {
         return ResponseEntity.ok(myPageMockService.getShopItems(category, sort, page, size));
+    }
+
+    @GetMapping("/redemptions")
+    @Operation(summary = "교환 내역 목록 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공",
+                    content = @Content(schema = @Schema(implementation = ShopRedemptionListResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<ShopRedemptionListResponseDTO> getRedemptions(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(myPageMockService.getRedemptions(user));
+    }
+
+    @GetMapping("/redemptions/{redemptionId}")
+    @Operation(summary = "교환 내역 상세 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공",
+                    content = @Content(schema = @Schema(implementation = ShopRedemptionDetailResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "교환 내역 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<ShopRedemptionDetailResponseDTO> getRedemptionDetail(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String redemptionId) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(myPageMockService.getRedemptionDetail(user, redemptionId));
     }
 
     @GetMapping("/redemptions/preview")

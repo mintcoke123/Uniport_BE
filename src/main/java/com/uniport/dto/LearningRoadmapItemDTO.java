@@ -18,4 +18,7 @@ public class LearningRoadmapItemDTO {
 
     @Schema(example = "CURRENT", requiredMode = Schema.RequiredMode.REQUIRED)
     private String status;
+
+    @Schema(example = "오늘 학습 진행중", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String statusLabel;
 }

@@ -43,6 +43,15 @@ public class MatchingRoomController {
         return ResponseEntity.ok(matchingRoomService.list(user));
     }
 
+    @GetMapping("/{roomId}")
+    public ResponseEntity<Map<String, Object>> getDetail(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @PathVariable String roomId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(matchingRoomService.getRoomDetail(roomId, user));
+    }
+
     @PostMapping
     public ResponseEntity<Map<String, Object>> create(
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
@@ -80,7 +89,7 @@ public class MatchingRoomController {
             }
         }
 
-        User creator = currentUserResolver.resolveNullable(principal, authorization);
+        User creator = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(matchingRoomService.create(name, visibility, capacity, matchType, marketType, inviteeUserIds, creator));
     }
 
@@ -113,7 +122,11 @@ public class MatchingRoomController {
     }
 
     @PostMapping("/{roomId}/start")
-    public ResponseEntity<Map<String, Object>> start(@PathVariable String roomId) {
-        return ResponseEntity.ok(matchingRoomService.start(roomId));
+    public ResponseEntity<Map<String, Object>> start(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @PathVariable String roomId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(matchingRoomService.start(roomId, user));
     }
 }

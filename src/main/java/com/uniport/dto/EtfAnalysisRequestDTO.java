@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @Schema(description = "ETF 분석 요청")
 public class EtfAnalysisRequestDTO {
 
-    @Schema(example = "1Y", allowableValues = {"1Y", "3Y", "5Y"}, requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(example = "1Y", allowableValues = {"1Y", "3Y", "5Y", "ALL"}, requiredMode = Schema.RequiredMode.REQUIRED)
     private String period;
 
     @Schema(example = "SP500", allowableValues = {"SP500", "KOSPI", "NASDAQ"}, requiredMode = Schema.RequiredMode.REQUIRED)

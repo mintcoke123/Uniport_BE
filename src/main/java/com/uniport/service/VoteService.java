@@ -256,6 +256,16 @@ public class VoteService {
         map.put("expiresAt", v.getExpiresAt().toString());
         map.put("totalMembers", v.getTotalMembers());
         map.put("status", v.getStatus());
+        map.put("statusLabel", toStatusLabel(v.getStatus()));
+        map.put("title", v.getStockName() + " " + v.getType() + " 제안");
+        map.put("description", switch (v.getStatus()) {
+            case STATUS_PENDING -> "조건이 충족되면 자동으로 주문이 실행됩니다.";
+            case STATUS_CANCELLED -> "대기 중이던 제안이 취소되었어요.";
+            case STATUS_PASSED -> "투표가 통과되어 주문 대기 상태입니다.";
+            case STATUS_EXECUTING -> "주문이 실행되는 중입니다.";
+            case "rejected" -> "팀원 투표 결과 반대로 종료되었어요.";
+            default -> "팀원 투표를 통해 거래 여부를 결정합니다.";
+        });
         map.put("orderStrategy", v.getOrderStrategy() != null ? v.getOrderStrategy() : ORDER_STRATEGY_MARKET);
         map.put("limitPrice", v.getLimitPrice());
         map.put("triggerPrice", v.getTriggerPrice());
@@ -368,11 +378,19 @@ public class VoteService {
 
         Vote updated = voteRepository.findById(voteId).orElse(vote);
         broadcastVoteUpdate(groupId, voteId);
-        return Map.of(
-                "success", true,
-                "message", "투표가 반영되었습니다.",
-                "vote", Map.<String, Object>of("id", voteId, "vote", v, "status", updated.getStatus() != null ? updated.getStatus() : vote.getStatus())
-        );
+        Map<String, Object> voteSummary = new HashMap<>();
+        voteSummary.put("id", voteId);
+        voteSummary.put("vote", v);
+        voteSummary.put("status", updated.getStatus() != null ? updated.getStatus() : vote.getStatus());
+        voteSummary.put("statusLabel", toStatusLabel(updated.getStatus() != null ? updated.getStatus() : vote.getStatus()));
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "투표가 반영되었습니다.");
+        response.put("title", "의견이 반영되었어요");
+        response.put("description", "팀원들의 투표 현황을 계속 확인해보세요.");
+        response.put("vote", voteSummary);
+        return response;
     }
 
     /** pending 상태 조건주문 취소. 제안자만 취소 가능. */
@@ -398,7 +416,18 @@ public class VoteService {
         vote.setStatus(STATUS_CANCELLED);
         voteRepository.save(vote);
         broadcastVoteUpdate(groupId, voteId);
-        return Map.of("success", true, "message", "대기가 취소되었습니다.", "vote", Map.<String, Object>of("id", voteId, "status", STATUS_CANCELLED));
+        Map<String, Object> voteSummary = new HashMap<>();
+        voteSummary.put("id", voteId);
+        voteSummary.put("status", STATUS_CANCELLED);
+        voteSummary.put("statusLabel", toStatusLabel(STATUS_CANCELLED));
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "대기가 취소되었습니다.");
+        response.put("title", "대기 주문이 취소되었어요");
+        response.put("description", "새로운 조건으로 다시 투표를 시작할 수 있습니다.");
+        response.put("vote", voteSummary);
+        return response;
     }
 
     /**
@@ -410,6 +439,17 @@ public class VoteService {
             return false;
         }
         return ((double) agreeCount / totalMembers) > 0.5;
+    }
+
+    private String toStatusLabel(String status) {
+        return switch (status) {
+            case STATUS_PENDING -> "대기중";
+            case STATUS_PASSED -> "통과";
+            case STATUS_EXECUTING -> "주문 실행중";
+            case STATUS_CANCELLED -> "취소됨";
+            case "rejected" -> "반려됨";
+            default -> "진행중";
+        };
     }
 
     /** 찬성/반대·취소 등 투표 갱신 시 같은 방 WebSocket 클라이언트에 실시간 알림 (프론트에서 투표 목록 재조회) */

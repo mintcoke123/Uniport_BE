@@ -28,6 +28,12 @@ public class LearningDayContentResponseDTO {
     @Schema(implementation = LearningProgressDTO.class)
     private LearningProgressDTO progress;
 
+    @Schema(example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Integer currentStepOrder;
+
+    @Schema(example = "5", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Integer totalSteps;
+
     @ArraySchema(schema = @Schema(implementation = LearningDayStepDTO.class))
     private List<LearningDayStepDTO> steps;
 }

@@ -11,6 +11,8 @@ import com.uniport.dto.EtfAnalysisApplyRequestDTO;
 import com.uniport.dto.EtfAnalysisApplyResponseDTO;
 import com.uniport.dto.EtfAnalysisRequestDTO;
 import com.uniport.dto.EtfAnalysisStartResponseDTO;
+import com.uniport.dto.EtfShareRequestDTO;
+import com.uniport.dto.EtfShareResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
 import com.uniport.service.EtfMockService;
@@ -158,5 +160,26 @@ public class CustomEtfController {
             @RequestBody EtfAnalysisApplyRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(etfMockService.applyReport(user, etfId, reportId, request));
+    }
+
+    @PostMapping("/{etfId}/share")
+    @Operation(summary = "ETF 공유 준비", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "공유 준비 성공",
+                    content = @Content(schema = @Schema(implementation = EtfShareResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 ETF",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<EtfShareResponseDTO> shareCustomEtf(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String etfId,
+            @RequestBody EtfShareRequestDTO request) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(etfMockService.shareCustomEtf(user, etfId, request));
     }
 }

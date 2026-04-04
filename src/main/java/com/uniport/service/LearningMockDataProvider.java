@@ -176,6 +176,82 @@ public class LearningMockDataProvider {
                             )
                     )
             ),
+            4L, new LearningCourseCatalog(
+                    4L,
+                    "MINI",
+                    "매매 기초 코스",
+                    "짧고 굵게 핵심만 익히는 미니 코스",
+                    "https://example.com/course-mini-trading.png",
+                    false,
+                    List.of(
+                            new LearningDayCatalog(
+                                    1,
+                                    "MINI 01",
+                                    "트레이딩의 이해",
+                                    "트레이딩의 기본 개념과 용어를 빠르게 익힙니다.",
+                                    "https://example.com/mini-day-1.png",
+                                    List.of(
+                                            LearningKeyConceptDTO.builder().title("매수와 매도의 차이").build(),
+                                            LearningKeyConceptDTO.builder().title("체결 가격 이해하기").build()
+                                    ),
+                                    List.of(
+                                            LearningDayStepDTO.builder()
+                                                    .id(4001L).order(1).type("THEORY").chapter("MINI 01")
+                                                    .title("트레이딩의 이해")
+                                                    .description("짧은 호흡으로 매매할 때 꼭 알아야 할 기본 개념을 정리합니다.")
+                                                    .imageUrl("https://example.com/mini-trading.png")
+                                                    .build(),
+                                            LearningDayStepDTO.builder()
+                                                    .id(4002L).order(2).type("QUIZ").chapter("MINI 01")
+                                                    .title("오늘의 퀴즈")
+                                                    .question("매수는 어떤 의미일까요?")
+                                                    .options(List.of(
+                                                            new LearningStepOptionDTO(1L, "주식을 사는 것"),
+                                                            new LearningStepOptionDTO(2L, "주식을 파는 것")
+                                                    ))
+                                                    .build()
+                                    )
+                            )
+                    )
+            ),
+            5L, new LearningCourseCatalog(
+                    5L,
+                    "MINI",
+                    "뉴스 읽기 코스",
+                    "뉴스와 공시를 해석하는 기초 감각을 익힙니다.",
+                    "https://example.com/course-mini-news.png",
+                    false,
+                    List.of(
+                            new LearningDayCatalog(
+                                    1,
+                                    "MINI 02",
+                                    "뉴스 읽는 법",
+                                    "뉴스 제목만 보고 판단하지 않는 습관을 배웁니다.",
+                                    "https://example.com/mini-news.png",
+                                    List.of(
+                                            LearningKeyConceptDTO.builder().title("제목과 본문의 차이").build(),
+                                            LearningKeyConceptDTO.builder().title("출처 확인하기").build()
+                                    ),
+                                    List.of(
+                                            LearningDayStepDTO.builder()
+                                                    .id(5001L).order(1).type("THEORY").chapter("MINI 02")
+                                                    .title("뉴스 읽는 법")
+                                                    .description("헤드라인만 보고 투자 판단을 내리지 않도록 기사 구조를 살펴봅니다.")
+                                                    .imageUrl("https://example.com/mini-news-reading.png")
+                                                    .build(),
+                                            LearningDayStepDTO.builder()
+                                                    .id(5002L).order(2).type("QUIZ").chapter("MINI 02")
+                                                    .title("오늘의 퀴즈")
+                                                    .question("뉴스를 볼 때 가장 먼저 확인할 것은?")
+                                                    .options(List.of(
+                                                            new LearningStepOptionDTO(1L, "출처와 날짜"),
+                                                            new LearningStepOptionDTO(2L, "댓글 수")
+                                                    ))
+                                                    .build()
+                                    )
+                            )
+                    )
+            ),
             3L, new LearningCourseCatalog(
                     3L,
                     "ADVANCED",
@@ -267,6 +343,8 @@ public class LearningMockDataProvider {
                 .day(day.day())
                 .title(day.title())
                 .progress(new LearningProgressDTO(currentDay, course.days().size()))
+                .currentStepOrder(1)
+                .totalSteps(day.steps().size())
                 .steps(day.steps())
                 .build();
     }

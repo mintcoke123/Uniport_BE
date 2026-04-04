@@ -11,7 +11,11 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -65,5 +69,67 @@ public class CompetitionController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         return ResponseEntity.ok(rankingService.getCompetingTeams(competitionId, user));
+    }
+
+    @GetMapping("/{competitionId}/summary")
+    public ResponseEntity<Map<String, Object>> getCompetitionSummary(
+            @PathVariable Long competitionId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        var competition = competitionService.findAll().stream()
+                .filter(item -> item.getId() != null && item.getId().equals(competitionId))
+                .findFirst()
+                .orElseThrow(() -> new com.uniport.exception.ApiException("대회를 찾을 수 없습니다.", org.springframework.http.HttpStatus.NOT_FOUND));
+
+        User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
+        List<Map<String, Object>> teams = rankingService.getCompetingTeams(competitionId, user);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("competitionId", competition.getId());
+        body.put("name", competition.getName());
+        body.put("status", competition.getStatus() != null ? competition.getStatus().toUpperCase() : "UPCOMING");
+        body.put("participantTeamCount", teams.size());
+        body.put("remainingTime", buildRemainingTime(competition.getEndDate()));
+        body.put("summaryCards", List.of(
+                Map.of("label", "참가 팀 수", "value", teams.size(), "unit", "팀"),
+                Map.of("label", "남은 시간", "value", buildRemainingTimeLabel(competition.getEndDate()), "unit", "")
+        ));
+        body.put("upcomingCompetitions", competitionService.findByStatus("upcoming").stream()
+                .limit(3)
+                .map(item -> Map.<String, Object>of(
+                        "competitionId", item.getId(),
+                        "name", item.getName(),
+                        "statusLabel", "참가 신청",
+                        "daysRemaining", Math.max(0, competitionService.daysRemaining(item.getEndDate())),
+                        "startDate", item.getStartDate(),
+                        "endDate", item.getEndDate()
+                ))
+                .toList());
+        body.put("liveRanking", teams.stream().limit(5).toList());
+        return ResponseEntity.ok(body);
+    }
+
+    private Map<String, Object> buildRemainingTime(String endDate) {
+        try {
+            LocalDateTime end = LocalDateTime.parse(endDate);
+            Duration duration = Duration.between(LocalDateTime.now(), end);
+            long totalSeconds = Math.max(0, duration.getSeconds());
+            long days = totalSeconds / 86400;
+            long hours = (totalSeconds % 86400) / 3600;
+            long minutes = (totalSeconds % 3600) / 60;
+            long seconds = totalSeconds % 60;
+            return Map.of(
+                    "days", days,
+                    "hours", hours,
+                    "minutes", minutes,
+                    "seconds", seconds,
+                    "label", String.format("%d일 %02d:%02d:%02d", days, hours, minutes, seconds)
+            );
+        } catch (DateTimeParseException ex) {
+            return Map.of("days", 0, "hours", 0, "minutes", 0, "seconds", 0, "label", "0일 00:00:00");
+        }
+    }
+
+    private String buildRemainingTimeLabel(String endDate) {
+        return String.valueOf(buildRemainingTime(endDate).get("label"));
     }
 }

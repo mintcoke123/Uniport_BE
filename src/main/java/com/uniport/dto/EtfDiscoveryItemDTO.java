@@ -25,11 +25,17 @@ public class EtfDiscoveryItemDTO {
     @Schema(example = "기술", requiredMode = Schema.RequiredMode.REQUIRED)
     private String theme;
 
+    @Schema(example = "인기")
+    private String badgeLabel;
+
     @Schema(example = "24.8", requiredMode = Schema.RequiredMode.REQUIRED)
     private Double returnRate3M;
 
     @Schema(example = "12500", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer followerCount;
+
+    @Schema(example = "false", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Boolean favorite;
 
     @Schema(example = "https://example.com/etf-ai-tech.png")
     private String thumbnailUrl;
