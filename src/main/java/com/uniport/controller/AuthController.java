@@ -4,6 +4,7 @@ import com.uniport.dto.AuthResponseDTO;
 import com.uniport.dto.LoginRequestDTO;
 import com.uniport.dto.RegisterRequestDTO;
 import com.uniport.service.AuthService;
+import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 명세 §1: 인증·사용자. 로그인(이메일·비밀번호), 회원가입.
  * 응답: { success, message, user } (로그인 시 token 포함).
  */
+@Hidden
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
