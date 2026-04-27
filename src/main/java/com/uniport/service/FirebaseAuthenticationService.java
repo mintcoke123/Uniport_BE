@@ -1,5 +1,7 @@
 package com.uniport.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
@@ -12,6 +14,8 @@ import com.uniport.config.FirebaseProperties;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,13 +29,18 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class FirebaseAuthenticationService {
 
     private static final BigDecimal INITIAL_ASSETS = new BigDecimal("10000000");
+    private static final Logger log = LoggerFactory.getLogger(FirebaseAuthenticationService.class);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final FirebaseProperties firebaseProperties;
     private final UserRepository userRepository;
@@ -57,15 +66,32 @@ public class FirebaseAuthenticationService {
     }
 
     private FirebaseToken verifyToken(String idToken) {
+        Map<String, Object> rawClaims = decodeTokenClaims(idToken);
         try {
-            return FirebaseAuth.getInstance(getOrInitializeFirebaseApp()).verifyIdToken(idToken);
+            FirebaseToken firebaseToken = FirebaseAuth.getInstance(getOrInitializeFirebaseApp()).verifyIdToken(idToken);
+            validateProjectAlignment(firebaseToken, rawClaims);
+            return firebaseToken;
         } catch (FirebaseAuthException ex) {
+            log.warn("[firebase-auth] ID token verification failed: code={}, configuredProjectId={}, credentialProjectId={}, tokenAud={}, tokenIss={}, tokenSub={}",
+                    ex.getAuthErrorCode(),
+                    configuredProjectIdOrBlank(),
+                    configuredCredentialProjectId(),
+                    rawClaims.getOrDefault("aud", ""),
+                    rawClaims.getOrDefault("iss", ""),
+                    rawClaims.containsKey("sub"));
             throw new IllegalArgumentException(mapFirebaseAuthMessage(ex));
         } catch (IOException ex) {
             throw new ApiException("Firebase credentials initialization failed", HttpStatus.INTERNAL_SERVER_ERROR);
         } catch (IllegalStateException ex) {
             throw ex;
         } catch (Exception ex) {
+            log.warn("[firebase-auth] Unexpected ID token verification failure: configuredProjectId={}, credentialProjectId={}, tokenAud={}, tokenIss={}, tokenSubPresent={}, message={}",
+                    configuredProjectIdOrBlank(),
+                    configuredCredentialProjectId(),
+                    rawClaims.getOrDefault("aud", ""),
+                    rawClaims.getOrDefault("iss", ""),
+                    rawClaims.containsKey("sub"),
+                    ex.getMessage());
             throw new IllegalArgumentException("Invalid Firebase ID token");
         }
     }
@@ -82,10 +108,15 @@ public class FirebaseAuthenticationService {
 
         GoogleCredentials credentials = loadCredentials();
         FirebaseOptions.Builder builder = FirebaseOptions.builder().setCredentials(credentials);
-        if (firebaseProperties.getProjectId() != null && !firebaseProperties.getProjectId().isBlank()) {
-            builder.setProjectId(firebaseProperties.getProjectId().trim());
+        String configuredProjectId = configuredProjectIdOrBlank();
+        if (!configuredProjectId.isBlank()) {
+            builder.setProjectId(configuredProjectId);
         }
         firebaseApp = FirebaseApp.initializeApp(builder.build());
+        log.info("[firebase-auth] FirebaseApp initialized: configuredProjectId={}, credentialProjectId={}, credentialsSource={}",
+                configuredProjectId,
+                configuredCredentialProjectId(),
+                describeCredentialSource());
         return firebaseApp;
     }
 
@@ -236,6 +267,104 @@ public class FirebaseAuthenticationService {
             return "Invalid Firebase ID token";
         }
         return "Firebase token verification failed";
+    }
+
+    private void validateProjectAlignment(FirebaseToken firebaseToken, Map<String, Object> rawClaims) {
+        String expectedProjectId = resolveExpectedProjectId();
+        if (expectedProjectId.isBlank()) {
+            return;
+        }
+
+        String actualIssuer = trim(firebaseToken.getIssuer());
+        String actualAudience = trim(String.valueOf(rawClaims.getOrDefault("aud", "")));
+        String expectedIssuer = "https://securetoken.google.com/" + expectedProjectId;
+
+        if (!actualAudience.isBlank() && !expectedProjectId.equals(actualAudience)) {
+            log.warn("[firebase-auth] Project mismatch: expectedProjectId={}, credentialProjectId={}, tokenAud={}, tokenIss={}",
+                    expectedProjectId, configuredCredentialProjectId(), actualAudience, actualIssuer);
+            throw new IllegalArgumentException("Firebase project mismatch");
+        }
+
+        if (!actualIssuer.isBlank() && !expectedIssuer.equals(actualIssuer)) {
+            log.warn("[firebase-auth] Issuer mismatch: expectedIssuer={}, credentialProjectId={}, tokenAud={}, tokenIss={}",
+                    expectedIssuer, configuredCredentialProjectId(), actualAudience, actualIssuer);
+            throw new IllegalArgumentException("Firebase project mismatch");
+        }
+
+        String rawIssuer = trim(String.valueOf(rawClaims.getOrDefault("iss", "")));
+        if (!rawIssuer.isBlank() && !expectedIssuer.equals(rawIssuer)) {
+            log.warn("[firebase-auth] Raw claim mismatch: expectedProjectId={}, credentialProjectId={}, tokenAud={}, tokenIss={}",
+                    expectedProjectId, configuredCredentialProjectId(), actualAudience, rawIssuer);
+            throw new IllegalArgumentException("Firebase project mismatch");
+        }
+    }
+
+    private String resolveExpectedProjectId() {
+        String configuredProjectId = configuredProjectIdOrBlank();
+        if (!configuredProjectId.isBlank()) {
+            return configuredProjectId;
+        }
+        return configuredCredentialProjectId();
+    }
+
+    private String configuredProjectIdOrBlank() {
+        return trim(firebaseProperties.getProjectId());
+    }
+
+    private String configuredCredentialProjectId() {
+        try {
+            return loadCredentialProjectId();
+        } catch (Exception ex) {
+            log.warn("[firebase-auth] Failed to inspect credential project id: {}", ex.getMessage());
+            return "";
+        }
+    }
+
+    private String loadCredentialProjectId() throws IOException {
+        String credentialsJson = trim(firebaseProperties.getCredentialsJson());
+        if (!credentialsJson.isBlank()) {
+            return extractProjectIdFromJson(credentialsJson);
+        }
+
+        String credentialsPath = trim(firebaseProperties.getCredentialsPath());
+        if (!credentialsPath.isBlank()) {
+            return extractProjectIdFromJson(Files.readString(Path.of(credentialsPath), StandardCharsets.UTF_8));
+        }
+
+        return "";
+    }
+
+    private String extractProjectIdFromJson(String json) throws IOException {
+        if (json == null || json.isBlank()) {
+            return "";
+        }
+        Map<String, Object> jsonMap = OBJECT_MAPPER.readValue(json, new TypeReference<>() {});
+        return trim(String.valueOf(jsonMap.getOrDefault("project_id", "")));
+    }
+
+    private String describeCredentialSource() {
+        String credentialsJson = trim(firebaseProperties.getCredentialsJson());
+        if (!credentialsJson.isBlank()) {
+            return "credentials-json";
+        }
+        String credentialsPath = trim(firebaseProperties.getCredentialsPath());
+        if (!credentialsPath.isBlank()) {
+            return "credentials-path";
+        }
+        return "not-configured";
+    }
+
+    private Map<String, Object> decodeTokenClaims(String idToken) {
+        try {
+            String[] segments = idToken.split("\\.");
+            if (segments.length < 2) {
+                return Collections.emptyMap();
+            }
+            byte[] decodedPayload = Base64.getUrlDecoder().decode(segments[1]);
+            return OBJECT_MAPPER.readValue(decodedPayload, new TypeReference<>() {});
+        } catch (Exception ex) {
+            return Collections.emptyMap();
+        }
     }
 
     private String trim(String value) {
