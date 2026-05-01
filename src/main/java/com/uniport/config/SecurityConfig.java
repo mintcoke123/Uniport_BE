@@ -51,20 +51,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/favicon.ico").permitAll()
-                        .requestMatchers("/", "/api/auth/**", "/api/me/**", "/api/market/**", "/api/stocks/**", "/api/news/**", "/api/ohlcv", "/api/trades", "/api/competitions/**", "/api/ranking/**", "/api/groups/**", "/api/admin/**", "/api/config/**", "/api/health", "/api/home/group-insights", "/api/shop/items", "/auth/**", "/stock/**", "/market/**", "/trade/**", "/h2-console/**", "/error", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/api/auth/**", "/api/me/**", "/api/market/**", "/api/stocks/**", "/api/news/**", "/api/ohlcv", "/api/trades", "/api/competitions/**", "/api/ranking/**", "/api/groups/**", "/api/admin/**", "/api/config/**", "/api/health", "/api/home/group-insights", "/api/shop/items", "/h2-console/**", "/error", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/etf-discovery/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/community/**").permitAll()
                         .requestMatchers("/groups/*/chat", "/prices").permitAll()
                         .requestMatchers(
-                                "/api/investment-survey/**",
                                 "/api/onboarding/**",
-                                "/api/surveys/**",
                                 "/api/learning/**",
                                 "/api/chat/**",
                                 "/api/matching-rooms/**",
-                                "/investment-survey/**",
-                                "/surveys/**",
-                                "/learning/**",
                                 "/api/custom-etfs/**",
                                 "/api/etf-analysis-reports/**",
                                 "/api/community/**",

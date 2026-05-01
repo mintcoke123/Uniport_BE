@@ -1,6 +1,7 @@
 package com.uniport.service;
 
-import com.uniport.dto.StockSearchItemDTO;
+import com.uniport.dto.StockSearchResponseDTO;
+import com.uniport.entity.StockMaster;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.StockMasterRepository;
 import org.junit.jupiter.api.Test;
@@ -15,14 +16,13 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * StockMasterSearchService 검증/limit 파싱 테스트. DB/네트워크 미사용.
- */
 @ExtendWith(MockitoExtension.class)
 class StockMasterSearchServiceTest {
 
@@ -33,36 +33,82 @@ class StockMasterSearchServiceTest {
     private StockMasterSearchService stockMasterSearchService;
 
     @Test
-    void search_emptyQuery_returnsEmptyList() {
-        List<StockSearchItemDTO> result = stockMasterSearchService.search("", null);
-        assertEquals(List.of(), result);
+    void search_blankKeyword_returnsEmptyPagedResponse() {
+        StockSearchResponseDTO result = stockMasterSearchService.search("", null, null, null, null);
+        assertEquals(List.of(), result.getItems());
+        assertEquals(0, result.getPage());
+        assertEquals(10, result.getSize());
+        assertEquals(Boolean.FALSE, result.getHasNext());
 
-        result = stockMasterSearchService.search("   ", null);
-        assertEquals(List.of(), result);
+        result = stockMasterSearchService.search("   ", null, null, null, null);
+        assertEquals(List.of(), result.getItems());
 
-        result = stockMasterSearchService.search(null, null);
-        assertEquals(List.of(), result);
+        result = stockMasterSearchService.search(null, null, null, null, null);
+        assertEquals(List.of(), result.getItems());
 
-        verify(stockMasterRepository, org.mockito.Mockito.never()).findByNameKrIlikeOrderByNameKrAsc(any(), any());
+        verify(stockMasterRepository, never()).findByNameKrIlikeOrderByNameKrAsc(any(), any());
     }
 
     @Test
-    void search_invalidLimit_throwsApiException400() {
-        ApiException ex = assertThrows(ApiException.class, () ->
-                stockMasterSearchService.search("삼성", "not-a-number"));
+    void search_invalidLegacyLimit_throwsBadRequest() {
+        ApiException ex = assertThrows(ApiException.class,
+                () -> stockMasterSearchService.search("삼성", null, null, null, "not-a-number"));
+
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
-        assertEquals("Invalid limit", ex.getMessage());
+        assertEquals("Invalid size", ex.getMessage());
     }
 
     @Test
-    void search_validQuery_callsRepositoryWithClampedLimit() {
+    void search_usesKeywordPaginationAndMapsItems() {
+        StockMaster samsung = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+        StockMaster apple = StockMaster.builder()
+                .code("AAPL")
+                .nameKr("Apple Inc.")
+                .market("NASDAQ")
+                .build();
+
         when(stockMasterRepository.findByNameKrIlikeOrderByNameKrAsc(eq("삼성"), any(Pageable.class)))
-                .thenReturn(List.of());
+                .thenReturn(List.of(samsung));
+        when(stockMasterRepository.findByNameKrIlikeOrderByNameKrAsc(eq("apple"), any(Pageable.class)))
+                .thenReturn(List.of(apple));
 
-        stockMasterSearchService.search("삼성", null);
-        verify(stockMasterRepository).findByNameKrIlikeOrderByNameKrAsc("삼성", any(Pageable.class));
+        StockSearchResponseDTO koreanResult =
+                stockMasterSearchService.search("삼성", 0, 10, null, null);
+        assertEquals(1, koreanResult.getItems().size());
+        assertEquals("KRX_005930", koreanResult.getItems().get(0).getStockId());
+        assertEquals("005930", koreanResult.getItems().get(0).getSymbol());
 
-        stockMasterSearchService.search("삼성", "100");
-        verify(stockMasterRepository).findByNameKrIlikeOrderByNameKrAsc("삼성", any(Pageable.class));
+        StockSearchResponseDTO usResult =
+                stockMasterSearchService.search("apple", 1, 5, null, null);
+        assertEquals(1, usResult.getPage());
+        assertEquals(5, usResult.getSize());
+        assertEquals("US_AAPL", usResult.getItems().get(0).getStockId());
+        assertEquals("NASDAQ", usResult.getItems().get(0).getMarket());
+
+        verify(stockMasterRepository).findByNameKrIlikeOrderByNameKrAsc(eq("삼성"), any(Pageable.class));
+        verify(stockMasterRepository).findByNameKrIlikeOrderByNameKrAsc(eq("apple"), any(Pageable.class));
+    }
+
+    @Test
+    void search_clampsLegacyLimitToMaxSize() {
+        StockMaster samsung = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+
+        when(stockMasterRepository.findByNameKrIlikeOrderByNameKrAsc(eq("삼성"), any(Pageable.class)))
+                .thenReturn(List.of(samsung));
+
+        StockSearchResponseDTO result =
+                stockMasterSearchService.search(null, null, null, "삼성", "100");
+
+        assertEquals(20, result.getSize());
+        assertTrue(result.getItems().size() <= 20);
+        verify(stockMasterRepository).findByNameKrIlikeOrderByNameKrAsc(eq("삼성"), any(Pageable.class));
     }
 }

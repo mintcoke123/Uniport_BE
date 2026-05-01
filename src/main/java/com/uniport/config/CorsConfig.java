@@ -16,13 +16,13 @@ import java.util.stream.Stream;
 @Configuration
 public class CorsConfig {
 
-    @Value("${app.cors.allowed-origins:https://uniport-mvp-fe.vercel.app,http://localhost:3000,http://localhost:5173,http://localhost:4173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:4173}")
+    @Value("${app.cors.allowed-origins:*}")
     private String allowedOrigins;
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(
+        config.setAllowedOriginPatterns(
                 Stream.of(allowedOrigins.split(","))
                         .map(String::trim)
                         .filter(origin -> !origin.isBlank())

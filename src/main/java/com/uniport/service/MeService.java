@@ -1,5 +1,6 @@
 package com.uniport.service;
 
+import com.uniport.dto.AuthUserDTO;
 import com.uniport.dto.CompetitionDataDTO;
 import com.uniport.dto.InvestmentDataDTO;
 import com.uniport.dto.MyInvestmentResponseDTO;
@@ -8,17 +9,13 @@ import com.uniport.dto.StockPriceDTO;
 import com.uniport.entity.Holding;
 import com.uniport.entity.User;
 import com.uniport.repository.HoldingRepository;
-import com.uniport.service.CompetitionService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
-/**
- * 명세 §2-1: 내 투자 요약 (자산 + 보유 종목 + 대회 요약).
- */
 @Service
 public class MeService {
 
@@ -29,14 +26,33 @@ public class MeService {
     private final MatchingRoomService matchingRoomService;
     private final CompetitionService competitionService;
 
-    public MeService(HoldingRepository holdingRepository, StockService stockService, MatchingRoomService matchingRoomService, CompetitionService competitionService) {
+    public MeService(HoldingRepository holdingRepository,
+                     StockService stockService,
+                     MatchingRoomService matchingRoomService,
+                     CompetitionService competitionService) {
         this.holdingRepository = holdingRepository;
         this.stockService = stockService;
         this.matchingRoomService = matchingRoomService;
         this.competitionService = competitionService;
     }
 
-    /** user가 null이면 빈/0 데이터 반환 (미로그인 시 홈에서 401 대신 사용). */
+    public AuthUserDTO getProfile(User user) {
+        if (user == null) {
+            return new AuthUserDTO();
+        }
+        return AuthUserDTO.builder()
+                .id(user.getId() != null ? String.valueOf(user.getId()) : null)
+                .studentId(user.getStudentId())
+                .nickname(user.getNickname())
+                .totalAssets(zeroIfNull(user.getTotalAssets()))
+                .investmentAmount(zeroIfNull(user.getInvestmentAmount()))
+                .profitLoss(zeroIfNull(user.getProfitLoss()))
+                .profitLossRate(zeroIfNull(user.getProfitLossRate()))
+                .teamId(user.getTeamId())
+                .role(user.getRole() != null ? user.getRole() : "user")
+                .build();
+    }
+
     public MyInvestmentResponseDTO getMyInvestment(User user) {
         if (user == null) {
             return MyInvestmentResponseDTO.builder()
@@ -52,11 +68,21 @@ public class MeService {
                     .mockTradingStarted(false)
                     .build();
         }
-        BigDecimal totalAssets = user.getTotalAssets() != null ? user.getTotalAssets() : BigDecimal.ZERO;
-        BigDecimal investmentPrincipal = user.getInvestmentAmount() != null ? user.getInvestmentAmount() : totalAssets;
-        BigDecimal profitLoss = user.getProfitLoss() != null ? user.getProfitLoss() : BigDecimal.ZERO;
-        BigDecimal profitLossRate = user.getProfitLossRate() != null ? user.getProfitLossRate() : BigDecimal.ZERO;
-        BigDecimal cashBalance = totalAssets; // stub: 전부 현금으로 간주 가능, 실제로는 totalAssets - 주식 평가액
+
+        List<Holding> holdings = holdingRepository.findByUser_Id(user.getId());
+        List<StockHoldingItemDTO> stockHoldings = new ArrayList<>();
+        BigDecimal holdingsValue = BigDecimal.ZERO;
+        for (Holding holding : holdings) {
+            StockHoldingItemDTO item = toStockHoldingItem(holding);
+            stockHoldings.add(item);
+            holdingsValue = holdingsValue.add(zeroIfNull(item.getCurrentValue()));
+        }
+
+        BigDecimal totalAssets = deriveTotalAssets(user, holdingsValue);
+        BigDecimal investmentPrincipal = deriveInvestmentPrincipal(user, totalAssets);
+        BigDecimal profitLoss = deriveProfitLoss(user, totalAssets, investmentPrincipal);
+        BigDecimal profitLossRate = deriveProfitLossRate(user, profitLoss, investmentPrincipal);
+        BigDecimal cashBalance = totalAssets.subtract(holdingsValue).max(BigDecimal.ZERO);
 
         InvestmentDataDTO investmentData = InvestmentDataDTO.builder()
                 .totalAssets(totalAssets)
@@ -66,19 +92,14 @@ public class MeService {
                 .cashBalance(cashBalance)
                 .build();
 
-        List<Holding> holdings = holdingRepository.findByUser_Id(user.getId());
-        List<StockHoldingItemDTO> stockHoldings = holdings.stream()
-                .map(h -> toStockHoldingItem(h))
-                .collect(Collectors.toList());
-
         CompetitionDataDTO competitionData = null;
         var ongoing = competitionService.findOngoing();
         if (ongoing.isPresent()) {
-            var c = ongoing.get();
+            var competition = ongoing.get();
             competitionData = CompetitionDataDTO.builder()
-                    .name(c.getName())
-                    .endDate(c.getEndDate())
-                    .daysRemaining(Math.max(0, competitionService.daysRemaining(c.getEndDate())))
+                    .name(competition.getName())
+                    .endDate(competition.getEndDate())
+                    .daysRemaining(Math.max(0, competitionService.daysRemaining(competition.getEndDate())))
                     .build();
         }
 
@@ -91,30 +112,79 @@ public class MeService {
                 .build();
     }
 
-    private StockHoldingItemDTO toStockHoldingItem(Holding h) {
+    private StockHoldingItemDTO toStockHoldingItem(Holding holding) {
         BigDecimal currentPrice = BigDecimal.ZERO;
-        String stockName = "종목_" + h.getStockCode();
+        String stockName = "Stock_" + holding.getStockCode();
         try {
-            StockPriceDTO price = stockService.getStockPrice(h.getStockCode());
+            StockPriceDTO price = stockService.getStockPrice(holding.getStockCode());
             currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
-            if (price.getStockName() != null && !price.getStockName().isBlank()) stockName = price.getStockName();
+            if (price.getStockName() != null && !price.getStockName().isBlank()) {
+                stockName = price.getStockName();
+            }
         } catch (Exception ignored) {
         }
-        BigDecimal avg = h.getAveragePurchasePrice() != null ? h.getAveragePurchasePrice() : BigDecimal.ZERO;
-        BigDecimal currentValue = currentPrice.multiply(BigDecimal.valueOf(h.getQuantity()));
-        BigDecimal profitLoss = currentValue.subtract(avg.multiply(BigDecimal.valueOf(h.getQuantity())));
-        BigDecimal profitLossPct = avg.compareTo(BigDecimal.ZERO) != 0
-                ? profitLoss.multiply(BigDecimal.valueOf(100)).divide(avg.multiply(BigDecimal.valueOf(h.getQuantity())), 2, RoundingMode.HALF_UP)
+
+        BigDecimal averagePrice = holding.getAveragePurchasePrice() != null
+                ? holding.getAveragePurchasePrice()
+                : BigDecimal.ZERO;
+        BigDecimal quantity = BigDecimal.valueOf(holding.getQuantity());
+        BigDecimal currentValue = currentPrice.multiply(quantity);
+        BigDecimal investedValue = averagePrice.multiply(quantity);
+        BigDecimal profitLoss = currentValue.subtract(investedValue);
+        BigDecimal profitLossPercentage = investedValue.compareTo(BigDecimal.ZERO) != 0
+                ? profitLoss.multiply(BigDecimal.valueOf(100)).divide(investedValue, 2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
 
         return StockHoldingItemDTO.builder()
-                .id(h.getId())
+                .id(holding.getId())
                 .name(stockName)
-                .quantity(h.getQuantity())
+                .quantity(holding.getQuantity())
                 .currentValue(currentValue)
                 .profitLoss(profitLoss)
-                .profitLossPercentage(profitLossPct)
+                .profitLossPercentage(profitLossPercentage)
                 .logoColor(DEFAULT_LOGO_COLOR)
                 .build();
+    }
+
+    private BigDecimal deriveTotalAssets(User user, BigDecimal holdingsValue) {
+        if (user.getTotalAssets() != null) {
+            return user.getTotalAssets();
+        }
+        if (user.getInvestmentAmount() != null && user.getProfitLoss() != null) {
+            return user.getInvestmentAmount().add(user.getProfitLoss());
+        }
+        return holdingsValue;
+    }
+
+    private BigDecimal deriveInvestmentPrincipal(User user, BigDecimal totalAssets) {
+        if (user.getInvestmentAmount() != null) {
+            return user.getInvestmentAmount();
+        }
+        if (user.getProfitLoss() != null) {
+            return totalAssets.subtract(user.getProfitLoss()).max(BigDecimal.ZERO);
+        }
+        return totalAssets;
+    }
+
+    private BigDecimal deriveProfitLoss(User user, BigDecimal totalAssets, BigDecimal investmentPrincipal) {
+        if (user.getProfitLoss() != null) {
+            return user.getProfitLoss();
+        }
+        return totalAssets.subtract(investmentPrincipal);
+    }
+
+    private BigDecimal deriveProfitLossRate(User user, BigDecimal profitLoss, BigDecimal investmentPrincipal) {
+        if (user.getProfitLossRate() != null) {
+            return user.getProfitLossRate();
+        }
+        if (investmentPrincipal.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        return profitLoss.multiply(BigDecimal.valueOf(100))
+                .divide(investmentPrincipal, 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal zeroIfNull(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 }

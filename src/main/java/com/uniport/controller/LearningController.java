@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping({"/api/learning", "/learning"})
+@RequestMapping("/api/learning")
 @Tag(name = "Learning", description = "학습 홈, 코스, Day, Step API")
 @SecurityRequirement(name = "firebaseBearerAuth")
 public class LearningController {

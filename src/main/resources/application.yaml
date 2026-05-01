@@ -33,7 +33,7 @@ logging:
 # CORS (env: APP_CORS_ALLOWED_ORIGINS. 프로덕션에서는 허용 오리진 제한)
 app:
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:*}
 
 # JWT (env: JWT_SECRET 필수 권장. 프로덕션에서는 반드시 32자 이상 랜덤 값 설정)
 jwt:
