@@ -3,11 +3,14 @@ package com.uniport.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.exception.ApiException;
+import com.uniport.exception.ApiErrorCodeResolver;
 import com.uniport.service.FirebaseAuthenticationService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -23,6 +26,7 @@ import java.util.List;
 @Component
 public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(FirebaseAuthenticationFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final FirebaseAuthenticationService firebaseAuthenticationService;
@@ -38,6 +42,7 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
         String requestUri = request.getRequestURI();
+        String method = request.getMethod();
         boolean protectedRequest = requestUri != null
                 && (requestUri.startsWith("/api/investment-survey/")
                 || requestUri.startsWith("/api/onboarding/")
@@ -59,12 +64,17 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                 && !"GET".equalsIgnoreCase(request.getMethod())));
 
         if (authorization == null || authorization.isBlank()) {
+            if (protectedRequest) {
+                log.warn("[firebase-auth-filter] Missing Authorization header: method={}, uri={}", method, requestUri);
+            }
             filterChain.doFilter(request, response);
             return;
         }
 
         if (!authorization.startsWith(BEARER_PREFIX)) {
             if (protectedRequest) {
+                log.warn("[firebase-auth-filter] Invalid Authorization scheme: method={}, uri={}, headerPrefix={}",
+                        method, requestUri, summarizeAuthorizationHeader(authorization));
                 writeUnauthorized(response, "Authorization header must use Bearer scheme");
                 return;
             }
@@ -74,6 +84,7 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
 
         String idToken = authorization.substring(BEARER_PREFIX.length()).trim();
         if (idToken.isBlank()) {
+            log.warn("[firebase-auth-filter] Blank Firebase token: method={}, uri={}", method, requestUri);
             writeUnauthorized(response, "Firebase ID token is required");
             return;
         }
@@ -90,11 +101,27 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(authentication);
             filterChain.doFilter(request, response);
         } catch (IllegalArgumentException ex) {
-            writeUnauthorized(response, ex.getMessage());
+            log.warn("[firebase-auth-filter] Unauthorized token: method={}, uri={}, message={}",
+                    method, requestUri, ex.getMessage());
+            writeUnauthorized(response, ex.getMessage(), ApiErrorCodeResolver.AUTH_TOKEN_REQUIRED);
         } catch (ApiException ex) {
-            writeError(response, ex.getStatus().value(), ex.getMessage());
+            log.error("[firebase-auth-filter] ApiException during authentication: method={}, uri={}, status={}, errorCode={}, message={}",
+                    method, requestUri, ex.getStatus().value(), ex.getErrorCode(), ex.getMessage(), ex);
+            writeError(
+                    response,
+                    ex.getStatus().value(),
+                    ex.getMessage(),
+                    ApiErrorCodeResolver.resolve(ex.getStatus(), ex.getErrorCode())
+            );
         } catch (Exception ex) {
-            writeError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error");
+            log.error("[firebase-auth-filter] Unexpected authentication failure: method={}, uri={}, exception={}, message={}",
+                    method, requestUri, ex.getClass().getName(), ex.getMessage(), ex);
+            writeError(
+                    response,
+                    HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    "Internal server error",
+                    ApiErrorCodeResolver.INTERNAL_SERVER_ERROR
+            );
         } finally {
             if (!response.isCommitted()) {
                 SecurityContextHolder.clearContext();
@@ -103,14 +130,26 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
-        writeError(response, HttpServletResponse.SC_UNAUTHORIZED, message);
+        writeUnauthorized(response, message, ApiErrorCodeResolver.AUTH_TOKEN_REQUIRED);
     }
 
-    private void writeError(HttpServletResponse response, int status, String message) throws IOException {
+    private void writeUnauthorized(HttpServletResponse response, String message, String errorCode) throws IOException {
+        writeError(response, HttpServletResponse.SC_UNAUTHORIZED, message, errorCode);
+    }
+
+    private void writeError(HttpServletResponse response, int status, String message, String errorCode) throws IOException {
         response.resetBuffer();
         response.setStatus(status);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        objectMapper.writeValue(response.getWriter(), new ErrorResponseDTO(false, message));
+        objectMapper.writeValue(response.getWriter(), new ErrorResponseDTO(false, message, errorCode));
+    }
+
+    private String summarizeAuthorizationHeader(String authorization) {
+        if (authorization == null || authorization.isBlank()) {
+            return "<blank>";
+        }
+        int end = Math.min(authorization.length(), 16);
+        return authorization.substring(0, end);
     }
 }
