@@ -59,10 +59,45 @@ public class FirebaseAuthenticationService {
     @Transactional
     public FirebaseAuthenticatedUser authenticate(String idToken) {
         FirebaseToken firebaseToken = verifyToken(idToken);
-        User user = userRepository.findByFirebaseUid(firebaseToken.getUid())
-                .map(existing -> updateExistingUser(existing, firebaseToken))
-                .orElseGet(() -> createInitialUser(firebaseToken));
+        User user = resolveUser(firebaseToken);
         return new FirebaseAuthenticatedUser(user, firebaseToken.getUid(), firebaseToken.getEmail());
+    }
+
+    private User resolveUser(FirebaseToken firebaseToken) {
+        String uid = trim(firebaseToken.getUid());
+        return userRepository.findByFirebaseUid(uid)
+                .map(existing -> updateExistingUser(existing, firebaseToken))
+                .orElseGet(() -> findOrLinkExistingUserByEmail(firebaseToken)
+                        .map(existing -> linkExistingUser(existing, firebaseToken))
+                        .orElseGet(() -> createInitialUser(firebaseToken)));
+    }
+
+    private java.util.Optional<User> findOrLinkExistingUserByEmail(FirebaseToken firebaseToken) {
+        String email = trim(firebaseToken.getEmail());
+        if (email.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        return userRepository.findByEmail(email);
+    }
+
+    private User linkExistingUser(User existingUser, FirebaseToken firebaseToken) {
+        String uid = trim(firebaseToken.getUid());
+        String existingUid = trim(existingUser.getFirebaseUid());
+
+        if (!existingUid.isBlank() && !existingUid.equals(uid)) {
+            log.warn("[firebase-auth] Email already linked to another Firebase UID: email={}, existingUid={}, incomingUid={}",
+                    existingUser.getEmail(), existingUid, uid);
+            throw new ApiException("Email already linked to another Firebase account", HttpStatus.CONFLICT,
+                    "FIREBASE_EMAIL_ALREADY_LINKED");
+        }
+
+        if (existingUid.isBlank()) {
+            existingUser.setFirebaseUid(uid);
+            log.info("[firebase-auth] Linked existing user to Firebase UID: userId={}, email={}, uid={}",
+                    existingUser.getId(), existingUser.getEmail(), uid);
+        }
+
+        return updateExistingUser(existingUser, firebaseToken);
     }
 
     private FirebaseToken verifyToken(String idToken) {
