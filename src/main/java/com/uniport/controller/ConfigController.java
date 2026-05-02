@@ -1,5 +1,7 @@
 package com.uniport.controller;
 
+import com.uniport.dto.ErrorResponseDTO;
+import com.uniport.exception.ApiErrorCodeResolver;
 import com.uniport.service.KisApiService;
 import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
@@ -42,11 +44,17 @@ public class ConfigController {
 
     /** 실시간(웹소켓) 접속키 발급. local/dev 프로필에서만 200 반환, 그 외 403. */
     @GetMapping("/kis-approval")
-    public ResponseEntity<Map<String, Object>> getKisApprovalKey() {
+    public ResponseEntity<Object> getKisApprovalKey() {
         boolean allowed = Arrays.stream(env.getActiveProfiles())
                 .anyMatch(p -> "local".equals(p) || "dev".equals(p));
         if (!allowed) {
-            return ResponseEntity.status(403).body(Map.of("message", "Forbidden in non-dev profile"));
+            return ResponseEntity.status(403).body(
+                    new ErrorResponseDTO(
+                            false,
+                            "Forbidden in non-dev profile",
+                            ApiErrorCodeResolver.FORBIDDEN_IN_NON_DEV_PROFILE
+                    )
+            );
         }
         String approvalKey = kisApiService.getWebSocketApprovalKey();
         return ResponseEntity.ok(Map.of("approval_key", approvalKey));

@@ -5,8 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 명세 §1 등: 실패 시 응답. success: false, message.
- * requestId는 5xx/미처리 예외 시 로그 상관용으로 선택 포함.
+ * 紐낆꽭 짠1 ?? ?ㅽ뙣 ???묐떟. success: false, message.
+ * requestId??5xx/誘몄쿂由??덉쇅 ??濡쒓렇 ?곴??⑹쑝濡??좏깮 ?ы븿.
  */
 @Data
 @NoArgsConstructor
@@ -15,13 +15,22 @@ public class ErrorResponseDTO {
 
     private boolean success = false;
     private String message;
-    /** 요청 추적용 ID (5xx·미처리 예외 시 로그와 응답에 포함) */
+    private String errorCode;
+    /** ?붿껌 異붿쟻??ID (5xx쨌誘몄쿂由??덉쇅 ??濡쒓렇? ?묐떟???ы븿) */
     private String requestId;
 
-    /** requestId 없이 사용 시 (기존 호환) */
+    /** requestId ?놁씠 ?ъ슜 ??(湲곗〈 ?명솚) */
     public ErrorResponseDTO(boolean success, String message) {
         this.success = success;
         this.message = message;
+        this.errorCode = null;
+        this.requestId = null;
+    }
+
+    public ErrorResponseDTO(boolean success, String message, String errorCode) {
+        this.success = success;
+        this.message = message;
+        this.errorCode = errorCode;
         this.requestId = null;
     }
 }

@@ -4,8 +4,8 @@ import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
 /**
- * API 비즈니스/클라이언트 오류용 커스텀 예외.
- * HTTP 상태 코드와 선택적 에러 코드를 담아 일관된 오류 응답에 사용합니다.
+ * API 鍮꾩쫰?덉뒪/?대씪?댁뼵???ㅻ쪟??而ㅼ뒪? ?덉쇅.
+ * HTTP ?곹깭 肄붾뱶? ?좏깮???먮윭 肄붾뱶瑜??댁븘 ?쇨????ㅻ쪟 ?묐떟???ъ슜?⑸땲??
  */
 @Getter
 public class ApiException extends RuntimeException {
@@ -16,12 +16,12 @@ public class ApiException extends RuntimeException {
     public ApiException(String message, HttpStatus status) {
         super(message);
         this.status = status;
-        this.errorCode = null;
+        this.errorCode = ApiErrorCodeResolver.defaultForStatus(status);
     }
 
     public ApiException(String message, HttpStatus status, String errorCode) {
         super(message);
         this.status = status;
-        this.errorCode = errorCode;
+        this.errorCode = ApiErrorCodeResolver.resolve(status, errorCode);
     }
 }

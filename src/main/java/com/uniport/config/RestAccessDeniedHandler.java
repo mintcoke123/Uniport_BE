@@ -2,6 +2,7 @@ package com.uniport.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.dto.ErrorResponseDTO;
+import com.uniport.exception.ApiErrorCodeResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.MediaType;
@@ -25,6 +26,6 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         objectMapper.writeValue(response.getWriter(),
-                new ErrorResponseDTO(false, "Access denied"));
+                new ErrorResponseDTO(false, "Access denied", ApiErrorCodeResolver.ACCESS_DENIED));
     }
 }
