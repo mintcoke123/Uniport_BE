@@ -38,8 +38,20 @@ public class ManagedCommunityPost extends AuditableEntity {
     @Column(nullable = false, length = 120)
     private String authorName;
 
+    @Column
+    private Long authorUserId;
+
     @Column(length = 500)
     private String authorProfileImageUrl;
+
+    @Column(length = 20)
+    private String stockCode;
+
+    @Column(length = 120)
+    private String stockName;
+
+    @Column(length = 20)
+    private String sentiment;
 
     @Column(nullable = false, length = 200)
     private String title;

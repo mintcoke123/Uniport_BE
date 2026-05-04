@@ -13,8 +13,9 @@ import com.uniport.dto.CommunityPostsResponseDTO;
 import com.uniport.dto.CommunityReportRequestDTO;
 import com.uniport.dto.CommunityReportResponseDTO;
 import com.uniport.dto.ErrorResponseDTO;
+import com.uniport.dto.InvestorSentimentDTO;
 import com.uniport.entity.User;
-import com.uniport.service.CommunityMockService;
+import com.uniport.service.CommunityService;
 import com.uniport.service.CurrentUserResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -43,12 +44,12 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Community", description = "커뮤니티 피드, 게시글, 댓글, 신고 API")
 public class CommunityController {
 
-    private final CommunityMockService communityMockService;
+    private final CommunityService communityService;
     private final CurrentUserResolver currentUserResolver;
 
-    public CommunityController(CommunityMockService communityMockService,
+    public CommunityController(CommunityService communityService,
                                CurrentUserResolver currentUserResolver) {
-        this.communityMockService = communityMockService;
+        this.communityService = communityService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -67,12 +68,19 @@ public class CommunityController {
             @RequestParam(value = "sort", required = false) String sort,
             @Parameter(example = "GENERAL")
             @RequestParam(value = "type", required = false) String type,
+            @RequestParam(value = "stockCode", required = false) String stockCode,
+            @RequestParam(value = "sentiment", required = false) String sentiment,
             @Parameter(example = "POST_101")
             @RequestParam(value = "cursor", required = false) String cursor,
             @Parameter(example = "10")
             @RequestParam(value = "size", required = false) Integer size) {
         User viewer = currentUserResolver.resolveNullable(principal, authorization);
-        return ResponseEntity.ok(communityMockService.getPosts(viewer, sort, type, cursor, size));
+        return ResponseEntity.ok(communityService.getPosts(viewer, sort, type, stockCode, sentiment, cursor, size));
+    }
+
+    @GetMapping("/stocks/{stockCode}/sentiment")
+    public ResponseEntity<InvestorSentimentDTO> getStockSentiment(@PathVariable String stockCode) {
+        return ResponseEntity.ok(communityService.getInvestorSentiment(stockCode));
     }
 
     @GetMapping("/posts/{postId}")
@@ -88,7 +96,7 @@ public class CommunityController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String postId) {
         User viewer = currentUserResolver.resolveNullable(principal, authorization);
-        return ResponseEntity.ok(communityMockService.getPost(viewer, postId));
+        return ResponseEntity.ok(communityService.getPost(viewer, postId));
     }
 
     @PostMapping("/posts")
@@ -108,7 +116,7 @@ public class CommunityController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody CommunityPostCreateRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.status(HttpStatus.CREATED).body(communityMockService.createPost(user, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(communityService.createPost(user, request));
     }
 
     @PatchMapping("/posts/{postId}")
@@ -131,7 +139,7 @@ public class CommunityController {
             @PathVariable String postId,
             @RequestBody CommunityPostUpdateRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(communityMockService.updatePost(user, postId, request));
+        return ResponseEntity.ok(communityService.updatePost(user, postId, request));
     }
 
     @DeleteMapping("/posts/{postId}")
@@ -150,7 +158,7 @@ public class CommunityController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String postId) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        communityMockService.deletePost(user, postId);
+        communityService.deletePost(user, postId);
         return ResponseEntity.noContent().build();
     }
 
@@ -171,7 +179,7 @@ public class CommunityController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String postId) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(communityMockService.likePost(user, postId));
+        return ResponseEntity.ok(communityService.likePost(user, postId));
     }
 
     @DeleteMapping("/posts/{postId}/likes")
@@ -191,7 +199,7 @@ public class CommunityController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String postId) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(communityMockService.unlikePost(user, postId));
+        return ResponseEntity.ok(communityService.unlikePost(user, postId));
     }
 
     @GetMapping("/posts/{postId}/comments")
@@ -211,7 +219,7 @@ public class CommunityController {
             @RequestParam(value = "cursor", required = false) String cursor,
             @RequestParam(value = "size", required = false) Integer size) {
         User viewer = currentUserResolver.resolveNullable(principal, authorization);
-        return ResponseEntity.ok(communityMockService.getComments(viewer, postId, cursor, size));
+        return ResponseEntity.ok(communityService.getComments(viewer, postId, cursor, size));
     }
 
     @PostMapping("/posts/{postId}/comments")
@@ -232,7 +240,7 @@ public class CommunityController {
             @PathVariable String postId,
             @RequestBody CommunityCommentCreateRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.status(HttpStatus.CREATED).body(communityMockService.createComment(user, postId, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(communityService.createComment(user, postId, request));
     }
 
     @DeleteMapping("/comments/{commentId}")
@@ -251,7 +259,7 @@ public class CommunityController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String commentId) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        communityMockService.deleteComment(user, commentId);
+        communityService.deleteComment(user, commentId);
         return ResponseEntity.noContent().build();
     }
 
@@ -275,7 +283,7 @@ public class CommunityController {
             @PathVariable String postId,
             @RequestBody CommunityReportRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.status(HttpStatus.CREATED).body(communityMockService.reportPost(user, postId, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(communityService.reportPost(user, postId, request));
     }
 
     @PostMapping("/comments/{commentId}/reports")
@@ -298,6 +306,6 @@ public class CommunityController {
             @PathVariable String commentId,
             @RequestBody CommunityReportRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.status(HttpStatus.CREATED).body(communityMockService.reportComment(user, commentId, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(communityService.reportComment(user, commentId, request));
     }
 }

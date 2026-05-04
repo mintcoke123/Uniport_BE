@@ -149,32 +149,107 @@ Wallet adjustment writes both:
 
 ## Stock Data Handoff Alignment
 
-The `stock-data-api-handoff.md` document describes a future production-grade stock detail flow:
+The `stock-data-api-handoff.md` handoff is now split into two layers:
 
-1. stock code -> corp code mapping
-2. KIS quote fetch
-3. OpenDART financial summary fetch
-4. OpenDART company fetch
-5. internal DB enrichment
-6. aggregate `/api/stocks/{stockCode}/detail`
+### Layer 1: now implemented without mock data
 
-Current codebase status:
+- Stock search uses `stock_master` through [StockMasterSearchService.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/service/StockMasterSearchService.java:14)
+- Live quote and volume come from KIS through [KisApiService.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/service/KisApiService.java:1)
+- Aggregate stock detail is assembled in [StockService.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/service/StockService.java:27)
+- Stock news now comes from persisted admin-managed records through [ManagedStockNewsService.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/service/ManagedStockNewsService.java:1)
+- Stock discussion and investor sentiment now come from persisted community records through [CommunityService.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/service/CommunityService.java:1)
 
-- KIS quote flow already exists in [KisApiService.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/service/KisApiService.java:1)
-- stock detail API already exists in [ApiStockController.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/controller/ApiStockController.java:18)
-- current financial/company/news sections inside [StockService.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/service/StockService.java:64) are still placeholder-oriented
+Current aggregate response on `GET /api/stocks/{id}` is:
 
-Recommended next implementation steps for the stock handoff:
+1. resolve stock code
+2. fetch current KIS quote
+3. resolve latest display name from KIS or `stock_master`
+4. resolve authenticated holding from `holdings` or `team_holdings`
+5. attach latest managed news records for the same stock
+6. derive company summary and optional financial rows from `companyInfoJson`
+7. derive investor sentiment and discussion count from managed community posts
+8. return one stock detail payload
 
-1. Add `stock_company_map` persistence and corpCode sync job.
-2. Add OpenDART client service for financial summary and company info.
-3. Split stock detail into:
-   - quote
-   - financial summary
-   - company
-   - aggregated detail
-4. Replace placeholder financial/company fields in `StockService`.
-5. Connect admin-managed news records to stock detail news output.
+This means the stock detail flow is already mock-free for:
+
+- search
+- current price
+- change / volume
+- holdings
+- managed news
+- managed discussion
+- investor sentiment
+
+### Layer 2: recommended next production upgrade
+
+The remaining gap versus the handoff doc is external financial fundamentals.
+
+Recommended next implementation steps:
+
+1. Add `stock_company_map` persistence for `stockCode -> corpCode`.
+2. Add an OpenDART client for company overview and quarter summaries.
+3. Populate `financialData` from OpenDART first, then fall back to admin-managed `companyInfoJson`.
+4. Populate `companyInfo` from OpenDART first, then fall back to managed news / `stock_master`.
+5. Keep admin-managed news and community as first-party editable content rather than replacing them.
+
+## Real Data Community Flow
+
+Community APIs are now JPA-backed instead of in-memory mock state.
+
+- Feed controller: [CommunityController.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/controller/CommunityController.java:1)
+- Main service: [CommunityService.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/service/CommunityService.java:1)
+
+Persisted tables:
+
+- `managed_community_posts`
+- `managed_community_comments`
+- `managed_community_post_likes`
+- `managed_community_reports`
+
+Important post fields:
+
+- `authorUserId`
+- `authorName`
+- `stockCode`
+- `stockName`
+- `sentiment`
+- `title`
+- `content`
+
+Supported public flows:
+
+- feed list with `sort`, `type`, `stockCode`, `sentiment`
+- post detail
+- create / update / delete
+- like / unlike
+- comment list / create / delete
+- post report / comment report
+- stock sentiment summary: `GET /api/community/stocks/{stockCode}/sentiment`
+
+## Real Data News Flow
+
+Stock news APIs are now JPA-backed instead of `StockNewsMockService`.
+
+- Controller: [StockNewsController.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/controller/StockNewsController.java:1)
+- Main service: [ManagedStockNewsService.java](/abs/path/C:/uniport/Uniport_BE/src/main/java/com/uniport/service/ManagedStockNewsService.java:1)
+
+Persisted table:
+
+- `managed_news_articles`
+
+Editable fields that power both admin and public APIs:
+
+- `newsKey`
+- `title`
+- `sourceLabel`
+- `stockCode`
+- `stockName`
+- `summary`
+- `content`
+- `companyInfoJson`
+- `tagsJson`
+- `opinionsJson`
+- `publishedAt`
 
 ## Verification
 

@@ -27,4 +27,6 @@ public class StockDetailDTO {
     private List<FinancialDataItemDTO> financialData;
     private String companyInfo;
     private List<NewsItemDTO> news;
+    private InvestorSentimentDTO investorSentiment;
+    private Integer discussionCount;
 }

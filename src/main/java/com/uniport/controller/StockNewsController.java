@@ -3,7 +3,7 @@ package com.uniport.controller;
 import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.dto.StockNewsDetailResponseDTO;
 import com.uniport.dto.StockNewsListResponseDTO;
-import com.uniport.service.StockNewsMockService;
+import com.uniport.service.ManagedStockNewsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -23,10 +23,10 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Stock News", description = "주식 뉴스 목록 및 상세 API")
 public class StockNewsController {
 
-    private final StockNewsMockService stockNewsMockService;
+    private final ManagedStockNewsService managedStockNewsService;
 
-    public StockNewsController(StockNewsMockService stockNewsMockService) {
-        this.stockNewsMockService = stockNewsMockService;
+    public StockNewsController(ManagedStockNewsService managedStockNewsService) {
+        this.managedStockNewsService = managedStockNewsService;
     }
 
     @GetMapping
@@ -44,7 +44,7 @@ public class StockNewsController {
             @RequestParam(value = "page", required = false) Integer page,
             @Parameter(example = "10")
             @RequestParam(value = "size", required = false) Integer size) {
-        return ResponseEntity.ok(stockNewsMockService.getNewsList(keyword, sort, page, size));
+        return ResponseEntity.ok(managedStockNewsService.getNewsList(keyword, sort, page, size));
     }
 
     @GetMapping("/{newsId}")
@@ -56,6 +56,6 @@ public class StockNewsController {
                     content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
     })
     public ResponseEntity<StockNewsDetailResponseDTO> getNewsDetail(@PathVariable String newsId) {
-        return ResponseEntity.ok(stockNewsMockService.getNewsDetail(newsId));
+        return ResponseEntity.ok(managedStockNewsService.getNewsDetail(newsId));
     }
 }

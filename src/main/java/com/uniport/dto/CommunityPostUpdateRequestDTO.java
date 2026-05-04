@@ -10,12 +10,21 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "커뮤니티 게시글 수정 요청")
+@Schema(description = "Community post update request")
 public class CommunityPostUpdateRequestDTO {
 
     @Schema(example = "수정된 제목")
     private String title;
 
-    @Schema(example = "수정된 내용")
+    @Schema(example = "수정된 본문")
     private String content;
+
+    @Schema(example = "005930")
+    private String stockCode;
+
+    @Schema(example = "삼성전자")
+    private String stockName;
+
+    @Schema(example = "BULLISH")
+    private String sentiment;
 }

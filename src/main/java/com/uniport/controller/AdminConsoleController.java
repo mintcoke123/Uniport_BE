@@ -39,6 +39,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
@@ -240,8 +241,8 @@ public class AdminConsoleController {
         user.setTeamId(getString(body, "teamId", user.getTeamId()));
         user.setRole(getString(body, "role", user.getRole()));
         user.setInvestmentProfileResult(getString(body, "investmentProfileResult", user.getInvestmentProfileResult()));
-        user.setInvestmentLevel(getString(body, "investmentLevel", user.getInvestmentLevel()));
-        user.setInterestSector(getString(body, "interestSector", user.getInterestSector()));
+        setOptionalUserStringField(user, "InvestmentLevel", getString(body, "investmentLevel", getOptionalUserStringField(user, "InvestmentLevel")));
+        setOptionalUserStringField(user, "InterestSector", getString(body, "interestSector", getOptionalUserStringField(user, "InterestSector")));
         user.setTotalAssets(getBigDecimal(body, "totalAssets"));
         user.setInvestmentAmount(getBigDecimal(body, "investmentAmount"));
         user.setProfitLoss(getBigDecimal(body, "profitLoss"));
@@ -426,7 +427,11 @@ public class AdminConsoleController {
     private void applyCommunityPost(ManagedCommunityPost post, Map<String, Object> body) {
         post.setType(requiredString(body, "type"));
         post.setAuthorName(requiredString(body, "authorName"));
+        post.setAuthorUserId(getLong(body, "authorUserId"));
         post.setAuthorProfileImageUrl(getString(body, "authorProfileImageUrl", post.getAuthorProfileImageUrl()));
+        post.setStockCode(getString(body, "stockCode", post.getStockCode()));
+        post.setStockName(getString(body, "stockName", post.getStockName()));
+        post.setSentiment(getString(body, "sentiment", post.getSentiment()));
         post.setTitle(requiredString(body, "title"));
         post.setContent(requiredString(body, "content"));
         post.setAnalysisReportId(getString(body, "analysisReportId", post.getAnalysisReportId()));
@@ -435,6 +440,7 @@ public class AdminConsoleController {
 
     private void applyCommunityComment(ManagedCommunityComment comment, Map<String, Object> body) {
         comment.setAuthorName(requiredString(body, "authorName"));
+        comment.setAuthorUserId(getLong(body, "authorUserId"));
         comment.setAuthorProfileImageUrl(getString(body, "authorProfileImageUrl", comment.getAuthorProfileImageUrl()));
         comment.setContent(requiredString(body, "content"));
     }
@@ -560,7 +566,11 @@ public class AdminConsoleController {
         map.put("id", post.getId());
         map.put("type", post.getType());
         map.put("authorName", post.getAuthorName());
+        map.put("authorUserId", post.getAuthorUserId());
         map.put("authorProfileImageUrl", post.getAuthorProfileImageUrl());
+        map.put("stockCode", post.getStockCode());
+        map.put("stockName", post.getStockName());
+        map.put("sentiment", post.getSentiment());
         map.put("title", post.getTitle());
         map.put("content", post.getContent());
         map.put("analysisReportId", post.getAnalysisReportId());
@@ -576,6 +586,7 @@ public class AdminConsoleController {
         map.put("id", comment.getId());
         map.put("postId", comment.getPost().getId());
         map.put("authorName", comment.getAuthorName());
+        map.put("authorUserId", comment.getAuthorUserId());
         map.put("authorProfileImageUrl", comment.getAuthorProfileImageUrl());
         map.put("content", comment.getContent());
         map.put("createdAt", comment.getCreatedAt());
@@ -610,8 +621,8 @@ public class AdminConsoleController {
         map.put("teamId", user.getTeamId());
         map.put("role", user.getRole());
         map.put("investmentProfileResult", user.getInvestmentProfileResult());
-        map.put("investmentLevel", user.getInvestmentLevel());
-        map.put("interestSector", user.getInterestSector());
+        map.put("investmentLevel", getOptionalUserStringField(user, "InvestmentLevel"));
+        map.put("interestSector", getOptionalUserStringField(user, "InterestSector"));
         map.put("totalAssets", user.getTotalAssets());
         map.put("investmentAmount", user.getInvestmentAmount());
         map.put("profitLoss", user.getProfitLoss());
@@ -756,6 +767,25 @@ public class AdminConsoleController {
             return new BigDecimal(String.valueOf(value).trim());
         } catch (NumberFormatException ex) {
             throw new ApiException(key + " must be a decimal number", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private static String getOptionalUserStringField(User user, String suffix) {
+        try {
+            Method getter = User.class.getMethod("get" + suffix);
+            Object value = getter.invoke(user);
+            return value != null ? String.valueOf(value) : null;
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
+    private static void setOptionalUserStringField(User user, String suffix, String value) {
+        try {
+            Method setter = User.class.getMethod("set" + suffix, String.class);
+            setter.invoke(user, value);
+        } catch (ReflectiveOperationException ignored) {
+            // Older deployments may not have this optional field yet.
         }
     }
 

@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "커뮤니티 게시글 상세")
+@Schema(description = "Community post detail")
 public class CommunityPostDetailDTO {
 
     @Schema(example = "POST_101", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -21,11 +21,20 @@ public class CommunityPostDetailDTO {
 
     private CommunityAuthorDTO author;
 
-    @Schema(example = "레벨업 20 달성")
+    @Schema(example = "삼성전자 지금 매수 적기일까요?")
     private String title;
 
-    @Schema(example = "꾸준히 투자 공부 중입니다.")
+    @Schema(example = "외인 수급과 실적 흐름을 보면 반등 가능성이 높다고 봅니다.")
     private String content;
+
+    @Schema(example = "005930")
+    private String stockCode;
+
+    @Schema(example = "삼성전자")
+    private String stockName;
+
+    @Schema(example = "BULLISH")
+    private String sentiment;
 
     @Schema(example = "12", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer likeCount;

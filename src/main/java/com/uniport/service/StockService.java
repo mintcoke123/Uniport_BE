@@ -1,7 +1,14 @@
 package com.uniport.service;
 
-import com.uniport.dto.*;
+import com.uniport.dto.FinancialDataItemDTO;
+import com.uniport.dto.InvestorSentimentDTO;
+import com.uniport.dto.MarketDataDTO;
+import com.uniport.dto.MyHoldingDTO;
+import com.uniport.dto.NewsItemDTO;
+import com.uniport.dto.StockDetailDTO;
+import com.uniport.dto.StockPriceDTO;
 import com.uniport.entity.Holding;
+import com.uniport.entity.ManagedNewsArticle;
 import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
@@ -15,7 +22,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,21 +35,30 @@ public class StockService {
     private final TeamHoldingRepository teamHoldingRepository;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final StockMasterRepository stockMasterRepository;
+    private final ManagedStockNewsService managedStockNewsService;
+    private final CommunityService communityService;
 
-    public StockService(KisApiService kisApiService, HoldingRepository holdingRepository,
+    public StockService(KisApiService kisApiService,
+                        HoldingRepository holdingRepository,
                         TeamHoldingRepository teamHoldingRepository,
                         @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
-                        StockMasterRepository stockMasterRepository) {
+                        StockMasterRepository stockMasterRepository,
+                        ManagedStockNewsService managedStockNewsService,
+                        CommunityService communityService) {
         this.kisApiService = kisApiService;
         this.holdingRepository = holdingRepository;
         this.teamHoldingRepository = teamHoldingRepository;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.stockMasterRepository = stockMasterRepository;
+        this.managedStockNewsService = managedStockNewsService;
+        this.communityService = communityService;
     }
 
     private static Long parseTeamId(User user) {
         String tid = user != null ? user.getTeamId() : null;
-        if (tid == null || tid.isBlank() || !tid.startsWith("team-")) return null;
+        if (tid == null || tid.isBlank() || !tid.startsWith("team-")) {
+            return null;
+        }
         try {
             return Long.parseLong(tid.substring(5));
         } catch (NumberFormatException e) {
@@ -75,98 +90,119 @@ public class StockService {
         }
     }
 
-    /** 명세 §3-5: 종목 상세. id는 숫자(예: 5930) → 코드 "005930" */
     public StockDetailDTO getStockDetail(Long id, User user) {
         String code = id != null ? String.format("%06d", id) : "000000";
         try {
             kisWsSubscriptionManager.ensureSubscribed(code);
         } catch (Exception ignored) {
-            /* WS 구독은 best-effort, REST 응답에는 영향 없음 */
+            // Realtime subscription failure should not block the REST response.
         }
+
         StockPriceDTO price = getStockPrice(code);
+        String displayName = resolveDisplayName(code, price.getStockName());
+        MyHoldingDTO myHolding = resolveMyHolding(user, code, price);
 
-        Long idLong = id != null ? id : 0L;
-        MyHoldingDTO myHolding = null;
-        if (user != null) {
-            BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
-            Long teamId = parseTeamId(user);
-            if (teamId != null) {
-                Optional<TeamHolding> teamOpt = teamHoldingRepository.findByTeamIdAndStockCode(teamId, code);
-                if (teamOpt.isPresent()) {
-                    TeamHolding h = teamOpt.get();
-                    BigDecimal avg = h.getAveragePurchasePrice() != null ? h.getAveragePurchasePrice() : BigDecimal.ZERO;
-                    BigDecimal totalValue = currentPrice.multiply(BigDecimal.valueOf(h.getQuantity()));
-                    BigDecimal totalProfit = totalValue.subtract(avg.multiply(BigDecimal.valueOf(h.getQuantity())));
-                    BigDecimal profitRate = avg.compareTo(BigDecimal.ZERO) != 0
-                            ? totalProfit.multiply(BigDecimal.valueOf(100)).divide(avg.multiply(BigDecimal.valueOf(h.getQuantity())), 2, RoundingMode.HALF_UP)
-                            : BigDecimal.ZERO;
-                    myHolding = MyHoldingDTO.builder()
-                            .quantity(h.getQuantity())
-                            .avgPrice(avg)
-                            .totalValue(totalValue)
-                            .totalProfit(totalProfit)
-                            .profitRate(profitRate)
-                            .build();
-                }
-            }
-            if (myHolding == null) {
-                Optional<Holding> opt = holdingRepository.findByUser_IdAndStockCode(user.getId(), code);
-                if (opt.isPresent()) {
-                    Holding h = opt.get();
-                    BigDecimal avg = h.getAveragePurchasePrice() != null ? h.getAveragePurchasePrice() : BigDecimal.ZERO;
-                    BigDecimal totalValue = currentPrice.multiply(BigDecimal.valueOf(h.getQuantity()));
-                    BigDecimal totalProfit = totalValue.subtract(avg.multiply(BigDecimal.valueOf(h.getQuantity())));
-                    BigDecimal profitRate = avg.compareTo(BigDecimal.ZERO) != 0
-                            ? totalProfit.multiply(BigDecimal.valueOf(100)).divide(avg.multiply(BigDecimal.valueOf(h.getQuantity())), 2, RoundingMode.HALF_UP)
-                            : BigDecimal.ZERO;
-                    myHolding = MyHoldingDTO.builder()
-                            .quantity(h.getQuantity())
-                            .avgPrice(avg)
-                            .totalValue(totalValue)
-                            .totalProfit(totalProfit)
-                            .profitRate(profitRate)
-                            .build();
-                }
-            }
-        }
+        BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
+        Long volume = price.getVolume() != null ? price.getVolume() : 0L;
 
-        BigDecimal cp = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
-        Long vol = price.getVolume() != null ? price.getVolume() : 0L;
         MarketDataDTO marketData = MarketDataDTO.builder()
-                .openPrice(cp)
-                .closePrice(cp)
-                .volume(vol)
-                .lowPrice(cp)
-                .highPrice(cp)
+                .openPrice(currentPrice)
+                .closePrice(currentPrice)
+                .volume(volume)
+                .lowPrice(currentPrice)
+                .highPrice(currentPrice)
                 .build();
 
-        List<FinancialDataItemDTO> financialData = new ArrayList<>();
-        financialData.add(FinancialDataItemDTO.builder().quarter("2024 Q3").revenue(BigDecimal.valueOf(1000000)).grossProfit(BigDecimal.valueOf(200000)).operatingProfit(BigDecimal.valueOf(100000)).build());
+        List<ManagedNewsArticle> relatedArticles = managedStockNewsService.getNewsForStock(code, displayName, 3);
+        List<FinancialDataItemDTO> financialData = relatedArticles.stream()
+                .findFirst()
+                .map(managedStockNewsService::extractFinancialData)
+                .orElse(List.of());
+        List<NewsItemDTO> news = relatedArticles.stream()
+                .map(article -> NewsItemDTO.builder()
+                        .id(article.getId())
+                        .title(article.getTitle())
+                        .source(article.getSourceLabel())
+                        .date(article.getPublishedAt() != null ? article.getPublishedAt().toString() : null)
+                        .summary(article.getSummary())
+                        .build())
+                .toList();
 
-        List<NewsItemDTO> news = new ArrayList<>();
-        news.add(NewsItemDTO.builder().id(1L).title("종목 소식").source("뉴스").date("2025-02-01").summary("요약").build());
+        String companyInfo = relatedArticles.stream()
+                .findFirst()
+                .map(managedStockNewsService::extractCompanyDescription)
+                .filter(text -> text != null && !text.isBlank())
+                .orElseGet(() -> stockMasterRepository.findById(code)
+                        .map(master -> {
+                            String market = master.getMarket() != null ? master.getMarket().trim() : "";
+                            String name = master.getNameKr() != null ? master.getNameKr().trim() : displayName;
+                            return market.isBlank() ? name : name + " (" + market + ")";
+                        })
+                        .orElse(displayName));
 
-        String displayName = price.getStockName() != null ? price.getStockName().trim() : "";
-        if (displayName.isEmpty() || displayName.equals(code) || displayName.matches("\\d{6}")
-                || displayName.equals("종목_" + code)) {
-            displayName = stockMasterRepository.findById(code)
-                    .map(m -> m.getNameKr() != null ? m.getNameKr().trim() : "")
-                    .filter(n -> !n.isEmpty())
-                    .orElse("종목_" + code);
-        }
+        InvestorSentimentDTO investorSentiment = communityService.getInvestorSentiment(code);
+        int discussionCount = communityService.getDiscussionCount(code);
+
         return StockDetailDTO.builder()
-                .id(idLong)
+                .id(id != null ? id : 0L)
                 .name(displayName)
                 .code(code)
-                .currentPrice(cp)
+                .currentPrice(currentPrice)
                 .change(price.getChangeAmount() != null ? price.getChangeAmount() : BigDecimal.ZERO)
                 .changeRate(price.getChangeRate() != null ? price.getChangeRate() : BigDecimal.ZERO)
                 .logoColor(DEFAULT_LOGO_COLOR)
                 .myHolding(myHolding)
                 .marketData(marketData)
                 .financialData(financialData)
-                .companyInfo("(주) 샘플 회사 소개")
+                .companyInfo(companyInfo)
                 .news(news)
+                .investorSentiment(investorSentiment)
+                .discussionCount(discussionCount)
                 .build();
+    }
+
+    private MyHoldingDTO resolveMyHolding(User user, String code, StockPriceDTO price) {
+        if (user == null) {
+            return null;
+        }
+        BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
+        Long teamId = parseTeamId(user);
+        if (teamId != null) {
+            Optional<TeamHolding> teamOpt = teamHoldingRepository.findByTeamIdAndStockCode(teamId, code);
+            if (teamOpt.isPresent()) {
+                return toMyHolding(teamOpt.get().getQuantity(), teamOpt.get().getAveragePurchasePrice(), currentPrice);
+            }
+        }
+        return holdingRepository.findByUser_IdAndStockCode(user.getId(), code)
+                .map(holding -> toMyHolding(holding.getQuantity(), holding.getAveragePurchasePrice(), currentPrice))
+                .orElse(null);
+    }
+
+    private MyHoldingDTO toMyHolding(int quantity, BigDecimal averagePrice, BigDecimal currentPrice) {
+        BigDecimal safeAveragePrice = averagePrice != null ? averagePrice : BigDecimal.ZERO;
+        BigDecimal totalValue = currentPrice.multiply(BigDecimal.valueOf(quantity));
+        BigDecimal totalProfit = totalValue.subtract(safeAveragePrice.multiply(BigDecimal.valueOf(quantity)));
+        BigDecimal totalCost = safeAveragePrice.multiply(BigDecimal.valueOf(quantity));
+        BigDecimal profitRate = totalCost.compareTo(BigDecimal.ZERO) != 0
+                ? totalProfit.multiply(BigDecimal.valueOf(100)).divide(totalCost, 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        return MyHoldingDTO.builder()
+                .quantity(quantity)
+                .avgPrice(safeAveragePrice)
+                .totalValue(totalValue)
+                .totalProfit(totalProfit)
+                .profitRate(profitRate)
+                .build();
+    }
+
+    private String resolveDisplayName(String code, String stockNameFromPrice) {
+        String displayName = stockNameFromPrice != null ? stockNameFromPrice.trim() : "";
+        if (displayName.isEmpty() || displayName.equals(code) || displayName.matches("\\d{6}") || displayName.equals("종목_" + code)) {
+            return stockMasterRepository.findById(code)
+                    .map(master -> master.getNameKr() != null ? master.getNameKr().trim() : "")
+                    .filter(name -> !name.isEmpty())
+                    .orElse("종목_" + code);
+        }
+        return displayName;
     }
 }

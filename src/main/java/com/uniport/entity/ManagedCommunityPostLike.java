@@ -17,13 +17,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "managed_community_comments")
+@Table(name = "managed_community_post_likes")
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 @Builder
-public class ManagedCommunityComment extends AuditableEntity {
+public class ManagedCommunityPostLike extends AuditableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -33,15 +33,6 @@ public class ManagedCommunityComment extends AuditableEntity {
     @JoinColumn(name = "post_id", nullable = false)
     private ManagedCommunityPost post;
 
-    @Column
-    private Long authorUserId;
-
-    @Column(nullable = false, length = 120)
-    private String authorName;
-
-    @Column(length = 500)
-    private String authorProfileImageUrl;
-
-    @Column(nullable = false, length = 3000)
-    private String content;
+    @Column(nullable = false)
+    private Long userId;
 }
