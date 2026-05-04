@@ -396,6 +396,7 @@ public class LearningService {
     }
 
     private void persistState(Long userId, LearningUserState state) {
+        LearningUserStateEntity existing = learningUserStateRepository.findById(userId).orElse(null);
         learningUserStateRepository.save(LearningUserStateEntity.builder()
                 .userId(userId)
                 .level(state.level)
@@ -406,6 +407,9 @@ public class LearningService {
                 .currentDayByCourseJson(writeValue(stringifyMap(state.currentDayByCourse)))
                 .completedDaysByCourseJson(writeValue(stringifyCompletedMap(state.completedDaysByCourse)))
                 .submittedStepIdsJson(writeValue(state.submittedStepIds))
+                .educationCurrentDayJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCurrentDayJson()))
+                .educationCompletedDaysJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCompletedDaysJson()))
+                .educationQuizAnswersJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationQuizAnswersJson()))
                 .build());
     }
 
@@ -484,6 +488,10 @@ public class LearningService {
         } catch (Exception e) {
             throw new ApiException("Failed to read learning data", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private String defaultObjectJson(String value) {
+        return value == null || value.isBlank() ? "{}" : value;
     }
 
     private record LearningCourseCatalog(

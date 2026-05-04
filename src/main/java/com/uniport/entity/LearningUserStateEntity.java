@@ -50,4 +50,13 @@ public class LearningUserStateEntity extends AuditableEntity {
     @Lob
     @Column(nullable = false)
     private String submittedStepIdsJson;
+
+    @Lob
+    private String educationCurrentDayJson;
+
+    @Lob
+    private String educationCompletedDaysJson;
+
+    @Lob
+    private String educationQuizAnswersJson;
 }

@@ -2,6 +2,12 @@ package com.uniport.controller;
 
 import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.ErrorResponseDTO;
+import com.uniport.dto.EducationCatalogResponseDTO;
+import com.uniport.dto.EducationDayCompleteResponseDTO;
+import com.uniport.dto.EducationDayContentResponseDTO;
+import com.uniport.dto.EducationQuizResponseDTO;
+import com.uniport.dto.EducationQuizSubmitRequestDTO;
+import com.uniport.dto.EducationQuizSubmitResponseDTO;
 import com.uniport.dto.LearningCourseDetailResponseDTO;
 import com.uniport.dto.LearningCourseStartResponseDTO;
 import com.uniport.dto.LearningCoursesResponseDTO;
@@ -11,6 +17,7 @@ import com.uniport.dto.LearningHomeResponseDTO;
 import com.uniport.dto.LearningStepSubmitRequestDTO;
 import com.uniport.dto.LearningStepSubmitResponseDTO;
 import com.uniport.service.LearningService;
+import com.uniport.service.EducationContentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -36,9 +43,107 @@ import org.springframework.web.bind.annotation.RestController;
 public class LearningController {
 
     private final LearningService learningService;
+    private final EducationContentService educationContentService;
 
-    public LearningController(LearningService learningService) {
+    public LearningController(LearningService learningService, EducationContentService educationContentService) {
         this.learningService = learningService;
+        this.educationContentService = educationContentService;
+    }
+
+    @GetMapping("/education/catalog")
+    @Operation(summary = "교육 콘텐츠 카탈로그 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "카탈로그 조회 성공",
+                    content = @Content(schema = @Schema(implementation = EducationCatalogResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<EducationCatalogResponseDTO> getEducationCatalog(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser authenticatedUser) {
+        return ResponseEntity.ok(educationContentService.getCatalog());
+    }
+
+    @GetMapping("/education/days/{track}/{day}")
+    @Operation(summary = "교육 Day 콘텐츠 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Day 콘텐츠 조회 성공",
+                    content = @Content(schema = @Schema(implementation = EducationDayContentResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "콘텐츠 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<EducationDayContentResponseDTO> getEducationDayContent(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser authenticatedUser,
+            @PathVariable String track,
+            @PathVariable Integer day,
+            @RequestParam(value = "sector", required = false) String sector) {
+        return ResponseEntity.ok(educationContentService.getDayContent(track, day, sector));
+    }
+
+    @GetMapping("/education/quizzes/{track}/{day}")
+    @Operation(summary = "교육 퀴즈 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "퀴즈 조회 성공",
+                    content = @Content(schema = @Schema(implementation = EducationQuizResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "퀴즈 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<EducationQuizResponseDTO> getEducationQuiz(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser authenticatedUser,
+            @PathVariable String track,
+            @PathVariable Integer day,
+            @RequestParam(value = "sector", required = false) String sector,
+            @RequestParam(value = "mode", required = false) String mode) {
+        return ResponseEntity.ok(educationContentService.getQuiz(track, day, sector, mode));
+    }
+
+    @PostMapping("/education/quizzes/{track}/{day}/submit")
+    @Operation(summary = "교육 퀴즈 제출")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "퀴즈 제출 성공",
+                    content = @Content(schema = @Schema(implementation = EducationQuizSubmitResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "퀴즈 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<EducationQuizSubmitResponseDTO> submitEducationQuiz(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser authenticatedUser,
+            @PathVariable String track,
+            @PathVariable Integer day,
+            @RequestParam(value = "sector", required = false) String sector,
+            @RequestParam(value = "mode", required = false) String mode,
+            @RequestBody EducationQuizSubmitRequestDTO request) {
+        return ResponseEntity.ok(educationContentService.submitQuiz(authenticatedUser.getUser(), track, day, sector, mode, request));
+    }
+
+    @PostMapping("/education/days/{track}/{day}/complete")
+    @Operation(summary = "교육 Day 완료")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Day 완료 성공",
+                    content = @Content(schema = @Schema(implementation = EducationDayCompleteResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "완료 조건 미충족 또는 중복 완료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "Day 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<EducationDayCompleteResponseDTO> completeEducationDay(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser authenticatedUser,
+            @PathVariable String track,
+            @PathVariable Integer day,
+            @RequestParam(value = "sector", required = false) String sector) {
+        return ResponseEntity.ok(educationContentService.completeDay(authenticatedUser.getUser(), track, day, sector));
     }
 
     @GetMapping("/home")
