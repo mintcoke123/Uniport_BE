@@ -14,11 +14,14 @@ import com.uniport.dto.MyPageBadgeDTO;
 import com.uniport.dto.MyPageCharacterCardDTO;
 import com.uniport.dto.MyPageCharacterSelectRequestDTO;
 import com.uniport.dto.MyPageExpDTO;
+import com.uniport.dto.MyPageHistoryItemDTO;
+import com.uniport.dto.MyPageNoteDTO;
 import com.uniport.dto.MyPageProfileUpdateRequestDTO;
 import com.uniport.dto.MyPageResponseDTO;
 import com.uniport.dto.MyPageSettingsDTO;
 import com.uniport.dto.MyPageSettingsUpdateRequestDTO;
 import com.uniport.dto.MyPageSummaryDTO;
+import com.uniport.dto.MyPageTitleDTO;
 import com.uniport.dto.MyPageUserDTO;
 import com.uniport.dto.PointBalanceResponseDTO;
 import com.uniport.dto.ShopItemDTO;
@@ -32,6 +35,9 @@ import com.uniport.dto.ShopRedemptionRequestDTO;
 import com.uniport.dto.ShopRedemptionResponseDTO;
 import com.uniport.entity.FriendRelation;
 import com.uniport.entity.GifticonInventory;
+import com.uniport.entity.Holding;
+import com.uniport.entity.LearningUserStateEntity;
+import com.uniport.entity.Order;
 import com.uniport.entity.PointShopOrder;
 import com.uniport.entity.PointShopProduct;
 import com.uniport.entity.PointTransaction;
@@ -41,6 +47,9 @@ import com.uniport.entity.UserMyPagePreference;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.GifticonInventoryRepository;
+import com.uniport.repository.HoldingRepository;
+import com.uniport.repository.LearningUserStateRepository;
+import com.uniport.repository.OrderRepository;
 import com.uniport.repository.PointShopOrderRepository;
 import com.uniport.repository.PointShopProductRepository;
 import com.uniport.repository.PointTransactionRepository;
@@ -52,11 +61,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -75,6 +87,9 @@ public class PointSocialDataService {
     private final FriendRelationRepository friendRelationRepository;
     private final UserRepository userRepository;
     private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
+    private final HoldingRepository holdingRepository;
+    private final OrderRepository orderRepository;
+    private final LearningUserStateRepository learningUserStateRepository;
 
     public PointSocialDataService(PointWalletRepository pointWalletRepository,
                                   PointTransactionRepository pointTransactionRepository,
@@ -83,7 +98,10 @@ public class PointSocialDataService {
                                   PointShopOrderRepository pointShopOrderRepository,
                                   FriendRelationRepository friendRelationRepository,
                                   UserRepository userRepository,
-                                  UserMyPagePreferenceRepository userMyPagePreferenceRepository) {
+                                  UserMyPagePreferenceRepository userMyPagePreferenceRepository,
+                                  HoldingRepository holdingRepository,
+                                  OrderRepository orderRepository,
+                                  LearningUserStateRepository learningUserStateRepository) {
         this.pointWalletRepository = pointWalletRepository;
         this.pointTransactionRepository = pointTransactionRepository;
         this.pointShopProductRepository = pointShopProductRepository;
@@ -92,6 +110,9 @@ public class PointSocialDataService {
         this.friendRelationRepository = friendRelationRepository;
         this.userRepository = userRepository;
         this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
+        this.holdingRepository = holdingRepository;
+        this.orderRepository = orderRepository;
+        this.learningUserStateRepository = learningUserStateRepository;
     }
 
     public MyPageResponseDTO getMyPage(User user) {
@@ -104,16 +125,23 @@ public class PointSocialDataService {
                 .filter(relation -> "ACCEPTED".equalsIgnoreCase(relation.getStatus()))
                 .count();
         int redemptionCount = pointShopOrderRepository.findByUser_IdOrderByCreatedAtDesc(user.getId()).size();
+        List<Order> orders = orderRepository.findByUser_IdOrderByOrderDateDesc(user.getId());
+        List<Holding> holdings = holdingRepository.findByUser_Id(user.getId());
+        LearningUserStateEntity learningState = learningUserStateRepository.findById(user.getId()).orElse(null);
+
         return MyPageResponseDTO.builder()
                 .user(MyPageUserDTO.builder()
                         .nickname(user.getNickname())
                         .profileImageUrl(user.getProfileImageUrl())
                         .level(level)
-                        .investmentMbti(defaultString(user.getInvestmentProfileResult(), "UNKNOWN"))
-                        .character(resolveSelectedCharacterName(user, preference))
+                        .investmentMbti(defaultString(user.getInvestmentProfileResult(), "균형잡힌 판다형"))
+                        .character(resolveSelectedCharacterName(preference))
                         .bio(defaultString(preference.getBio(), "나만의 투자 원칙을 기록해 보세요."))
                         .build())
-                .exp(MyPageExpDTO.builder().currentExp(currentExp).maxExp(1000).build())
+                .exp(MyPageExpDTO.builder()
+                        .currentExp(currentExp)
+                        .maxExp(1000)
+                        .build())
                 .summary(MyPageSummaryDTO.builder()
                         .learningTimeMinutes(redemptionCount * 15)
                         .currentStreak(streak)
@@ -130,8 +158,12 @@ public class PointSocialDataService {
                         .profitLossRate(orZero(user.getProfitLossRate()))
                         .pointBalance(balance)
                         .build())
-                .characters(buildCharacters(user, preference))
-                .badges(buildBadges(user, streak, redemptionCount))
+                .characters(buildCharacters(preference))
+                .badges(buildBadges(streak, redemptionCount))
+                .note(buildInvestmentNote(user, holdings))
+                .investmentHistory(buildInvestmentHistory(orders, holdings))
+                .learningHistory(buildLearningHistory(learningState))
+                .titles(buildTitles(user, streak, redemptionCount, holdings, orders))
                 .build();
     }
 
@@ -171,7 +203,7 @@ public class PointSocialDataService {
             throw new ApiException("characterCode is required", HttpStatus.BAD_REQUEST);
         }
         String selected = request.getCharacterCode().trim().toUpperCase(Locale.ROOT);
-        boolean valid = buildCharacters(user, getOrCreatePreference(user.getId())).stream()
+        boolean valid = buildCharacters(getOrCreatePreference(user.getId())).stream()
                 .anyMatch(character -> character.getCode().equalsIgnoreCase(selected));
         if (!valid) {
             throw new ApiException("characterCode is invalid", HttpStatus.BAD_REQUEST);
@@ -241,6 +273,7 @@ public class PointSocialDataService {
         if (wallet.getBalance() < safeInt(product.getPricePoint())) {
             throw new ApiException("not enough points", HttpStatus.CONFLICT);
         }
+
         wallet.setBalance(wallet.getBalance() - safeInt(product.getPricePoint()));
         pointWalletRepository.save(wallet);
 
@@ -250,8 +283,9 @@ public class PointSocialDataService {
                 .inventory(inventory)
                 .usedPoint(safeInt(product.getPricePoint()))
                 .status("COMPLETED")
-                .sentAt(java.time.LocalDateTime.now())
+                .sentAt(LocalDateTime.now())
                 .build());
+
         inventory.setStatus("ASSIGNED");
         inventory.setAssignedOrderId("REDEEM_" + order.getId());
         gifticonInventoryRepository.save(inventory);
@@ -265,6 +299,7 @@ public class PointSocialDataService {
                 .sourceId(String.valueOf(order.getId()))
                 .description(product.getName() + " redemption")
                 .build());
+
         order.setPointTransactionId(String.valueOf(transaction.getId()));
         pointShopOrderRepository.save(order);
 
@@ -371,12 +406,12 @@ public class PointSocialDataService {
                 .filter(candidate -> !candidate.getId().equals(user.getId()))
                 .distinct()
                 .toList();
-        List<User> withMe = new java.util.ArrayList<>(rankingPool);
+        List<User> withMe = new ArrayList<>(rankingPool);
         withMe.add(user);
         List<User> sorted = withMe.stream()
                 .sorted(Comparator.comparingInt(this::getBalance).reversed())
                 .toList();
-        List<FriendRankingItemDTO> items = new java.util.ArrayList<>();
+        List<FriendRankingItemDTO> items = new ArrayList<>();
         for (int i = 0; i < Math.min(5, sorted.size()); i++) {
             items.add(toRankingItem(i + 1, sorted.get(i)));
         }
@@ -396,12 +431,12 @@ public class PointSocialDataService {
                         .build()));
     }
 
-    private List<MyPageCharacterCardDTO> buildCharacters(User user, UserMyPagePreference preference) {
+    private List<MyPageCharacterCardDTO> buildCharacters(UserMyPagePreference preference) {
         String selectedCode = defaultString(preference.getSelectedCharacterCode(), "SEED");
         return List.of(
                 character("SEED", "조심스러운 거북이형", "🐢", "#d9f1c7", selectedCode),
-                character("PANDA", "균형 잡힌 판다형", "🐼", "#d3ecff", selectedCode),
-                character("FOX", "기민한 여우형", "🦊", "#ffe0c2", selectedCode)
+                character("PANDA", "균형잡힌 판다형", "🐼", "#d3ecff", selectedCode),
+                character("FOX", "기회를 찾는 여우형", "🦊", "#ffe0c2", selectedCode)
         );
     }
 
@@ -415,11 +450,125 @@ public class PointSocialDataService {
                 .build();
     }
 
-    private List<MyPageBadgeDTO> buildBadges(User user, int streak, int redemptionCount) {
+    private List<MyPageBadgeDTO> buildBadges(int streak, int redemptionCount) {
         return List.of(
-                MyPageBadgeDTO.builder().code("FIRST_LOGIN").label("첫 로그인").description("유니포트에 첫 방문").unlocked(Boolean.TRUE).build(),
-                MyPageBadgeDTO.builder().code("STREAK_3").label("3일 연속").description("연속 활동 3일 달성").unlocked(streak >= 3).build(),
-                MyPageBadgeDTO.builder().code("SHOPPER").label("포인트 교환").description("포인트샵 첫 교환").unlocked(redemptionCount >= 1).build()
+                MyPageBadgeDTO.builder().code("FIRST_LOGIN").label("첫 방문").description("유니포트 첫 방문").unlocked(Boolean.TRUE).build(),
+                MyPageBadgeDTO.builder().code("STREAK_3").label("3일 연속").description("3일 연속으로 활동했어요").unlocked(streak >= 3).build(),
+                MyPageBadgeDTO.builder().code("SHOPPER").label("첫 교환").description("포인트샵에서 첫 상품을 교환했어요").unlocked(redemptionCount >= 1).build()
+        );
+    }
+
+    private MyPageNoteDTO buildInvestmentNote(User user, List<Holding> holdings) {
+        String profile = defaultString(user.getInvestmentProfileResult(), "균형잡힌 판다형");
+        String description = switch (profile) {
+            case "조심스러운 거북이형" -> "원금을 지키면서 천천히 배우고 싶은 장기형 투자자에 가깝습니다.";
+            case "기회를 찾는 여우형" -> "기회를 빠르게 포착하지만 리스크 관리가 중요한 투자 성향입니다.";
+            default -> "안정성과 성장의 균형을 함께 보려는 투자 성향입니다.";
+        };
+
+        List<String> principles = holdings.isEmpty()
+                ? List.of("모르는 기업에는 투자하지 않기", "매수 전 3번 더 확인하기", "자동이체로 투자 습관 만들기")
+                : List.of("보유 종목의 사업보고서 확인하기", "한 종목에 과도하게 몰리지 않기", "매수 이유를 투자 노트에 남기기");
+
+        List<String> strategies = holdings.size() >= 3
+                ? List.of("코어+위성 조합 유지하기", "정기 매수 비중 점검하기", "실적 발표 전후로 리스크 체크하기")
+                : List.of("관심 종목 3개 먼저 추리기", "ETF로 분산 시작하기", "짧은 매매보다 기록 습관 먼저 만들기");
+
+        return MyPageNoteDTO.builder()
+                .investorTypeTitle(profile)
+                .investorTypeDescription(description)
+                .principles(principles)
+                .recommendedStrategies(strategies)
+                .build();
+    }
+
+    private List<MyPageHistoryItemDTO> buildInvestmentHistory(List<Order> orders, List<Holding> holdings) {
+        List<MyPageHistoryItemDTO> orderItems = orders.stream()
+                .limit(5)
+                .map(order -> MyPageHistoryItemDTO.builder()
+                        .title(order.getStockCode())
+                        .subtitle(order.getOrderType().name() + " " + order.getQuantity() + "주")
+                        .valueLabel(formatMoney(order.getPrice()))
+                        .statusLabel(order.getStatus().name())
+                        .happenedAtLabel(toAgoLabel(order.getOrderDate()))
+                        .build())
+                .toList();
+        if (!orderItems.isEmpty()) {
+            return orderItems;
+        }
+        return holdings.stream()
+                .limit(5)
+                .map(holding -> MyPageHistoryItemDTO.builder()
+                        .title(holding.getStockCode())
+                        .subtitle("보유 수량 " + holding.getQuantity() + "주")
+                        .valueLabel(formatMoney(holding.getAveragePurchasePrice()))
+                        .statusLabel("HOLDING")
+                        .happenedAtLabel("현재 보유")
+                        .build())
+                .toList();
+    }
+
+    private List<MyPageHistoryItemDTO> buildLearningHistory(LearningUserStateEntity learningState) {
+        if (learningState == null) {
+            return List.of();
+        }
+        int completedCount = extractCompletedLearningCount(learningState);
+        return List.of(
+                MyPageHistoryItemDTO.builder()
+                        .title("MAIN COURSE")
+                        .subtitle("완료한 Day " + completedCount + "개")
+                        .valueLabel(learningState.getPoint() + "P")
+                        .statusLabel("IN_PROGRESS")
+                        .happenedAtLabel(learningState.getLastCompletedDate() != null ? learningState.getLastCompletedDate().format(DATE_FORMATTER) : "진행 중")
+                        .build(),
+                MyPageHistoryItemDTO.builder()
+                        .title("LEARNING STREAK")
+                        .subtitle("현재 레벨 " + safeInt(learningState.getLevel()))
+                        .valueLabel("연속 " + safeInt(learningState.getStreakDays()) + "일")
+                        .statusLabel("ACTIVE")
+                        .happenedAtLabel("학습 상태 저장됨")
+                        .build()
+        );
+    }
+
+    private List<MyPageTitleDTO> buildTitles(User user, int streak, int redemptionCount, List<Holding> holdings, List<Order> orders) {
+        return List.of(
+                MyPageTitleDTO.builder()
+                        .code("NEXT_BUFFETT")
+                        .label("차세대 워렌버핏")
+                        .description("수익률 100% 이상 달성")
+                        .unlocked(orZero(user.getProfitLossRate()).compareTo(BigDecimal.valueOf(100)) >= 0)
+                        .build(),
+                MyPageTitleDTO.builder()
+                        .code("TOURNAMENTER")
+                        .label("거래 챌린저")
+                        .description("주문 기록 10건 이상")
+                        .unlocked(orders.size() >= 10)
+                        .build(),
+                MyPageTitleDTO.builder()
+                        .code("NOTE_KEEPER")
+                        .label("투자 노트 수집가")
+                        .description("마이페이지 투자 원칙을 유지하는 투자자")
+                        .unlocked(Boolean.TRUE)
+                        .build(),
+                MyPageTitleDTO.builder()
+                        .code("STEADY")
+                        .label("꾸준한 학습가")
+                        .description("최근 활동 기록을 꾸준히 이어감")
+                        .unlocked(streak >= 3)
+                        .build(),
+                MyPageTitleDTO.builder()
+                        .code("DIVERSIFIER")
+                        .label("분산 투자 입문자")
+                        .description("보유 종목 3개 이상 유지")
+                        .unlocked(holdings.size() >= 3)
+                        .build(),
+                MyPageTitleDTO.builder()
+                        .code("SHOPPER")
+                        .label("포인트 헌터")
+                        .description("포인트샵 상품 첫 교환")
+                        .unlocked(redemptionCount >= 1)
+                        .build()
         );
     }
 
@@ -434,11 +583,11 @@ public class PointSocialDataService {
                 .currentXp(balance % 1000)
                 .maxXp(1000)
                 .relationLabel("친구")
-                .description(friend.getTeamId() != null ? "같은 팀에서 활동 중" : "투자 학습 친구")
+                .description(friend.getTeamId() != null ? "같은 팀에서 활동 중" : "함께 공부하는 친구")
                 .build();
     }
 
-    private FriendRequestListItemDTO toFriendRequestItem(String requestId, User target, java.time.LocalDateTime createdAt, String status) {
+    private FriendRequestListItemDTO toFriendRequestItem(String requestId, User target, LocalDateTime createdAt, String status) {
         int balance = getBalance(target);
         return FriendRequestListItemDTO.builder()
                 .requestId(requestId)
@@ -522,8 +671,8 @@ public class PointSocialDataService {
         return order;
     }
 
-    private String resolveSelectedCharacterName(User user, UserMyPagePreference preference) {
-        return buildCharacters(user, preference).stream()
+    private String resolveSelectedCharacterName(UserMyPagePreference preference) {
+        return buildCharacters(preference).stream()
                 .filter(character -> Boolean.TRUE.equals(character.getSelected()))
                 .findFirst()
                 .map(MyPageCharacterCardDTO::getName)
@@ -534,7 +683,8 @@ public class PointSocialDataService {
         if (preference.getPushEnabled() != null) {
             return preference.getPushEnabled();
         }
-        return (user.getEmail() != null && !user.getEmail().isBlank()) || (user.getPhoneNumber() != null && !user.getPhoneNumber().isBlank());
+        return (user.getEmail() != null && !user.getEmail().isBlank())
+                || (user.getPhoneNumber() != null && !user.getPhoneNumber().isBlank());
     }
 
     private int getBalance(User user) {
@@ -547,10 +697,10 @@ public class PointSocialDataService {
 
     private String resolveRedeemReason(PointShopProduct product, int remaining, boolean hasInventory) {
         if (!"ACTIVE".equalsIgnoreCase(product.getStatus()) || !hasInventory) {
-            return "재고가 없습니다";
+            return "재고가 없습니다.";
         }
         if (remaining < 0) {
-            return "보유 포인트가 부족합니다";
+            return "보유 포인트가 부족합니다.";
         }
         return null;
     }
@@ -568,13 +718,37 @@ public class PointSocialDataService {
         }
     }
 
-    private String toAgoLabel(java.time.LocalDateTime createdAt) {
-        Duration duration = Duration.between(createdAt, java.time.LocalDateTime.now());
+    private String toAgoLabel(LocalDateTime createdAt) {
+        Duration duration = Duration.between(createdAt, LocalDateTime.now());
         long minutes = Math.max(1, duration.toMinutes());
-        if (minutes < 60) return minutes + "분 전";
+        if (minutes < 60) {
+            return minutes + "분 전";
+        }
         long hours = duration.toHours();
-        if (hours < 24) return hours + "시간 전";
+        if (hours < 24) {
+            return hours + "시간 전";
+        }
         return duration.toDays() + "일 전";
+    }
+
+    private int extractCompletedLearningCount(LearningUserStateEntity learningState) {
+        String json = learningState.getCompletedDaysByCourseJson();
+        if (json == null || json.isBlank()) {
+            return 0;
+        }
+        int digitCount = 0;
+        boolean inNumber = false;
+        for (char ch : json.toCharArray()) {
+            if (Character.isDigit(ch)) {
+                if (!inNumber) {
+                    digitCount++;
+                    inNumber = true;
+                }
+            } else {
+                inNumber = false;
+            }
+        }
+        return Math.max(digitCount, safeInt(learningState.getStreakDays()));
     }
 
     private String defaultString(String value, String fallback) {
@@ -583,5 +757,10 @@ public class PointSocialDataService {
 
     private BigDecimal orZero(BigDecimal value) {
         return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private String formatMoney(BigDecimal value) {
+        BigDecimal safe = value != null ? value : BigDecimal.ZERO;
+        return safe.setScale(0, RoundingMode.HALF_UP).toPlainString() + "원";
     }
 }

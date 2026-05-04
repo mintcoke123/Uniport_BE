@@ -19,6 +19,21 @@ public class LearningRoadmapItemDTO {
     @Schema(example = "CURRENT", requiredMode = Schema.RequiredMode.REQUIRED)
     private String status;
 
-    @Schema(example = "오늘 학습 진행중", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(example = "Current", requiredMode = Schema.RequiredMode.REQUIRED)
     private String statusLabel;
+
+    @Schema(example = "LESSON", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String nodeType;
+
+    @Schema(example = "-1", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Integer xOffset;
+
+    @Schema(example = "CHAPTER 01")
+    private String chapterLabel;
+
+    @Schema(example = "50P")
+    private String rewardLabel;
+
+    @Schema(example = "Complete previous day first")
+    private String lockedReason;
 }

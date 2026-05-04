@@ -16,7 +16,7 @@ public class LearningHomeCourseDTO {
     @Schema(example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
     private Long id;
 
-    @Schema(example = "30일 로드맵", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(example = "입문 30일 코스", requiredMode = Schema.RequiredMode.REQUIRED)
     private String title;
 
     @Schema(example = "12", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -30,4 +30,10 @@ public class LearningHomeCourseDTO {
 
     @Schema(example = "Day 02 / 30", requiredMode = Schema.RequiredMode.REQUIRED)
     private String progressLabel;
+
+    @Schema(example = "FOREST", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String worldTheme;
+
+    @Schema(example = "기초 개념을 익히는 숲")
+    private String worldLabel;
 }

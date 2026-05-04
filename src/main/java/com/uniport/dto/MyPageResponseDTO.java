@@ -28,4 +28,12 @@ public class MyPageResponseDTO {
     private List<MyPageCharacterCardDTO> characters;
 
     private List<MyPageBadgeDTO> badges;
+
+    private MyPageNoteDTO note;
+
+    private List<MyPageHistoryItemDTO> investmentHistory;
+
+    private List<MyPageHistoryItemDTO> learningHistory;
+
+    private List<MyPageTitleDTO> titles;
 }

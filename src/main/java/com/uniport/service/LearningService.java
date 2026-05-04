@@ -136,7 +136,9 @@ public class LearningService {
                         progressPercent,
                         currentDay,
                         totalDays,
-                        String.format("Day %02d / %02d", currentDay, totalDays)))
+                        String.format("Day %02d / %02d", currentDay, totalDays),
+                        resolveWorldTheme(course.category()),
+                        resolveWorldLabel(course.category())))
                 .roadmap(buildRoadmap(course.id(), totalDays, currentDay, state))
                 .currentContent(new LearningCurrentContentDTO(day.day(), day.title(), "CURRENT"))
                 .build();
@@ -273,13 +275,58 @@ public class LearningService {
 
     private List<LearningRoadmapItemDTO> buildRoadmap(long courseId, int totalDays, int currentDay, LearningUserState state) {
         Set<Integer> completedDays = state.completedDaysByCourse.getOrDefault(courseId, Set.of());
+        LearningCourseCatalog course = getCourseOrThrow(courseId);
         return java.util.stream.IntStream.rangeClosed(1, totalDays)
                 .mapToObj(day -> LearningRoadmapItemDTO.builder()
                         .day(day)
                         .status(completedDays.contains(day) ? "COMPLETED" : day == currentDay ? "CURRENT" : "LOCKED")
                         .statusLabel(completedDays.contains(day) ? "Completed" : day == currentDay ? "Current" : "Locked")
+                        .nodeType(resolveNodeType(day, currentDay, completedDays))
+                        .xOffset(resolveXOffset(day))
+                        .chapterLabel(getDayOrThrow(courseId, day).chapter())
+                        .rewardLabel(day == currentDay || completedDays.contains(day) ? "50P" : null)
+                        .lockedReason(completedDays.contains(day) || day == currentDay ? null : "Complete previous day first")
                         .build())
                 .toList();
+    }
+
+    private String resolveNodeType(int day, int currentDay, Set<Integer> completedDays) {
+        if (day == 1) {
+            return "START";
+        }
+        if (day == currentDay) {
+            return "CURRENT";
+        }
+        if (completedDays.contains(day)) {
+            return day % 5 == 0 ? "CHECKPOINT" : "LESSON";
+        }
+        return day % 5 == 0 ? "CHECKPOINT" : "LESSON";
+    }
+
+    private int resolveXOffset(int day) {
+        int pattern = (day - 1) % 4;
+        return switch (pattern) {
+            case 0 -> -2;
+            case 1 -> 1;
+            case 2 -> 2;
+            default -> -1;
+        };
+    }
+
+    private String resolveWorldTheme(String category) {
+        return switch (category) {
+            case "MINI" -> "SKY";
+            case "ADVANCED" -> "CAVE";
+            default -> "FOREST";
+        };
+    }
+
+    private String resolveWorldLabel(String category) {
+        return switch (category) {
+            case "MINI" -> "빠르게 배우는 하늘 코스";
+            case "ADVANCED" -> "심화 개념을 푸는 동굴 코스";
+            default -> "기초 개념을 익히는 숲";
+        };
     }
 
     private String toStatusLabel(String status) {
