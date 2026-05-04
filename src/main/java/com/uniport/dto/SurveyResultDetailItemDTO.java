@@ -13,9 +13,9 @@ import lombok.NoArgsConstructor;
 @Schema(description = "투자 성향 결과 상세 항목")
 public class SurveyResultDetailItemDTO {
 
-    @Schema(description = "항목명", example = "분석형 의사결정", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "항목명", example = "특징", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
 
-    @Schema(description = "항목 설명", example = "중요한 투자 결정을 내릴 때 신중하게 판단하는 편입니다.", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "항목 설명", example = "타이밍보다 꾸준함을 믿는 편이다.", requiredMode = Schema.RequiredMode.REQUIRED)
     private String description;
 }

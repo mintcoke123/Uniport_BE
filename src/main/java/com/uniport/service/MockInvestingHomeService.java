@@ -25,22 +25,25 @@ public class MockInvestingHomeService {
     private final MeService meService;
     private final RankingService rankingService;
     private final CompetitionService competitionService;
+    private final CompetitionParticipationService competitionParticipationService;
 
     public MockInvestingHomeService(MatchingRoomService matchingRoomService,
                                     MeService meService,
                                     RankingService rankingService,
-                                    CompetitionService competitionService) {
+                                    CompetitionService competitionService,
+                                    CompetitionParticipationService competitionParticipationService) {
         this.matchingRoomService = matchingRoomService;
         this.meService = meService;
         this.rankingService = rankingService;
         this.competitionService = competitionService;
+        this.competitionParticipationService = competitionParticipationService;
     }
 
     public MockInvestingSummaryResponseDTO getSummary(User user) {
         MyInvestmentResponseDTO investment = meService.getMyInvestment(user);
         CompetitionDataDTO competition = investment.getCompetitionData();
         Map<String, Object> myRanking = rankingService.getMyGroupRanking(user);
-        List<Map<String, Object>> rooms = matchingRoomService.listRoomsJoinedBy(user);
+        List<Map<String, Object>> rooms = user != null ? matchingRoomService.listRoomsJoinedBy(user) : List.of();
         Map<String, Object> activeRoom = rooms.isEmpty() ? null : rooms.get(0);
 
         return MockInvestingSummaryResponseDTO.builder()
@@ -53,7 +56,7 @@ public class MockInvestingHomeService {
                 .ongoingCompetition(HomeCompetitionSummaryDTO.builder()
                         .id(null)
                         .name(competition != null ? competition.getName() : null)
-                        .endDate(competition != null && competition.getEndDate() != null ? competition.getEndDate().toString() : null)
+                        .endDate(competition != null ? competition.getEndDate() : null)
                         .build())
                 .myInvestment(HomeInvestmentSummaryDTO.builder()
                         .totalAssets(investment.getInvestmentData() != null ? investment.getInvestmentData().getTotalAssets() : BigDecimal.ZERO)
@@ -97,7 +100,7 @@ public class MockInvestingHomeService {
                         .groupName(topGroup != null ? stringValue(topGroup.get("groupName")) : null)
                         .dailyReturnRate(topGroupRate)
                         .topPick("NVDA")
-                        .comment("실적 발표 전 기술적 신호에서 매수세가 확인된 전략입니다.")
+                        .comment("실적 발표 전 수급과 모멘텀을 같이 확인한 뒤 수익을 확정한 인사이트예요.")
                         .build())
                 .build();
     }
@@ -116,6 +119,7 @@ public class MockInvestingHomeService {
             ));
         }
 
+        String participantTeamId = resolveParticipantTeamId(user);
         List<Map<String, Object>> upcomingCards = competitionService.findByStatus("upcoming").stream()
                 .limit(3)
                 .map(competition -> Map.<String, Object>of(
@@ -124,32 +128,48 @@ public class MockInvestingHomeService {
                         "statusLabel", "참가 신청",
                         "daysRemaining", Math.max(0, competitionService.daysRemaining(competition.getEndDate())),
                         "startDate", competition.getStartDate(),
-                        "endDate", competition.getEndDate()
+                        "endDate", competition.getEndDate(),
+                        "application", competitionParticipationService.getApplicationStatus(competition.getId(), user, participantTeamId)
                 ))
                 .toList();
 
         GroupInsightsResponseDTO insights = getGroupInsights();
-        return Map.of(
-                "heroCards", List.of(
-                        Map.of(
-                                "type", "GROUP_MATCH",
-                                "title", "그룹 매칭",
-                                "description", "관심사 기반 친구 매칭",
-                                "ctaLabel", "함께 시작하기"
-                        ),
-                        Map.of(
-                                "type", "TOURNAMENT",
-                                "title", "토너먼트 대회",
-                                "description", "우승 도전하기",
-                                "ctaLabel", "우승 도전하기"
-                        )
+        BigDecimal myProfitRate = extractMyProfitRate(user);
+        BigDecimal unlockTarget = new BigDecimal("5.0");
+        boolean unlocked = myProfitRate.compareTo(unlockTarget) >= 0;
+
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("heroCards", List.of(
+                Map.of(
+                        "type", "GROUP_MATCH",
+                        "title", "그룹 매칭",
+                        "description", "관심사 기반 친구 매칭",
+                        "ctaLabel", "바로 시작하기"
                 ),
-                "topConsensus", insights.getTopConsensus(),
-                "topGroupInsight", insights.getTopGroup(),
-                "upcomingTournaments", upcomingCards,
-                "realtimeRanking", rankingPreview,
-                "myGroupRanking", user != null ? rankingService.getMyGroupRanking(user) : null
-        );
+                Map.of(
+                        "type", "TOURNAMENT",
+                        "title", "토너먼트 대회",
+                        "description", "실전형 수익률 경쟁",
+                        "ctaLabel", "대회 둘러보기"
+                )
+        ));
+        body.put("topConsensus", insights.getTopConsensus());
+        body.put("topGroupInsight", insights.getTopGroup());
+        body.put("upcomingTournaments", upcomingCards);
+        body.put("realtimeRanking", rankingPreview);
+        body.put("myGroupRanking", user != null ? rankingService.getMyGroupRanking(user) : null);
+        body.put("insightUnlock", Map.of(
+                "unlocked", unlocked,
+                "targetProfitRate", unlockTarget,
+                "currentProfitRate", myProfitRate,
+                "title", unlocked ? "상위 그룹 인사이트" : "잠금 풀기",
+                "description", unlocked
+                        ? "어제 수익률 전국 1위 그룹의 인사이트를 확인할 수 있어요."
+                        : "수익률 5%를 달성하고 잠금을 해제하세요!",
+                "ctaLabel", unlocked ? "인사이트 더 보기" : "잠금 풀기"
+        ));
+        body.put("myApplications", user != null ? competitionParticipationService.getMyApplications(user) : List.of());
+        return body;
     }
 
     private static String stringValue(Object value) {
@@ -157,20 +177,46 @@ public class MockInvestingHomeService {
     }
 
     private static String normalizeRoomStatus(String status) {
-        if (status == null) return null;
+        if (status == null) {
+            return null;
+        }
         return "started".equalsIgnoreCase(status) ? "STARTED" : "WAITING";
     }
 
     private static Long parseRoomId(Map<String, Object> room) {
-        if (room == null || room.get("id") == null) return null;
-        String value = String.valueOf(room.get("id"));
-        if (value.startsWith("room-")) {
-            try {
-                return Long.parseLong(value.substring(5));
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
+        if (room == null || room.get("id") == null) {
+            return null;
         }
-        return null;
+        String value = String.valueOf(room.get("id"));
+        if (!value.startsWith("room-")) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.substring(5));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private BigDecimal extractMyProfitRate(User user) {
+        Map<String, Object> myRanking = user != null ? rankingService.getMyGroupRanking(user) : null;
+        if (myRanking != null && myRanking.get("profitRate") instanceof BigDecimal rate) {
+            return rate.multiply(BigDecimal.valueOf(100));
+        }
+        MyInvestmentResponseDTO investment = meService.getMyInvestment(user);
+        if (investment.getInvestmentData() != null && investment.getInvestmentData().getProfitLossPercentage() != null) {
+            return investment.getInvestmentData().getProfitLossPercentage();
+        }
+        return BigDecimal.ZERO;
+    }
+
+    private String resolveParticipantTeamId(User user) {
+        if (user == null) {
+            return null;
+        }
+        if (user.getTeamId() != null && !user.getTeamId().isBlank()) {
+            return user.getTeamId();
+        }
+        return user.getId() != null ? "solo-" + user.getId() : null;
     }
 }

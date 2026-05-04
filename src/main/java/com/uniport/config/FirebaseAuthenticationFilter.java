@@ -2,8 +2,10 @@ package com.uniport.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.dto.ErrorResponseDTO;
+import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.exception.ApiErrorCodeResolver;
+import com.uniport.repository.UserRepository;
 import com.uniport.service.FirebaseAuthenticationService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -30,10 +32,16 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final FirebaseAuthenticationService firebaseAuthenticationService;
+    private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public FirebaseAuthenticationFilter(FirebaseAuthenticationService firebaseAuthenticationService) {
+    public FirebaseAuthenticationFilter(FirebaseAuthenticationService firebaseAuthenticationService,
+                                        JwtUtil jwtUtil,
+                                        UserRepository userRepository) {
         this.firebaseAuthenticationService = firebaseAuthenticationService;
+        this.jwtUtil = jwtUtil;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -90,7 +98,7 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
-            FirebaseAuthenticatedUser principal = firebaseAuthenticationService.authenticate(idToken);
+            FirebaseAuthenticatedUser principal = authenticatePrincipal(idToken);
             String role = principal.getUser().getRole() != null ? principal.getUser().getRole().toUpperCase() : "USER";
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(
@@ -131,6 +139,17 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
 
     private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
         writeUnauthorized(response, message, ApiErrorCodeResolver.AUTH_TOKEN_REQUIRED);
+    }
+
+    private FirebaseAuthenticatedUser authenticatePrincipal(String idToken) {
+        try {
+            return firebaseAuthenticationService.authenticate(idToken);
+        } catch (Exception ignored) {
+            Long userId = jwtUtil.getUserIdFromToken(idToken);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ApiException("User not found", org.springframework.http.HttpStatus.UNAUTHORIZED));
+            return new FirebaseAuthenticatedUser(user, user.getFirebaseUid(), user.getEmail());
+        }
     }
 
     private void writeUnauthorized(HttpServletResponse response, String message, String errorCode) throws IOException {

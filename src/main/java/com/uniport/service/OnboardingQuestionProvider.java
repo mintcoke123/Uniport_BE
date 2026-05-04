@@ -12,53 +12,95 @@ import java.util.stream.Collectors;
 @Component
 public class OnboardingQuestionProvider {
 
+    public static final long QUESTION_RISK = 1L;
+    public static final long QUESTION_TERM = 2L;
+    public static final long QUESTION_INVOLVEMENT = 3L;
+    public static final long QUESTION_STYLE = 4L;
+    public static final long QUESTION_LEVEL = 5L;
+    public static final long QUESTION_SECTOR = 6L;
+
+    private static final Map<Long, Integer> RISK_VALUES = Map.of(1L, 1, 2L, 2, 3L, 3);
+    private static final Map<Long, Integer> TERM_VALUES = Map.of(4L, 1, 5L, 2, 6L, 3);
+    private static final Map<Long, Integer> INVOLVEMENT_VALUES = Map.of(7L, 1, 8L, 2, 9L, 3);
+    private static final Map<Long, Integer> STYLE_VALUES = Map.of(10L, 1, 11L, 2, 12L, 3);
+    private static final Map<Long, Integer> LEVEL_VALUES = Map.of(13L, 1, 14L, 2, 15L, 3);
+    private static final Map<Long, String> SECTOR_VALUES = Map.ofEntries(
+            Map.entry(16L, "AI 반도체"),
+            Map.entry(17L, "2차전지(배터리)"),
+            Map.entry(18L, "로봇·휴머노이드"),
+            Map.entry(19L, "전력·전력기기"),
+            Map.entry(20L, "방산"),
+            Map.entry(21L, "바이오·비만치료제"),
+            Map.entry(22L, "자율주행·미래차"),
+            Map.entry(23L, "원전·SMR"),
+            Map.entry(24L, "양자컴퓨터"),
+            Map.entry(25L, "우주·항공")
+    );
+
     public List<OnboardingSurveyQuestionDTO> getQuestions() {
         return List.of(
-                singleQuestion(1L, 1, "1주일 사이 100만원이 95만원(-5%)으로 떨어졌어", "나랑 제일 가까운 반응은?",
-                        option(1L, "원인부터 다시 확인해본다", "손절보다는 이유를 먼저 살핀다"),
-                        option(2L, "일단 조금 더 지켜본다", "흐름을 보고 판단한다"),
-                        option(3L, "추가 매수 기회라고 본다", "하락도 기회라고 생각한다")),
-                singleQuestion(2L, 2, "가격 변동을 얼마나 자주 보고 싶은 편이야?", "나랑 제일 가까운 반응은?",
-                        option(4L, "자주 보면 불안해서 싫다", "가끔 확인하는 게 마음 편하다"),
-                        option(5L, "하루 한 번 정도 OK", "마감 시황 정도는 챙겨본다"),
-                        option(6L, "수시로 보는 것도 재밌다", "시장의 흐름을 놓치고 싶지 않다")),
-                singleQuestion(3L, 3, "이 앱에서 투자를 어느 정도 기간 가져가고 싶어?", "나랑 제일 가까운 반응은?",
-                        option(7L, "1년 안에 결과 보고 싶다", "단기 목표 달성형"),
-                        option(8L, "3~5년 정도면 괜찮다", "중기 성장 추구형"),
-                        option(9L, "10년 이상 길게도 OK", "장기 가치 투자형")),
-                singleQuestion(4L, 4, "나는 이런 식으로 투자 결정을 내리고 싶어", "나의 투자 스타일은?",
-                        option(10L, "숫자/재무제표/지표 보고", "기업의 내재 가치를 분석해서"),
-                        option(11L, "뉴스/스토리/트렌드 보고", "미래 성장 가능성을 예측해서"),
-                        option(12L, "차트/가격 흐름 보고", "시장의 흐름과 타이밍을 잡아서")),
-                singleQuestion(5L, 5, "투자 해본 경험은 어느 정도야?", "나랑 제일 가까운 반응은?",
-                        option(13L, "완전 처음", "계좌도 거의 안 써봄"),
-                        option(14L, "가끔 해봄", "소액으로 몇 번 해봤다"),
-                        option(15L, "익숙함", "1년 이상 꾸준히 해봤다")),
-                OnboardingSurveyQuestionDTO.builder()
-                        .id(6L)
-                        .order(6)
-                        .type("MULTI_SELECT")
-                        .title("현재 가장 관심 있는 투자분야는 무엇인가요?")
-                        .subtitle("관심 있는 키워드를 모두 선택해주세요. (중복 가능)")
-                        .minSelection(1)
-                        .maxSelection(3)
-                        .options(List.of(
-                                option(16L, "AI 반도체", null),
-                                option(17L, "로봇", null),
-                                option(18L, "방산", null),
-                                option(19L, "자율주행", null),
-                                option(20L, "2차전지", null),
-                                option(21L, "전력기기", null),
-                                option(22L, "바이오", null),
-                                option(23L, "원전", null),
-                                option(24L, "우주/로켓", null)
-                        ))
-                        .build()
+                singleQuestion(
+                        QUESTION_RISK,
+                        1,
+                        "100만원을 투자했는데 일주일 만에 5만원 손실이 났다. 내 실제 반응에 가장 가까운 것은?",
+                        "리스크 성향을 확인하는 질문이야.",
+                        option(1L, "불안해서 비중을 줄이거나 매도를 고민한다.", "R1 · 안정"),
+                        option(2L, "이유를 확인하고 조금 더 지켜본다.", "R2 · 중립"),
+                        option(3L, "원래 생길 수 있는 변동이라 생각하고 계획대로 간다.", "R3 · 공격")
+                ),
+                singleQuestion(
+                        QUESTION_TERM,
+                        2,
+                        "투자 결과를 어느 정도 시간 기준으로 보는 편이야?",
+                        "투자 기간 선호를 확인하는 질문이야.",
+                        option(4L, "6개월~1년 안에 흐름과 결과를 보고 싶다.", "T1 · 단기"),
+                        option(5L, "1~5년 정도는 기다릴 수 있다.", "T2 · 중기"),
+                        option(6L, "5년 이상 길게 보고 키우는 편이 좋다.", "T3 · 장기")
+                ),
+                singleQuestion(
+                        QUESTION_INVOLVEMENT,
+                        3,
+                        "투자한 뒤 나는 보통 어떻게 운영하는 편이야?",
+                        "투자 운영 관여도를 확인하는 질문이야.",
+                        option(7L, "자주 보기보다 정해둔 방식으로 천천히 가져가는 편이다.", "M1 · 저관여"),
+                        option(8L, "뉴스나 가격을 가끔 확인하며 조정하는 편이다.", "M2 · 보통"),
+                        option(9L, "흐름을 자주 보고 직접 판단하고 대응하는 편이다.", "M3 · 고관여")
+                ),
+                singleQuestion(
+                        QUESTION_STYLE,
+                        4,
+                        "내가 더 끌리는 투자 판단 방식은?",
+                        "투자 스타일 축을 확인하는 질문이야.",
+                        option(10L, "실적, 재무, 밸류에이션처럼 숫자로 설명되는 투자", "S1 · 가치"),
+                        option(11L, "산업 변화, 제품, 성장성, 미래 스토리로 설명되는 투자", "S2 · 성장"),
+                        option(12L, "차트, 수급, 가격 흐름처럼 타이밍이 중요한 투자", "S3 · 모멘텀")
+                ),
+                singleQuestion(
+                        QUESTION_LEVEL,
+                        5,
+                        "내 투자 경험은 어느 쪽에 더 가까워?",
+                        "투자 난이도와 경험 수준을 확인하는 질문이야.",
+                        option(13L, "완전 처음이거나 계좌 사용이 아직 낯설다.", "LV1"),
+                        option(14L, "소액 투자 경험이 있고 기본 용어는 조금 안다.", "LV2"),
+                        option(15L, "1년 이상 직접 사고팔아 보며 자기 기준이 조금 생겼다.", "LV3")
+                ),
+                singleQuestion(
+                        QUESTION_SECTOR,
+                        6,
+                        "지금 가장 관심 있게 보는 투자 분야는?",
+                        "관심 섹터는 결과 화면과 투자노트에 따로 보여줄게.",
+                        option(16L, "AI 반도체", null),
+                        option(17L, "2차전지(배터리)", null),
+                        option(18L, "로봇·휴머노이드", null),
+                        option(19L, "전력·전력기기", null),
+                        option(20L, "방산", null),
+                        option(21L, "바이오·비만치료제", null),
+                        option(22L, "자율주행·미래차", null),
+                        option(23L, "원전·SMR", null),
+                        option(24L, "양자컴퓨터", null),
+                        option(25L, "우주·항공", null)
+                )
         );
-    }
-
-    public boolean hasQuestion(Long questionId) {
-        return getQuestions().stream().anyMatch(question -> question.getId().equals(questionId));
     }
 
     public OnboardingSurveyQuestionDTO getQuestion(Long questionId) {
@@ -69,23 +111,61 @@ public class OnboardingQuestionProvider {
     }
 
     public Set<Long> getRequiredQuestionIds() {
-        return getQuestions().stream().map(OnboardingSurveyQuestionDTO::getId).collect(Collectors.toSet());
+        return getQuestions().stream()
+                .map(OnboardingSurveyQuestionDTO::getId)
+                .collect(Collectors.toSet());
     }
 
-    public int getOptionScore(Long optionId) {
-        return Map.ofEntries(
-                Map.entry(1L, 1), Map.entry(2L, 2), Map.entry(3L, 3),
-                Map.entry(4L, 1), Map.entry(5L, 2), Map.entry(6L, 3),
-                Map.entry(7L, 1), Map.entry(8L, 2), Map.entry(9L, 3),
-                Map.entry(10L, 1), Map.entry(11L, 2), Map.entry(12L, 3),
-                Map.entry(13L, 1), Map.entry(14L, 2), Map.entry(15L, 3)
-        ).getOrDefault(optionId, 2);
+    public int getRiskValue(Long optionId) {
+        return getRequiredValue(RISK_VALUES, optionId, "risk");
     }
 
-    private OnboardingSurveyQuestionDTO singleQuestion(Long id, int order, String title, String subtitle,
-                                                       OnboardingSurveyOptionDTO first,
-                                                       OnboardingSurveyOptionDTO second,
-                                                       OnboardingSurveyOptionDTO third) {
+    public int getTermValue(Long optionId) {
+        return getRequiredValue(TERM_VALUES, optionId, "term");
+    }
+
+    public int getInvolvementValue(Long optionId) {
+        return getRequiredValue(INVOLVEMENT_VALUES, optionId, "involvement");
+    }
+
+    public int getStyleValue(Long optionId) {
+        return getRequiredValue(STYLE_VALUES, optionId, "style");
+    }
+
+    public int getLevelValue(Long optionId) {
+        return getRequiredValue(LEVEL_VALUES, optionId, "level");
+    }
+
+    public String getLevelLabel(Long optionId) {
+        return switch (getLevelValue(optionId)) {
+            case 1 -> "입문";
+            case 2 -> "기본";
+            case 3 -> "심화";
+            default -> throw new IllegalArgumentException("Unsupported level option: " + optionId);
+        };
+    }
+
+    public String getSectorLabel(Long optionId) {
+        String sector = SECTOR_VALUES.get(optionId);
+        if (sector == null) {
+            throw new IllegalArgumentException("Unknown sector option: " + optionId);
+        }
+        return sector;
+    }
+
+    private int getRequiredValue(Map<Long, Integer> values, Long optionId, String axisName) {
+        Integer value = values.get(optionId);
+        if (value == null) {
+            throw new IllegalArgumentException("Unknown " + axisName + " option: " + optionId);
+        }
+        return value;
+    }
+
+    private OnboardingSurveyQuestionDTO singleQuestion(Long id,
+                                                       int order,
+                                                       String title,
+                                                       String subtitle,
+                                                       OnboardingSurveyOptionDTO... options) {
         return OnboardingSurveyQuestionDTO.builder()
                 .id(id)
                 .order(order)
@@ -94,7 +174,7 @@ public class OnboardingQuestionProvider {
                 .subtitle(subtitle)
                 .minSelection(1)
                 .maxSelection(1)
-                .options(List.of(first, second, third))
+                .options(List.of(options))
                 .build();
     }
 

@@ -15,8 +15,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -41,7 +43,10 @@ public class OnboardingService {
         }
 
         OnboardingSurveyResultDTO result = hasResult(user)
-                ? onboardingResultProvider.getByType(user.getInvestmentProfileResult())
+                ? onboardingResultProvider.getByCharacterName(
+                user.getInvestmentProfileResult(),
+                user.getInvestmentLevel(),
+                user.getInterestSector())
                 : null;
 
         return OnboardingSurveyFlowResponseDTO.builder()
@@ -89,24 +94,37 @@ public class OnboardingService {
             throw new ApiException("answers is required", HttpStatus.BAD_REQUEST);
         }
         if (hasResult(user)) {
-            return onboardingResultProvider.getByType(user.getInvestmentProfileResult());
+            return onboardingResultProvider.getByCharacterName(
+                    user.getInvestmentProfileResult(),
+                    user.getInvestmentLevel(),
+                    user.getInterestSector());
         }
 
-        validateAnswers(request.getAnswers());
+        Map<Long, OnboardingSurveyAnswerDTO> answersByQuestion = validateAnswers(request.getAnswers());
 
-        int singleQuestionScore = request.getAnswers().stream()
-                .filter(answer -> answer.getQuestionId() != null && answer.getQuestionId() <= 5)
-                .mapToInt(answer -> onboardingQuestionProvider.getOptionScore(answer.getOptionIds().get(0)))
-                .sum();
-        double averageScore = singleQuestionScore / 5.0;
+        int risk = getSingleValue(answersByQuestion, OnboardingQuestionProvider.QUESTION_RISK, onboardingQuestionProvider::getRiskValue);
+        int term = getSingleValue(answersByQuestion, OnboardingQuestionProvider.QUESTION_TERM, onboardingQuestionProvider::getTermValue);
+        int involvement = getSingleValue(answersByQuestion, OnboardingQuestionProvider.QUESTION_INVOLVEMENT, onboardingQuestionProvider::getInvolvementValue);
+        int style = getSingleValue(answersByQuestion, OnboardingQuestionProvider.QUESTION_STYLE, onboardingQuestionProvider::getStyleValue);
+        String investmentLevel = onboardingQuestionProvider.getLevelLabel(
+                getSingleSelectedOptionId(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_LEVEL)));
+        String interestSector = onboardingQuestionProvider.getSectorLabel(
+                getSingleSelectedOptionId(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_SECTOR)));
 
-        String resultType = averageScore <= 1.6
-                ? "조심스러운 거북이형"
-                : averageScore <= 2.4 ? "균형잡힌 판다형" : "기회를 찾는 여우형";
+        OnboardingSurveyResultDTO result = onboardingResultProvider.classify(
+                risk,
+                term,
+                style,
+                involvement,
+                investmentLevel,
+                interestSector);
 
-        user.setInvestmentProfileResult(resultType);
+        user.setInvestmentProfileResult(result.getCharacterName());
+        user.setInvestmentLevel(investmentLevel);
+        user.setInterestSector(interestSector);
         userRepository.save(user);
-        return onboardingResultProvider.getByType(resultType);
+
+        return result;
     }
 
     public OnboardingSurveyResultDTO getMyResult(User user) {
@@ -116,7 +134,10 @@ public class OnboardingService {
         if (!hasResult(user)) {
             throw new ApiException("온보딩 결과가 없습니다.", HttpStatus.NOT_FOUND);
         }
-        return onboardingResultProvider.getByType(user.getInvestmentProfileResult());
+        return onboardingResultProvider.getByCharacterName(
+                user.getInvestmentProfileResult(),
+                user.getInvestmentLevel(),
+                user.getInterestSector());
     }
 
     public OnboardingCompleteResponseDTO complete(User user) {
@@ -126,14 +147,15 @@ public class OnboardingService {
         return OnboardingCompleteResponseDTO.builder()
                 .completed(true)
                 .noteCreated(true)
-                .message("첫 투자 노트가 생성되었어요")
-                .nextActionLabel("30일 투자 공부 하러가기")
+                .message("첫 투자노트가 생성되었어요")
+                .nextActionLabel("30일 투자공부하러가기")
                 .build();
     }
 
-    private void validateAnswers(List<OnboardingSurveyAnswerDTO> answers) {
+    private Map<Long, OnboardingSurveyAnswerDTO> validateAnswers(List<OnboardingSurveyAnswerDTO> answers) {
         Set<Long> seenQuestionIds = new HashSet<>();
         Set<Long> requiredQuestionIds = onboardingQuestionProvider.getRequiredQuestionIds();
+        Map<Long, OnboardingSurveyAnswerDTO> answersByQuestion = new HashMap<>();
 
         for (OnboardingSurveyAnswerDTO answer : answers) {
             if (answer == null || answer.getQuestionId() == null || answer.getOptionIds() == null || answer.getOptionIds().isEmpty()) {
@@ -162,14 +184,46 @@ public class OnboardingService {
                     throw new ApiException("Option not found for question: " + answer.getQuestionId(), HttpStatus.NOT_FOUND);
                 }
             }
+
+            answersByQuestion.put(answer.getQuestionId(), answer);
         }
 
         if (!seenQuestionIds.equals(requiredQuestionIds)) {
             throw new ApiException("All survey questions must be answered exactly once", HttpStatus.BAD_REQUEST);
         }
+
+        return answersByQuestion;
+    }
+
+    private int getSingleValue(Map<Long, OnboardingSurveyAnswerDTO> answersByQuestion,
+                               long questionId,
+                               OptionValueResolver resolver) {
+        long optionId = getSingleSelectedOptionId(answersByQuestion.get(questionId));
+        int value = resolver.resolve(optionId);
+        if (value < 1 || value > 3) {
+            throw new ApiException("Mapped answer is out of range for question: " + questionId, HttpStatus.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    private long getSingleSelectedOptionId(OnboardingSurveyAnswerDTO answer) {
+        if (answer == null || answer.getOptionIds() == null || answer.getOptionIds().size() != 1) {
+            throw new ApiException("Each onboarding question must have exactly one selected option", HttpStatus.BAD_REQUEST);
+        }
+        return answer.getOptionIds().get(0);
     }
 
     private boolean hasResult(User user) {
-        return user.getInvestmentProfileResult() != null && !user.getInvestmentProfileResult().isBlank();
+        return user.getInvestmentProfileResult() != null
+                && !user.getInvestmentProfileResult().isBlank()
+                && user.getInvestmentLevel() != null
+                && !user.getInvestmentLevel().isBlank()
+                && user.getInterestSector() != null
+                && !user.getInterestSector().isBlank();
+    }
+
+    @FunctionalInterface
+    private interface OptionValueResolver {
+        int resolve(Long optionId);
     }
 }

@@ -79,4 +79,10 @@ public class User {
 
     @Column(length = 50)
     private String investmentProfileResult;
+
+    @Column(length = 50)
+    private String investmentLevel;
+
+    @Column(length = 100)
+    private String interestSector;
 }

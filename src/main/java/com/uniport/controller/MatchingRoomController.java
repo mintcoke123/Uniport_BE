@@ -112,6 +112,38 @@ public class MatchingRoomController {
         return ResponseEntity.ok(matchingRoomService.join(roomId, user));
     }
 
+    @PostMapping("/{roomId}/invitees")
+    public ResponseEntity<Map<String, Object>> inviteUsers(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @PathVariable String roomId,
+            @RequestBody(required = false) Map<String, Object> body,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        List<Long> inviteeUserIds = new ArrayList<>();
+        if (body != null && body.get("inviteeUserIds") instanceof List<?> rawList) {
+            for (Object item : rawList) {
+                if (item instanceof Number number) {
+                    inviteeUserIds.add(number.longValue());
+                } else if (item != null) {
+                    try {
+                        inviteeUserIds.add(Long.parseLong(item.toString()));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+        return ResponseEntity.ok(matchingRoomService.inviteUsers(roomId, inviteeUserIds, user));
+    }
+
+    @GetMapping("/{roomId}/share-payload")
+    public ResponseEntity<Map<String, Object>> getSharePayload(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @PathVariable String roomId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(matchingRoomService.getSharePayload(roomId, user));
+    }
+
     @PostMapping("/{roomId}/leave")
     public ResponseEntity<Map<String, Object>> leave(
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
@@ -128,5 +160,29 @@ public class MatchingRoomController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(matchingRoomService.start(roomId, user));
+    }
+
+    @PostMapping("/quick-match")
+    public ResponseEntity<Map<String, Object>> quickMatch(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestBody(required = false) Map<String, Object> body,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        String mode = body != null && body.get("mode") != null ? body.get("mode").toString() : "RANDOM";
+        String marketType = body != null && body.get("marketType") != null ? body.get("marketType").toString() : "KR";
+        List<Long> inviteeUserIds = new ArrayList<>();
+        if (body != null && body.get("inviteeUserIds") instanceof List<?> rawList) {
+            for (Object item : rawList) {
+                if (item instanceof Number number) {
+                    inviteeUserIds.add(number.longValue());
+                } else if (item != null) {
+                    try {
+                        inviteeUserIds.add(Long.parseLong(item.toString()));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+        return ResponseEntity.ok(matchingRoomService.quickMatch(mode, marketType, inviteeUserIds, user));
     }
 }

@@ -215,6 +215,89 @@ public class MatchingRoomService {
         );
     }
 
+    @Transactional
+    public Map<String, Object> inviteUsers(String roomId, List<Long> inviteeUserIds, User user) {
+        MatchingRoom room = findRoomByApiIdFlexible(roomId);
+        if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())) {
+            throw new ApiException("초대는 방 참가자만 할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+        if (!"FRIEND".equalsIgnoreCase(room.getMatchType())) {
+            throw new ApiException("친구 초대형 방에서만 초대할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        List<Long> sanitizedInvitees = inviteeUserIds != null ? inviteeUserIds.stream().distinct().toList() : List.of();
+        pendingInviteUserIdsByRoomId.put(room.getId(), new ArrayList<>(sanitizedInvitees));
+
+        return Map.of(
+                "success", true,
+                "message", "친구 초대 목록을 저장했어요.",
+                "detail", getRoomDetail(toApiId(room.getId()), user)
+        );
+    }
+
+    public Map<String, Object> getSharePayload(String roomId, User user) {
+        MatchingRoom room = findRoomByApiIdFlexible(roomId);
+        if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())) {
+            throw new ApiException("공유는 방 참가자만 할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+
+        String inviteCode = room.getInviteCode();
+        String deepLink = "uniport://matching-room/" + toApiId(room.getId()) + "?inviteCode=" + inviteCode;
+        String shareText = room.getName() + "에 같이 참여해요. 초대 코드 " + inviteCode;
+
+        return Map.of(
+                "roomId", toApiId(room.getId()),
+                "inviteCode", inviteCode,
+                "deepLink", deepLink,
+                "shareTitle", room.getName() + " 친구 초대",
+                "shareText", shareText,
+                "kakaoPayload", Map.of(
+                        "title", room.getName() + " 친구 초대",
+                        "description", shareText,
+                        "deepLink", deepLink,
+                        "inviteCode", inviteCode
+                )
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> quickMatch(String mode, String marketType, List<Long> inviteeUserIds, User creator) {
+        String normalizedMode = mode != null ? mode.trim().toUpperCase() : "RANDOM";
+        return switch (normalizedMode) {
+            case "SOLO" -> {
+                Map<String, Object> created = create("나 혼자 주식 왕", VISIBILITY_PRIVATE, 1, "RANDOM", marketType, List.of(), creator);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> room = (Map<String, Object>) created.get("room");
+                String roomId = room != null && room.get("id") != null ? String.valueOf(room.get("id")) : null;
+                Map<String, Object> started = start(roomId, creator);
+                yield Map.of(
+                        "mode", "SOLO",
+                        "message", "혼자 하기 방을 만들고 바로 시작했어요.",
+                        "detail", started.get("detail"),
+                        "teamId", started.get("teamId")
+                );
+            }
+            case "FRIEND" -> {
+                Map<String, Object> created = create("친구와 함께 수익률 경쟁!", VISIBILITY_PRIVATE, 3, "FRIEND", marketType, inviteeUserIds, creator);
+                yield Map.of(
+                        "mode", "FRIEND",
+                        "message", "친구 초대형 방을 만들었어요.",
+                        "room", created.get("room"),
+                        "detail", created.get("detail")
+                );
+            }
+            default -> {
+                Map<String, Object> created = create("랜덤 매칭 방", VISIBILITY_PUBLIC, 3, "RANDOM", marketType, List.of(), creator);
+                yield Map.of(
+                        "mode", "RANDOM",
+                        "message", "랜덤 매칭 방을 만들었어요.",
+                        "room", created.get("room"),
+                        "detail", created.get("detail")
+                );
+            }
+        };
+    }
+
     public Map<String, Object> getRoomDetail(String roomId, User currentUser) {
         MatchingRoom room = findRoomByApiIdFlexible(roomId);
         List<MatchingRoomMember> joinedMembers = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());

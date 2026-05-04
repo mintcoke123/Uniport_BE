@@ -19,9 +19,9 @@ public class OnboardingCompleteResponseDTO {
     @Schema(example = "true", requiredMode = Schema.RequiredMode.REQUIRED)
     private boolean noteCreated;
 
-    @Schema(example = "첫 투자 노트가 생성되었어요", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(example = "첫 투자노트가 생성되었어요", requiredMode = Schema.RequiredMode.REQUIRED)
     private String message;
 
-    @Schema(example = "30일 투자 공부 하러가기", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(example = "30일 투자공부하러가기", requiredMode = Schema.RequiredMode.REQUIRED)
     private String nextActionLabel;
 }

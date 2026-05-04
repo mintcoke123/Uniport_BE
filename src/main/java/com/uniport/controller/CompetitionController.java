@@ -2,11 +2,14 @@ package com.uniport.controller;
 
 import com.uniport.entity.User;
 import com.uniport.service.AuthService;
+import com.uniport.service.CompetitionParticipationService;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.RankingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,11 +32,16 @@ public class CompetitionController {
     private final CompetitionService competitionService;
     private final RankingService rankingService;
     private final AuthService authService;
+    private final CompetitionParticipationService competitionParticipationService;
 
-    public CompetitionController(CompetitionService competitionService, RankingService rankingService, AuthService authService) {
+    public CompetitionController(CompetitionService competitionService,
+                                 RankingService rankingService,
+                                 AuthService authService,
+                                 CompetitionParticipationService competitionParticipationService) {
         this.competitionService = competitionService;
         this.rankingService = rankingService;
         this.authService = authService;
+        this.competitionParticipationService = competitionParticipationService;
     }
 
     @GetMapping("/ongoing")
@@ -104,8 +112,50 @@ public class CompetitionController {
                         "endDate", item.getEndDate()
                 ))
                 .toList());
+        String participantTeamId = resolveParticipantTeamId(user);
+        body.put("application", competitionParticipationService.getApplicationStatus(competitionId, user, participantTeamId));
         body.put("liveRanking", teams.stream().limit(5).toList());
         return ResponseEntity.ok(body);
+    }
+
+    @PostMapping("/{competitionId}/apply")
+    public ResponseEntity<Map<String, Object>> applyToCompetition(
+            @PathVariable Long competitionId,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody(required = false) Map<String, Object> body) {
+        User user = authService.getUserFromToken(authorization != null ? authorization : "");
+        String participantTeamId = body != null && body.get("teamId") != null ? String.valueOf(body.get("teamId")) : resolveParticipantTeamId(user);
+        String participantName = body != null && body.get("teamName") != null ? String.valueOf(body.get("teamName")) : null;
+        return ResponseEntity.ok(competitionParticipationService.apply(competitionId, user, participantTeamId, participantName));
+    }
+
+    @PostMapping("/{competitionId}/cancel-application")
+    public ResponseEntity<Map<String, Object>> cancelCompetitionApplication(
+            @PathVariable Long competitionId,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody(required = false) Map<String, Object> body) {
+        User user = authService.getUserFromToken(authorization != null ? authorization : "");
+        String participantTeamId = body != null && body.get("teamId") != null ? String.valueOf(body.get("teamId")) : resolveParticipantTeamId(user);
+        return ResponseEntity.ok(competitionParticipationService.cancel(competitionId, user, participantTeamId));
+    }
+
+    @GetMapping("/{competitionId}/application-status")
+    public ResponseEntity<Map<String, Object>> getCompetitionApplicationStatus(
+            @PathVariable Long competitionId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
+        return ResponseEntity.ok(competitionParticipationService.getApplicationStatus(
+                competitionId,
+                user,
+                resolveParticipantTeamId(user)
+        ));
+    }
+
+    @GetMapping("/applications/me")
+    public ResponseEntity<List<Map<String, Object>>> getMyCompetitionApplications(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = authService.getUserFromToken(authorization != null ? authorization : "");
+        return ResponseEntity.ok(competitionParticipationService.getMyApplications(user));
     }
 
     private Map<String, Object> buildRemainingTime(String endDate) {
@@ -131,5 +181,15 @@ public class CompetitionController {
 
     private String buildRemainingTimeLabel(String endDate) {
         return String.valueOf(buildRemainingTime(endDate).get("label"));
+    }
+
+    private String resolveParticipantTeamId(User user) {
+        if (user == null) {
+            return null;
+        }
+        if (user.getTeamId() != null && !user.getTeamId().isBlank()) {
+            return user.getTeamId();
+        }
+        return user.getId() != null ? "solo-" + user.getId() : null;
     }
 }
