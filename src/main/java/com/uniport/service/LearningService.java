@@ -129,7 +129,7 @@ public class LearningService {
         return LearningHomeResponseDTO.builder()
                 .level(state.level)
                 .point(state.point)
-                .todayLearningCompleted(LocalDate.now().equals(state.lastCompletedDate))
+                .todayLearningCompleted(LocalDate.now().equals(state.roadmapLastCompletedDate))
                 .course(new LearningHomeCourseDTO(
                         course.id(),
                         course.title(),
@@ -167,6 +167,7 @@ public class LearningService {
         LearningCourseCatalog course = getCourseOrThrow(courseId);
         LearningMockDataProvider.LearningDayCatalog day = getDayOrThrow(courseId, dayId);
         int currentDay = state.currentDayByCourse.getOrDefault(courseId, 1);
+        ensureDayReadable(courseId, dayId, state);
         return LearningDayContentResponseDTO.builder()
                 .courseId(course.id())
                 .day(day.day())
@@ -188,6 +189,7 @@ public class LearningService {
         if ("THEORY".equals(lookup.step().getType())) {
             throw new ApiException("THEORY step cannot be submitted", HttpStatus.BAD_REQUEST);
         }
+        ensureCurrentDayEditable(lookup.course().id(), lookup.day().day(), state);
         Long correctAnswerId = getCorrectAnswerId(stepId);
         boolean isCorrect = correctAnswerId != null && correctAnswerId.equals(request.getSelectedAnswerId());
         state.submittedStepIds.add(stepId);
@@ -211,6 +213,7 @@ public class LearningService {
         LearningUserState state = getOrCreateState(user);
         LearningCourseCatalog course = getCourseOrThrow(courseId);
         LearningMockDataProvider.LearningDayCatalog day = getDayOrThrow(courseId, dayId);
+        ensureCurrentDayEditable(courseId, day.day(), state);
         if (state.completedDaysByCourse.getOrDefault(courseId, Set.of()).contains(day.day())) {
             throw new ApiException("Day already completed", HttpStatus.BAD_REQUEST);
         }
@@ -222,10 +225,17 @@ public class LearningService {
         state.point += 50;
         state.level = Math.max(0, state.point / 300);
         updateStreak(state);
+        state.roadmapLastCompletedDate = LocalDate.now();
 
-        int nextDay = Math.min(day.day() + 1, course.days().size());
-        state.currentDayByCourse.put(courseId, nextDay);
-        state.activeCourseId = courseId;
+        boolean courseCompleted = state.completedDaysByCourse.getOrDefault(courseId, Set.of()).size() >= course.days().size();
+        if (courseCompleted) {
+            state.currentDayByCourse.put(courseId, course.days().size());
+            state.activeCourseId = null;
+        } else {
+            int nextDay = Math.min(day.day() + 1, course.days().size());
+            state.currentDayByCourse.put(courseId, nextDay);
+            state.activeCourseId = courseId;
+        }
         persistState(user.getId(), state);
 
         return LearningDayCompleteResponseDTO.builder()
@@ -353,6 +363,24 @@ public class LearningService {
                 .allMatch(step -> state.submittedStepIds.contains(step.getId()));
     }
 
+    private void ensureDayReadable(long courseId, int dayId, LearningUserState state) {
+        int currentDay = state.currentDayByCourse.getOrDefault(courseId, 1);
+        boolean completed = state.completedDaysByCourse.getOrDefault(courseId, Set.of()).contains(dayId);
+        if (!completed && dayId > currentDay) {
+            throw new ApiException("Learning day is locked", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private void ensureCurrentDayEditable(long courseId, int dayId, LearningUserState state) {
+        if (state.activeCourseId == null || !state.activeCourseId.equals(courseId)) {
+            throw new ApiException("Learning course is not active", HttpStatus.BAD_REQUEST);
+        }
+        int currentDay = state.currentDayByCourse.getOrDefault(courseId, 1);
+        if (dayId != currentDay) {
+            throw new ApiException("Only the current learning day can be submitted or completed", HttpStatus.BAD_REQUEST);
+        }
+    }
+
     private Long getCorrectAnswerId(long stepId) {
         return switch ((int) stepId) {
             case 1002, 1003, 302, 2002, 4002, 5002 -> 1L;
@@ -403,6 +431,7 @@ public class LearningService {
                 .activeCourseId(state.activeCourseId)
                 .streakDays(state.streakDays)
                 .lastCompletedDate(state.lastCompletedDate)
+                .roadmapLastCompletedDate(state.roadmapLastCompletedDate)
                 .currentDayByCourseJson(writeValue(stringifyMap(state.currentDayByCourse)))
                 .completedDaysByCourseJson(writeValue(stringifyCompletedMap(state.completedDaysByCourse)))
                 .submittedStepIdsJson(writeValue(state.submittedStepIds))
@@ -444,6 +473,7 @@ public class LearningService {
         state.activeCourseId = entity.getActiveCourseId();
         state.streakDays = entity.getStreakDays();
         state.lastCompletedDate = entity.getLastCompletedDate();
+        state.roadmapLastCompletedDate = entity.getRoadmapLastCompletedDate();
 
         readValue(entity.getCurrentDayByCourseJson(), CURRENT_DAY_TYPE).forEach((key, value) -> state.currentDayByCourse.put(Long.parseLong(key), value));
         readValue(entity.getCompletedDaysByCourseJson(), COMPLETED_DAY_TYPE).forEach((key, value) -> state.completedDaysByCourse.put(Long.parseLong(key), new HashSet<>(value)));
@@ -536,6 +566,7 @@ public class LearningService {
         private Long activeCourseId;
         private int streakDays = 0;
         private LocalDate lastCompletedDate;
+        private LocalDate roadmapLastCompletedDate;
         private final Map<Long, Integer> currentDayByCourse = new HashMap<>();
         private final Map<Long, Set<Integer>> completedDaysByCourse = new HashMap<>();
         private final Set<Long> submittedStepIds = new HashSet<>();

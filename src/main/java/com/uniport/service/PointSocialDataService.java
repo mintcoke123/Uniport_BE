@@ -73,6 +73,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -236,17 +237,23 @@ public class PointSocialDataService {
 
         List<PointShopProduct> filtered = pointShopProductRepository.findAllByOrderBySortOrderAscCreatedAtDesc().stream()
                 .filter(product -> safeCategory == null || safeCategory.equalsIgnoreCase(product.getCategory()))
-                .sorted(resolveProductComparator(safeSort))
+                .toList();
+        Map<Long, Integer> availableStockByProduct = new HashMap<>();
+        filtered.forEach(product -> availableStockByProduct.put(product.getId(), getAvailableStockCount(product.getId())));
+        List<PointShopProduct> sorted = filtered.stream()
+                .sorted(resolveProductComparator(safeSort, availableStockByProduct))
                 .toList();
 
-        int fromIndex = Math.min(safePage * safeSize, filtered.size());
-        int toIndex = Math.min(fromIndex + safeSize, filtered.size());
+        int fromIndex = Math.min(safePage * safeSize, sorted.size());
+        int toIndex = Math.min(fromIndex + safeSize, sorted.size());
 
         return ShopItemsResponseDTO.builder()
-                .items(filtered.subList(fromIndex, toIndex).stream().map(this::toShopItemDto).toList())
+                .items(sorted.subList(fromIndex, toIndex).stream()
+                        .map(product -> toShopItemDto(product, availableStockByProduct.getOrDefault(product.getId(), 0)))
+                        .toList())
                 .page(safePage)
                 .size(safeSize)
-                .hasNext(toIndex < filtered.size())
+                .hasNext(toIndex < sorted.size())
                 .build();
     }
 
@@ -254,11 +261,11 @@ public class PointSocialDataService {
         PointShopProduct product = getRequiredProduct(itemId);
         int currentBalance = getBalance(user);
         int remaining = currentBalance - safeInt(product.getPricePoint());
-        int availableInventoryCount = syncAvailableStockCount(product);
+        int availableInventoryCount = getAvailableStockCount(product.getId());
         boolean hasInventory = availableInventoryCount > 0;
         boolean canRedeem = remaining >= 0 && hasInventory && "ACTIVE".equalsIgnoreCase(product.getStatus());
         return ShopRedemptionPreviewResponseDTO.builder()
-                .item(toShopItemDto(product))
+                .item(toShopItemDto(product, availableInventoryCount))
                 .point(ShopPreviewPointDTO.builder()
                         .currentBalance(currentBalance)
                         .requiredPoint(safeInt(product.getPricePoint()))
@@ -300,7 +307,7 @@ public class PointSocialDataService {
         inventory.setStatus("ASSIGNED");
         inventory.setAssignedOrderId("REDEEM_" + order.getId());
         gifticonInventoryRepository.save(inventory);
-        syncAvailableStockCount(product);
+        updatePersistedStockCount(product);
 
         PointTransaction transaction = pointTransactionRepository.save(PointTransaction.builder()
                 .user(user)
@@ -357,13 +364,20 @@ public class PointSocialDataService {
 
     public FriendListResponseDTO getFriends(User user, String keyword) {
         String normalized = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
-        List<FriendListItemDTO> items = friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(user.getId(), user.getId()).stream()
-                .filter(relation -> "ACCEPTED".equalsIgnoreCase(relation.getStatus()))
-                .map(relation -> relation.getRequesterUser().getId().equals(user.getId()) ? relation.getAddresseeUser() : relation.getRequesterUser())
-                .filter(friend -> normalized.isBlank() || friend.getNickname().toLowerCase(Locale.ROOT).contains(normalized))
-                .distinct()
-                .map(this::toFriendListItem)
-                .toList();
+        List<FriendListItemDTO> items;
+        if (normalized.isBlank()) {
+            items = friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(user.getId(), user.getId()).stream()
+                    .filter(relation -> "ACCEPTED".equalsIgnoreCase(relation.getStatus()))
+                    .map(relation -> relation.getRequesterUser().getId().equals(user.getId()) ? relation.getAddresseeUser() : relation.getRequesterUser())
+                    .distinct()
+                    .map(friend -> toFriendListItem(friend, "FRIEND"))
+                    .toList();
+        } else {
+            items = userRepository.findTop10ByNicknameContainingIgnoreCaseOrStudentIdContaining(normalized, normalized).stream()
+                    .filter(candidate -> !candidate.getId().equals(user.getId()))
+                    .map(candidate -> toFriendListItem(candidate, resolveFriendRelationLabel(user.getId(), candidate.getId())))
+                    .toList();
+        }
         return FriendListResponseDTO.builder().items(items).build();
     }
 
@@ -616,7 +630,7 @@ public class PointSocialDataService {
         );
     }
 
-    private FriendListItemDTO toFriendListItem(User friend) {
+    private FriendListItemDTO toFriendListItem(User friend, String relationStatus) {
         LearningProgressSnapshot learningProgress = getLearningProgress(friend);
         return FriendListItemDTO.builder()
                 .userId("USER_" + friend.getId())
@@ -626,8 +640,8 @@ public class PointSocialDataService {
                 .investmentProfileLabel(friend.getInvestmentProfileResult())
                 .currentXp(learningProgress.currentExp())
                 .maxXp(learningProgress.maxExp())
-                .relationLabel("친구")
-                .description(friend.getTeamId() != null ? "같은 팀에서 활동 중" : "함께 공부하는 친구")
+                .relationLabel(toRelationLabel(relationStatus))
+                .description(toFriendDescription(friend, relationStatus))
                 .build();
     }
 
@@ -658,8 +672,7 @@ public class PointSocialDataService {
                 .build();
     }
 
-    private ShopItemDTO toShopItemDto(PointShopProduct product) {
-        int availableInventoryCount = syncAvailableStockCount(product);
+    private ShopItemDTO toShopItemDto(PointShopProduct product, int availableInventoryCount) {
         boolean available = availableInventoryCount > 0;
         return ShopItemDTO.builder()
                 .itemId("ITEM_" + product.getId())
@@ -672,22 +685,61 @@ public class PointSocialDataService {
                 .build();
     }
 
-    private Comparator<PointShopProduct> resolveProductComparator(String sort) {
+    private Comparator<PointShopProduct> resolveProductComparator(String sort, Map<Long, Integer> availableStockByProduct) {
         return switch (sort) {
             case "LOW_POINT" -> Comparator.comparingInt(product -> safeInt(product.getPricePoint()));
             case "HIGH_POINT" -> Comparator.comparingInt((PointShopProduct product) -> safeInt(product.getPricePoint())).reversed();
-            default -> Comparator.comparingInt((PointShopProduct product) -> syncAvailableStockCount(product)).reversed()
+            default -> Comparator.comparingInt((PointShopProduct product) -> availableStockByProduct.getOrDefault(product.getId(), 0)).reversed()
                     .thenComparingInt(product -> safeInt(product.getSortOrder()));
         };
     }
 
-    private int syncAvailableStockCount(PointShopProduct product) {
-        int availableInventoryCount = Math.toIntExact(gifticonInventoryRepository.countByProduct_IdAndStatus(product.getId(), "AVAILABLE"));
+    private int updatePersistedStockCount(PointShopProduct product) {
+        int availableInventoryCount = getAvailableStockCount(product.getId());
         if (safeInt(product.getStockCount()) != availableInventoryCount) {
             product.setStockCount(availableInventoryCount);
             pointShopProductRepository.save(product);
         }
         return availableInventoryCount;
+    }
+
+    private int getAvailableStockCount(Long productId) {
+        return Math.toIntExact(gifticonInventoryRepository.countByProduct_IdAndStatus(productId, "AVAILABLE"));
+    }
+
+    private String resolveFriendRelationLabel(Long userId, Long otherUserId) {
+        return friendRelationRepository.findBetweenUsers(userId, otherUserId)
+                .map(relation -> {
+                    if ("ACCEPTED".equalsIgnoreCase(relation.getStatus())) {
+                        return "FRIEND";
+                    }
+                    if ("REQUESTED".equalsIgnoreCase(relation.getStatus())) {
+                        return relation.getRequesterUser().getId().equals(userId) ? "REQUESTED_SENT" : "REQUESTED_RECEIVED";
+                    }
+                    if ("REJECTED".equalsIgnoreCase(relation.getStatus())) {
+                        return "NONE";
+                    }
+                    return relation.getStatus();
+                })
+                .orElse("NONE");
+    }
+
+    private String toRelationLabel(String relationStatus) {
+        return switch (relationStatus) {
+            case "FRIEND" -> "친구";
+            case "REQUESTED_SENT" -> "요청 보냄";
+            case "REQUESTED_RECEIVED" -> "받은 요청";
+            default -> "요청 가능";
+        };
+    }
+
+    private String toFriendDescription(User friend, String relationStatus) {
+        return switch (relationStatus) {
+            case "FRIEND" -> friend.getTeamId() != null ? "같은 팀에서 활동 중" : "함께 공부하는 친구";
+            case "REQUESTED_SENT" -> "상대의 수락을 기다리는 중";
+            case "REQUESTED_RECEIVED" -> "수락 또는 거절이 필요한 요청";
+            default -> friend.getTeamId() != null ? "같은 팀 소속 유저" : "친구 요청을 보낼 수 있는 유저";
+        };
     }
 
     private ShopRedemptionListItemDTO toRedemptionListItem(PointShopOrder order) {

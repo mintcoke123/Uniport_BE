@@ -39,6 +39,8 @@ public class LearningUserStateEntity extends AuditableEntity {
 
     private LocalDate lastCompletedDate;
 
+    private LocalDate roadmapLastCompletedDate;
+
     @Lob
     @Column(nullable = false)
     private String currentDayByCourseJson;

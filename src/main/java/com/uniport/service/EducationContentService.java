@@ -1,5 +1,6 @@
 package com.uniport.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,9 +17,15 @@ import com.uniport.dto.EducationQuizResponseDTO;
 import com.uniport.dto.EducationQuizSubmitRequestDTO;
 import com.uniport.dto.EducationQuizSubmitResponseDTO;
 import com.uniport.dto.EducationTrackSummaryDTO;
+import com.uniport.entity.EducationCardEntity;
+import com.uniport.entity.EducationOverviewEntity;
+import com.uniport.entity.EducationQuizEntity;
 import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.repository.EducationCardRepository;
+import com.uniport.repository.EducationOverviewRepository;
+import com.uniport.repository.EducationQuizRepository;
 import com.uniport.repository.LearningUserStateRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.core.io.ClassPathResource;
@@ -26,8 +33,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -52,34 +61,67 @@ public class EducationContentService {
     private static final TypeReference<Map<String, Integer>> CURRENT_DAY_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, Set<Integer>>> COMPLETED_DAYS_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, Map<String, Integer>>> QUIZ_ANSWERS_TYPE = new TypeReference<>() {};
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
     private final LearningUserStateRepository learningUserStateRepository;
+    private final EducationOverviewRepository educationOverviewRepository;
+    private final EducationCardRepository educationCardRepository;
+    private final EducationQuizRepository educationQuizRepository;
 
-    private List<JsonNode> cards = List.of();
-    private List<JsonNode> overviews = List.of();
-    private List<JsonNode> quizzes = List.of();
-    private Map<Integer, String> svgPresetByIdx = Map.of();
-
-    public EducationContentService(LearningUserStateRepository learningUserStateRepository) {
+    public EducationContentService(LearningUserStateRepository learningUserStateRepository,
+                                   EducationOverviewRepository educationOverviewRepository,
+                                   EducationCardRepository educationCardRepository,
+                                   EducationQuizRepository educationQuizRepository) {
         this.learningUserStateRepository = learningUserStateRepository;
+        this.educationOverviewRepository = educationOverviewRepository;
+        this.educationCardRepository = educationCardRepository;
+        this.educationQuizRepository = educationQuizRepository;
     }
 
     @PostConstruct
-    public void loadResources() {
-        this.cards = readArray("education/cards.json");
-        this.overviews = readArray("education/education_overviews.json");
-        this.quizzes = readArray("education/education_quizzes.json");
-        this.svgPresetByIdx = parseSvgPresetMap("education/chart_svgs.js");
+    @Transactional
+    public void seedDatabaseIfNeeded() {
+        if (educationOverviewRepository.count() > 0
+                && educationCardRepository.count() > 0
+                && educationQuizRepository.count() > 0) {
+            return;
+        }
+
+        List<JsonNode> overviewNodes = readArray("education/education_overviews.json");
+        List<JsonNode> cardNodes = readArray("education/cards.json");
+        List<JsonNode> quizNodes = readArray("education/education_quizzes.json");
+        Map<Integer, String> svgPresetByIdx = parseSvgPresetMap("education/chart_svgs.js");
+
+        if (educationOverviewRepository.count() == 0) {
+            List<EducationOverviewEntity> overviewEntities = overviewNodes.stream()
+                    .map(this::toOverviewEntity)
+                    .toList();
+            educationOverviewRepository.saveAll(overviewEntities);
+        }
+
+        if (educationCardRepository.count() == 0) {
+            List<EducationCardEntity> cardEntities = cardNodes.stream()
+                    .map(node -> toCardEntity(node, svgPresetByIdx))
+                    .toList();
+            educationCardRepository.saveAll(cardEntities);
+        }
+
+        if (educationQuizRepository.count() == 0) {
+            List<EducationQuizEntity> quizEntities = quizNodes.stream()
+                    .map(this::toQuizEntity)
+                    .toList();
+            educationQuizRepository.saveAll(quizEntities);
+        }
     }
 
     public EducationCatalogResponseDTO getCatalog() {
         LinkedHashSet<String> sectorOrder = new LinkedHashSet<>();
         Map<String, EducationTrackSummaryDTO> grouped = new LinkedHashMap<>();
 
-        for (JsonNode node : overviews) {
-            String track = normalizeTrack(text(node, "track"));
-            String sector = nullableText(node, "sector");
-            int day = node.path("day").asInt(0);
+        for (EducationOverviewEntity entity : educationOverviewRepository.findAllByOrderByTrackAscSectorAscDayNumberAsc()) {
+            String track = normalizeTrack(entity.getTrack());
+            String sector = entity.getSector();
+            int day = safeInt(entity.getDayNumber());
             String key = track + "|" + Objects.toString(sector, "");
 
             if (sector != null && !sector.isBlank()) {
@@ -87,7 +129,7 @@ public class EducationContentService {
             }
 
             grouped.compute(key, (ignored, current) -> {
-                String levelLabel = text(node, "levelLabel");
+                String levelLabel = entity.getLevelLabel();
                 String title = sector == null
                         ? levelLabel + " " + dayCountLabel(track, day)
                         : sector + " " + levelLabel + " 모듈";
@@ -127,38 +169,35 @@ public class EducationContentService {
         String normalizedTrack = normalizeRequestTrack(track);
         String normalizedSector = normalizeSector(normalizedTrack, sector);
 
-        JsonNode overviewNode = overviews.stream()
-                .filter(node -> normalizedTrack.equals(normalizeTrack(text(node, "track"))))
-                .filter(node -> day == node.path("day").asInt())
-                .filter(node -> Objects.equals(normalizedSector, nullableText(node, "sector")))
-                .findFirst()
+        EducationOverviewEntity overviewEntity = educationOverviewRepository
+                .findByTrackAndSectorAndDayNumber(normalizedTrack, normalizedSector, day)
                 .orElse(null);
 
-        List<EducationCardDTO> dayCards = cards.stream()
-                .filter(node -> normalizedTrack.equals(normalizeTrack(text(node, "track"))))
-                .filter(node -> day == node.path("day").asInt())
-                .filter(node -> Objects.equals(normalizedSector, cardSector(node)))
-                .sorted(Comparator.comparingInt(node -> node.path("idx").asInt()))
-                .map(node -> toCardDto(node, normalizedTrack))
+        List<EducationCardDTO> dayCards = educationCardRepository
+                .findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(normalizedTrack, normalizedSector, day).stream()
+                .map(this::toCardDto)
                 .toList();
 
-        List<JsonNode> dayQuizzes = filterQuizzes(normalizedTrack, day, normalizedSector, null);
-        if (overviewNode == null && dayCards.isEmpty() && dayQuizzes.isEmpty()) {
+        List<EducationQuizEntity> dayQuizEntities = filterQuizzes(normalizedTrack, day, normalizedSector, null);
+        if (overviewEntity == null && dayCards.isEmpty() && dayQuizEntities.isEmpty()) {
             throw new ApiException("Education day content not found", HttpStatus.NOT_FOUND);
         }
 
-        String mode = dayQuizzes.isEmpty() ? inferMode(normalizedTrack, day) : normalizeMode(text(dayQuizzes.getFirst(), "source"));
+        String mode = dayQuizEntities.isEmpty()
+                ? inferMode(normalizedTrack, day)
+                : normalizeMode(dayQuizEntities.getFirst().getSourceMode());
+
         return EducationDayContentResponseDTO.builder()
                 .contentVersion(CONTENT_VERSION)
                 .track(normalizedTrack)
                 .sector(normalizedSector)
                 .day(day)
-                .overview(overviewNode == null ? null : toOverviewDto(overviewNode))
+                .overview(overviewEntity == null ? null : toOverviewDto(overviewEntity))
                 .cards(dayCards)
                 .quiz(EducationQuizMetaDTO.builder()
                         .mode(mode)
-                        .questionCount(dayQuizzes.size())
-                        .available(!dayQuizzes.isEmpty())
+                        .questionCount(dayQuizEntities.size())
+                        .available(!dayQuizEntities.isEmpty())
                         .build())
                 .build();
     }
@@ -168,15 +207,15 @@ public class EducationContentService {
         String normalizedSector = normalizeSector(normalizedTrack, sector);
         String normalizedMode = mode == null || mode.isBlank() ? null : normalizeMode(mode);
 
-        List<JsonNode> filtered = filterQuizzes(normalizedTrack, day, normalizedSector, normalizedMode);
+        List<EducationQuizEntity> filtered = filterQuizzes(normalizedTrack, day, normalizedSector, normalizedMode);
         if (filtered.isEmpty()) {
             throw new ApiException("Education quiz not found", HttpStatus.NOT_FOUND);
         }
 
-        String responseMode = normalizedMode != null ? normalizedMode : normalizeMode(text(filtered.getFirst(), "source"));
+        String responseMode = normalizedMode != null ? normalizedMode : normalizeMode(filtered.getFirst().getSourceMode());
         List<EducationQuizQuestionDTO> questions = filtered.stream()
-                .sorted(Comparator.comparingInt(node -> node.path("quizNumber").asInt()))
-                .map(node -> toQuestionDto(node, normalizedTrack, normalizedSector, day))
+                .sorted(Comparator.comparingInt(entity -> safeInt(entity.getQuizNumber())))
+                .map(entity -> toQuestionDto(entity, normalizedTrack, normalizedSector, day))
                 .toList();
 
         return EducationQuizResponseDTO.builder()
@@ -265,8 +304,14 @@ public class EducationContentService {
             throw new ApiException("Education day completion requirements are not met", HttpStatus.BAD_REQUEST);
         }
 
+        int totalDays = getTotalDays(normalizedTrack, normalizedSector);
         state.completedDaysByTrack.computeIfAbsent(trackKey, ignored -> new HashSet<>()).add(day);
-        state.currentDayByTrack.put(trackKey, day + 1);
+        Integer nextDay = day < totalDays ? day + 1 : null;
+        if (nextDay == null) {
+            state.currentDayByTrack.remove(trackKey);
+        } else {
+            state.currentDayByTrack.put(trackKey, nextDay);
+        }
         state.point += 30;
         state.level = Math.max(0, state.point / 300);
         updateStreak(state);
@@ -280,7 +325,7 @@ public class EducationContentService {
                 .streakDays(state.streakDays)
                 .earnedPoint(30)
                 .earnedExp(80)
-                .nextDay(day + 1)
+                .nextDay(nextDay)
                 .completionTitle("Education day completed")
                 .completionDescription("Quiz progress has been saved to the learning database.")
                 .build();
@@ -307,66 +352,64 @@ public class EducationContentService {
         }
     }
 
-    private List<JsonNode> filterQuizzes(String track, int day, String sector, String mode) {
-        return quizzes.stream()
-                .filter(node -> track.equals(normalizeTrack(text(node, "track"))))
-                .filter(node -> day == node.path("day").asInt())
-                .filter(node -> Objects.equals(sector, nullableText(node, "sector")))
-                .filter(node -> mode == null || mode.equals(normalizeMode(text(node, "source"))))
-                .toList();
+    private List<EducationQuizEntity> filterQuizzes(String track, int day, String sector, String mode) {
+        if (mode == null) {
+            return educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(track, sector, day);
+        }
+        return educationQuizRepository.findByTrackAndSectorAndDayNumberAndSourceModeOrderByQuizNumberAsc(track, sector, day, mode);
     }
 
-    private EducationOverviewDTO toOverviewDto(JsonNode node) {
+    private EducationOverviewDTO toOverviewDto(EducationOverviewEntity entity) {
         return EducationOverviewDTO.builder()
-                .levelLabel(text(node, "levelLabel"))
-                .dayLabel(text(node, "dayLabel"))
-                .title(text(node, "title"))
-                .summary1(text(node, "summary1"))
-                .summary2(text(node, "summary2"))
-                .keyPoints(readStringList(node.path("keyPoints")))
-                .ctaLabel(text(node, "ctaLabel"))
+                .levelLabel(entity.getLevelLabel())
+                .dayLabel(entity.getDayLabel())
+                .title(entity.getTitle())
+                .summary1(entity.getSummary1())
+                .summary2(entity.getSummary2())
+                .keyPoints(readStringList(entity.getKeyPointsJson()))
+                .ctaLabel(entity.getCtaLabel())
                 .build();
     }
 
-    private EducationCardDTO toCardDto(JsonNode node, String track) {
-        int idx = node.path("idx").asInt();
+    private EducationCardDTO toCardDto(EducationCardEntity entity) {
         return EducationCardDTO.builder()
-                .idx(idx)
-                .sheet(text(node, "sheet"))
-                .track(track)
-                .sector(cardSector(node))
-                .day(node.path("day").asInt())
-                .section(text(node, "section"))
-                .cardNumber(text(node, "card_number"))
-                .assetId(text(node, "asset_id"))
-                .title(text(node, "title"))
-                .text(text(node, "text"))
-                .imageType(text(node, "image_type"))
-                .svgPreset(svgPresetByIdx.get(idx))
-                .visual(node.get("card_visual"))
+                .idx(safeInt(entity.getSourceIdx()))
+                .sheet(entity.getSheet())
+                .track(entity.getTrack())
+                .sector(entity.getSector())
+                .day(safeInt(entity.getDayNumber()))
+                .section(entity.getSection())
+                .cardNumber(entity.getCardNumber())
+                .assetId(entity.getAssetId())
+                .title(entity.getTitle())
+                .text(entity.getText())
+                .imageType(entity.getImageType())
+                .svgPreset(entity.getSvgPreset())
+                .visual(readJsonNode(entity.getVisualJson()))
                 .build();
     }
 
-    private EducationQuizQuestionDTO toQuestionDto(JsonNode node, String track, String sector, int day) {
+    private EducationQuizQuestionDTO toQuestionDto(EducationQuizEntity entity, String track, String sector, int day) {
+        List<String> optionTexts = readStringList(entity.getOptionsJson());
         List<EducationQuizOptionDTO> options = new ArrayList<>();
-        JsonNode optionNode = node.path("options");
-        for (int i = 0; i < optionNode.size(); i++) {
+        for (int i = 0; i < optionTexts.size(); i++) {
             options.add(EducationQuizOptionDTO.builder()
                     .id(i + 1)
-                    .text(optionNode.get(i).asText())
+                    .text(optionTexts.get(i))
                     .build());
         }
-        int quizNumber = node.path("quizNumber").asInt();
+
+        int quizNumber = safeInt(entity.getQuizNumber());
         return EducationQuizQuestionDTO.builder()
                 .id(buildQuestionId(track, sector, day, quizNumber))
                 .quizNumber(quizNumber)
-                .quizType(text(node, "quizType"))
-                .question(text(node, "question"))
+                .quizType(entity.getQuizType())
+                .question(entity.getQuestion())
                 .options(options)
-                .answerIndex(node.path("answerIndex").asInt())
-                .topic(text(node, "topic"))
-                .area(text(node, "area"))
-                .intent(text(node, "intent"))
+                .answerIndex(safeInt(entity.getAnswerIndex()))
+                .topic(entity.getTopic())
+                .area(entity.getArea())
+                .intent(entity.getIntent())
                 .build();
     }
 
@@ -380,6 +423,13 @@ public class EducationContentService {
             builder.append("-").append(Math.abs(sector.hashCode()));
         }
         return builder.toString();
+    }
+
+    private int getTotalDays(String track, String sector) {
+        return educationOverviewRepository.findByTrackAndSectorOrderByDayNumberAsc(track, sector).stream()
+                .mapToInt(entity -> safeInt(entity.getDayNumber()))
+                .max()
+                .orElse(0);
     }
 
     private boolean isDayReadyToComplete(EducationQuizResponseDTO quiz, EducationProgressState state) {
@@ -421,6 +471,7 @@ public class EducationContentService {
                 .activeCourseId(existing == null ? null : existing.getActiveCourseId())
                 .streakDays(state.streakDays)
                 .lastCompletedDate(state.lastCompletedDate)
+                .roadmapLastCompletedDate(existing == null ? null : existing.getRoadmapLastCompletedDate())
                 .currentDayByCourseJson(existing == null ? "{}" : defaultObjectJson(existing.getCurrentDayByCourseJson()))
                 .completedDaysByCourseJson(existing == null ? "{}" : defaultObjectJson(existing.getCompletedDaysByCourseJson()))
                 .submittedStepIdsJson(existing == null ? "[]" : defaultArrayJson(existing.getSubmittedStepIdsJson()))
@@ -431,7 +482,7 @@ public class EducationContentService {
     }
 
     private void updateStreak(EducationProgressState state) {
-        java.time.LocalDate today = java.time.LocalDate.now();
+        LocalDate today = LocalDate.now();
         if (today.equals(state.lastCompletedDate)) {
             return;
         }
@@ -494,6 +545,57 @@ public class EducationContentService {
         return day == 20 || day == 26 ? "review" : "daily";
     }
 
+    private EducationOverviewEntity toOverviewEntity(JsonNode node) {
+        return EducationOverviewEntity.builder()
+                .track(normalizeTrack(text(node, "track")))
+                .sector(nullableText(node, "sector"))
+                .dayNumber(node.path("day").asInt())
+                .levelLabel(text(node, "levelLabel"))
+                .dayLabel(text(node, "dayLabel"))
+                .title(text(node, "title"))
+                .summary1(text(node, "summary1"))
+                .summary2(text(node, "summary2"))
+                .keyPointsJson(writeValue(readStringList(node.path("keyPoints"))))
+                .ctaLabel(text(node, "ctaLabel"))
+                .build();
+    }
+
+    private EducationCardEntity toCardEntity(JsonNode node, Map<Integer, String> svgPresetByIdx) {
+        int idx = node.path("idx").asInt();
+        return EducationCardEntity.builder()
+                .sourceIdx(idx)
+                .assetId(nullableText(node, "asset_id"))
+                .sheet(text(node, "sheet"))
+                .track(normalizeTrack(text(node, "track")))
+                .sector(cardSector(node))
+                .dayNumber(node.path("day").asInt())
+                .section(text(node, "section"))
+                .cardNumber(text(node, "card_number"))
+                .title(text(node, "title"))
+                .text(text(node, "text"))
+                .imageType(text(node, "image_type"))
+                .svgPreset(svgPresetByIdx.get(idx))
+                .visualJson(writeValue(node.get("card_visual")))
+                .build();
+    }
+
+    private EducationQuizEntity toQuizEntity(JsonNode node) {
+        return EducationQuizEntity.builder()
+                .sourceMode(normalizeMode(text(node, "source")))
+                .track(normalizeTrack(text(node, "track")))
+                .sector(nullableText(node, "sector"))
+                .dayNumber(node.path("day").asInt())
+                .quizNumber(node.path("quizNumber").asInt())
+                .quizType(text(node, "quizType"))
+                .question(text(node, "question"))
+                .optionsJson(writeValue(readStringList(node.path("options"))))
+                .answerIndex(node.path("answerIndex").asInt())
+                .topic(text(node, "topic"))
+                .area(text(node, "area"))
+                .intent(text(node, "intent"))
+                .build();
+    }
+
     private String cardSector(JsonNode node) {
         String sector = nullableText(node, "sector");
         if (sector != null) {
@@ -503,84 +605,103 @@ public class EducationContentService {
         return track != null && track.contains("sector") ? nullableText(node, "section") : null;
     }
 
-    private List<String> readStringList(JsonNode node) {
-        List<String> result = new ArrayList<>();
-        if (node != null && node.isArray()) {
-            node.forEach(item -> result.add(item.asText()));
-        }
-        return result;
-    }
-
     private List<JsonNode> readArray(String resourcePath) {
         try (InputStream inputStream = new ClassPathResource(resourcePath).getInputStream()) {
             JsonNode root = OBJECT_MAPPER.readTree(inputStream);
             if (!root.isArray()) {
-                throw new ApiException("Education resource is not an array: " + resourcePath, HttpStatus.INTERNAL_SERVER_ERROR);
+                throw new IllegalStateException("Expected array resource: " + resourcePath);
             }
             List<JsonNode> items = new ArrayList<>();
             root.forEach(items::add);
             return items;
-        } catch (ApiException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new ApiException("Failed to load education resource: " + resourcePath, HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read education resource: " + resourcePath, exception);
         }
+    }
+
+    private Map<Integer, String> parseSvgPresetMap(String resourcePath) {
+        String content = readResourceText(resourcePath);
+        Matcher matcher = SVG_MAP_PATTERN.matcher(content);
+        Map<Integer, String> result = new HashMap<>();
+        while (matcher.find()) {
+            result.put(Integer.parseInt(matcher.group(1)), matcher.group(2));
+        }
+        return result;
+    }
+
+    private String readResourceText(String resourcePath) {
+        try (InputStream inputStream = new ClassPathResource(resourcePath).getInputStream()) {
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read education resource: " + resourcePath, exception);
+        }
+    }
+
+    private List<String> readStringList(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return List.of();
+        }
+        if (!node.isArray()) {
+            return List.of(node.asText());
+        }
+        List<String> values = new ArrayList<>();
+        node.forEach(item -> values.add(item.asText()));
+        return values;
+    }
+
+    private List<String> readStringList(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(json, STRING_LIST_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to parse string list json", exception);
+        }
+    }
+
+    private JsonNode readJsonNode(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.readTree(json);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to parse education card visual json", exception);
+        }
+    }
+
+    private <T> T readObject(String json, TypeReference<T> typeReference) {
+        if (json == null || json.isBlank()) {
+            return defaultValue(typeReference);
+        }
+        try {
+            return OBJECT_MAPPER.readValue(json, typeReference);
+        } catch (JsonProcessingException exception) {
+            return defaultValue(typeReference);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T defaultValue(TypeReference<T> typeReference) {
+        if (typeReference.getType().getTypeName().contains("Set")) {
+            return (T) new HashMap<String, Set<Integer>>();
+        }
+        if (typeReference.getType().getTypeName().contains("Map<java.lang.String, java.lang.Integer>")) {
+            return (T) new HashMap<String, Integer>();
+        }
+        if (typeReference.getType().getTypeName().contains("Map<java.lang.String, java.util.Map")) {
+            return (T) new HashMap<String, Map<String, Integer>>();
+        }
+        return (T) new HashMap<>();
     }
 
     private String writeValue(Object value) {
         try {
             return OBJECT_MAPPER.writeValueAsString(value);
-        } catch (Exception e) {
-            throw new ApiException("Failed to serialize education state", HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize education content payload", exception);
         }
-    }
-
-    private <T> T readObject(String value, TypeReference<T> typeReference) {
-        try {
-            return OBJECT_MAPPER.readValue(defaultObjectJson(value), typeReference);
-        } catch (Exception e) {
-            throw new ApiException("Failed to read education state", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    private Map<Integer, String> parseSvgPresetMap(String resourcePath) {
-        try (InputStream inputStream = new ClassPathResource(resourcePath).getInputStream()) {
-            String text = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-            int start = text.indexOf("const IDX_TO_SVG = {");
-            if (start < 0) {
-                return Map.of();
-            }
-            int end = text.indexOf("};", start);
-            if (end < 0) {
-                return Map.of();
-            }
-            String block = text.substring(start, end);
-            Matcher matcher = SVG_MAP_PATTERN.matcher(block);
-            Map<Integer, String> result = new LinkedHashMap<>();
-            while (matcher.find()) {
-                result.put(Integer.parseInt(matcher.group(1)), matcher.group(2));
-            }
-            return result;
-        } catch (Exception e) {
-            throw new ApiException("Failed to parse svg preset map", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    private String dayCountLabel(String track, int totalDays) {
-        if (track.contains("sector")) {
-            return totalDays + "일 모듈";
-        }
-        return totalDays + "일 코스";
-    }
-
-    private String text(JsonNode node, String fieldName) {
-        JsonNode field = node.get(fieldName);
-        return field == null || field.isNull() ? null : field.asText();
-    }
-
-    private String nullableText(JsonNode node, String fieldName) {
-        String value = text(node, fieldName);
-        return value == null || value.isBlank() ? null : value;
     }
 
     private String defaultObjectJson(String value) {
@@ -591,11 +712,32 @@ public class EducationContentService {
         return value == null || value.isBlank() ? "[]" : value;
     }
 
-    private static final class EducationProgressState {
-        private Integer level = 0;
-        private Integer point = 0;
-        private int streakDays = 0;
-        private java.time.LocalDate lastCompletedDate;
+    private String text(JsonNode node, String fieldName) {
+        JsonNode field = node.path(fieldName);
+        return field.isMissingNode() || field.isNull() ? null : field.asText();
+    }
+
+    private String nullableText(JsonNode node, String fieldName) {
+        String value = text(node, fieldName);
+        return value == null || value.isBlank() ? null : value;
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private String dayCountLabel(String track, int day) {
+        if (track.contains("advanced")) {
+            return day + "일";
+        }
+        return day + "일 코스";
+    }
+
+    private static class EducationProgressState {
+        private int level;
+        private int point;
+        private int streakDays;
+        private LocalDate lastCompletedDate;
         private final Map<String, Integer> currentDayByTrack = new HashMap<>();
         private final Map<String, Set<Integer>> completedDaysByTrack = new HashMap<>();
         private final Map<String, Map<String, Integer>> quizAnswersByDay = new HashMap<>();
