@@ -221,8 +221,7 @@ public class LearningService {
         state.completedDaysByCourse.computeIfAbsent(courseId, ignored -> new HashSet<>()).add(day.day());
         state.point += 50;
         state.level = Math.max(0, state.point / 300);
-        state.streakDays += 1;
-        state.lastCompletedDate = LocalDate.now();
+        updateStreak(state);
 
         int nextDay = Math.min(day.day() + 1, course.days().size());
         state.currentDayByCourse.put(courseId, nextDay);
@@ -411,6 +410,19 @@ public class LearningService {
                 .educationCompletedDaysJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCompletedDaysJson()))
                 .educationQuizAnswersJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationQuizAnswersJson()))
                 .build());
+    }
+
+    private void updateStreak(LearningUserState state) {
+        LocalDate today = LocalDate.now();
+        if (today.equals(state.lastCompletedDate)) {
+            return;
+        }
+        if (today.minusDays(1).equals(state.lastCompletedDate)) {
+            state.streakDays += 1;
+        } else {
+            state.streakDays = 1;
+        }
+        state.lastCompletedDate = today;
     }
 
     private Map<String, Integer> stringifyMap(Map<Long, Integer> value) {

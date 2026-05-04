@@ -1,7 +1,10 @@
 package com.uniport.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.dto.FriendListItemDTO;
 import com.uniport.dto.FriendListResponseDTO;
+import com.uniport.dto.FriendRequestDecisionDTO;
 import com.uniport.dto.FriendRankingItemDTO;
 import com.uniport.dto.FriendRankingSectionDTO;
 import com.uniport.dto.FriendRequestCreateDTO;
@@ -72,12 +75,18 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class PointSocialDataService {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_DATE;
+    private static final TypeReference<Map<String, Set<Integer>>> COMPLETED_DAYS_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Integer>> EDUCATION_CURRENT_DAY_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Set<Integer>>> EDUCATION_COMPLETED_DAYS_TYPE = new TypeReference<>() {};
 
     private final PointWalletRepository pointWalletRepository;
     private final PointTransactionRepository pointTransactionRepository;
@@ -118,9 +127,10 @@ public class PointSocialDataService {
     public MyPageResponseDTO getMyPage(User user) {
         UserMyPagePreference preference = getOrCreatePreference(user.getId());
         int balance = getBalance(user);
-        int level = Math.max(1, balance / 1000 + 1);
-        int currentExp = Math.max(0, balance % 1000);
-        int streak = pointTransactionRepository.findTop50ByUser_IdOrderByCreatedAtDesc(user.getId()).size();
+        LearningProgressSnapshot learningProgress = getLearningProgress(user);
+        int level = learningProgress.level();
+        int currentExp = learningProgress.currentExp();
+        int streak = learningProgress.streakDays();
         int friendCount = (int) friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(user.getId(), user.getId()).stream()
                 .filter(relation -> "ACCEPTED".equalsIgnoreCase(relation.getStatus()))
                 .count();
@@ -143,7 +153,7 @@ public class PointSocialDataService {
                         .maxExp(1000)
                         .build())
                 .summary(MyPageSummaryDTO.builder()
-                        .learningTimeMinutes(redemptionCount * 15)
+                        .learningTimeMinutes(learningProgress.learningTimeMinutes())
                         .currentStreak(streak)
                         .friendCount(friendCount)
                         .redemptionCount(redemptionCount)
@@ -244,7 +254,8 @@ public class PointSocialDataService {
         PointShopProduct product = getRequiredProduct(itemId);
         int currentBalance = getBalance(user);
         int remaining = currentBalance - safeInt(product.getPricePoint());
-        boolean hasInventory = gifticonInventoryRepository.findFirstByProduct_IdAndStatusOrderByCreatedAtAsc(product.getId(), "AVAILABLE") != null;
+        int availableInventoryCount = syncAvailableStockCount(product);
+        boolean hasInventory = availableInventoryCount > 0;
         boolean canRedeem = remaining >= 0 && hasInventory && "ACTIVE".equalsIgnoreCase(product.getStatus());
         return ShopRedemptionPreviewResponseDTO.builder()
                 .item(toShopItemDto(product))
@@ -289,6 +300,7 @@ public class PointSocialDataService {
         inventory.setStatus("ASSIGNED");
         inventory.setAssignedOrderId("REDEEM_" + order.getId());
         gifticonInventoryRepository.save(inventory);
+        syncAvailableStockCount(product);
 
         PointTransaction transaction = pointTransactionRepository.save(PointTransaction.builder()
                 .user(user)
@@ -383,6 +395,38 @@ public class PointSocialDataService {
                 .build();
     }
 
+    @Transactional
+    public FriendRequestResponseDTO decideFriendRequest(User user, String requestId, FriendRequestDecisionDTO request) {
+        if (request == null || request.getAction() == null || request.getAction().isBlank()) {
+            throw new ApiException("action is required", HttpStatus.BAD_REQUEST);
+        }
+
+        String action = request.getAction().trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("ACCEPT", "REJECT").contains(action)) {
+            throw new ApiException("action must be ACCEPT or REJECT", HttpStatus.BAD_REQUEST);
+        }
+
+        Long relationId = parsePrefixedId(requestId, "REQ_");
+        FriendRelation relation = friendRelationRepository.findById(relationId)
+                .orElseThrow(() -> new ApiException("friend request not found", HttpStatus.NOT_FOUND));
+
+        if (!relation.getAddresseeUser().getId().equals(user.getId())) {
+            throw new ApiException("friend request not found", HttpStatus.NOT_FOUND);
+        }
+        if (!"REQUESTED".equalsIgnoreCase(relation.getStatus())) {
+            throw new ApiException("friend request is already processed", HttpStatus.BAD_REQUEST);
+        }
+
+        relation.setStatus("ACCEPT".equals(action) ? "ACCEPTED" : "REJECTED");
+        FriendRelation saved = friendRelationRepository.save(relation);
+        return FriendRequestResponseDTO.builder()
+                .requestId("REQ_" + saved.getId())
+                .targetUserId("USER_" + saved.getRequesterUser().getId())
+                .status(saved.getStatus())
+                .createdAt(saved.getCreatedAt().atOffset(ZoneOffset.UTC).toString())
+                .build();
+    }
+
     public FriendRequestListResponseDTO getSentFriendRequests(User user) {
         return FriendRequestListResponseDTO.builder()
                 .items(friendRelationRepository.findByRequesterUser_IdAndStatusOrderByCreatedAtDesc(user.getId(), "REQUESTED").stream()
@@ -409,7 +453,7 @@ public class PointSocialDataService {
         List<User> withMe = new ArrayList<>(rankingPool);
         withMe.add(user);
         List<User> sorted = withMe.stream()
-                .sorted(Comparator.comparingInt(this::getBalance).reversed())
+                .sorted(Comparator.comparingInt((User candidate) -> getLearningProgress(candidate).totalXp()).reversed())
                 .toList();
         List<FriendRankingItemDTO> items = new ArrayList<>();
         for (int i = 0; i < Math.min(5, sorted.size()); i++) {
@@ -512,7 +556,7 @@ public class PointSocialDataService {
         if (learningState == null) {
             return List.of();
         }
-        int completedCount = extractCompletedLearningCount(learningState);
+        int completedCount = countCompletedLearningDays(learningState);
         return List.of(
                 MyPageHistoryItemDTO.builder()
                         .title("MAIN COURSE")
@@ -573,28 +617,28 @@ public class PointSocialDataService {
     }
 
     private FriendListItemDTO toFriendListItem(User friend) {
-        int balance = getBalance(friend);
+        LearningProgressSnapshot learningProgress = getLearningProgress(friend);
         return FriendListItemDTO.builder()
                 .userId("USER_" + friend.getId())
                 .nickname(friend.getNickname())
                 .profileImageUrl(friend.getProfileImageUrl())
-                .level(Math.max(1, balance / 1000 + 1))
+                .level(learningProgress.level())
                 .investmentProfileLabel(friend.getInvestmentProfileResult())
-                .currentXp(balance % 1000)
-                .maxXp(1000)
+                .currentXp(learningProgress.currentExp())
+                .maxXp(learningProgress.maxExp())
                 .relationLabel("친구")
                 .description(friend.getTeamId() != null ? "같은 팀에서 활동 중" : "함께 공부하는 친구")
                 .build();
     }
 
     private FriendRequestListItemDTO toFriendRequestItem(String requestId, User target, LocalDateTime createdAt, String status) {
-        int balance = getBalance(target);
+        LearningProgressSnapshot learningProgress = getLearningProgress(target);
         return FriendRequestListItemDTO.builder()
                 .requestId(requestId)
                 .userId("USER_" + target.getId())
                 .nickname(target.getNickname())
                 .profileImageUrl(target.getProfileImageUrl())
-                .level(Math.max(1, balance / 1000 + 1))
+                .level(learningProgress.level())
                 .investmentProfileLabel(target.getInvestmentProfileResult())
                 .requestedAgoLabel(toAgoLabel(createdAt))
                 .status(status)
@@ -602,20 +646,21 @@ public class PointSocialDataService {
     }
 
     private FriendRankingItemDTO toRankingItem(int rank, User user) {
-        int balance = getBalance(user);
+        LearningProgressSnapshot learningProgress = getLearningProgress(user);
         return FriendRankingItemDTO.builder()
                 .rank(rank)
                 .userId("USER_" + user.getId())
                 .nickname(user.getNickname())
                 .profileImageUrl(user.getProfileImageUrl())
-                .level(Math.max(1, balance / 1000 + 1))
-                .xp(balance)
+                .level(learningProgress.level())
+                .xp(learningProgress.totalXp())
                 .rankChange(0)
                 .build();
     }
 
     private ShopItemDTO toShopItemDto(PointShopProduct product) {
-        boolean available = gifticonInventoryRepository.findFirstByProduct_IdAndStatusOrderByCreatedAtAsc(product.getId(), "AVAILABLE") != null;
+        int availableInventoryCount = syncAvailableStockCount(product);
+        boolean available = availableInventoryCount > 0;
         return ShopItemDTO.builder()
                 .itemId("ITEM_" + product.getId())
                 .brand(product.getBrand())
@@ -631,9 +676,18 @@ public class PointSocialDataService {
         return switch (sort) {
             case "LOW_POINT" -> Comparator.comparingInt(product -> safeInt(product.getPricePoint()));
             case "HIGH_POINT" -> Comparator.comparingInt((PointShopProduct product) -> safeInt(product.getPricePoint())).reversed();
-            default -> Comparator.comparingInt((PointShopProduct product) -> safeInt(product.getStockCount())).reversed()
+            default -> Comparator.comparingInt((PointShopProduct product) -> syncAvailableStockCount(product)).reversed()
                     .thenComparingInt(product -> safeInt(product.getSortOrder()));
         };
+    }
+
+    private int syncAvailableStockCount(PointShopProduct product) {
+        int availableInventoryCount = Math.toIntExact(gifticonInventoryRepository.countByProduct_IdAndStatus(product.getId(), "AVAILABLE"));
+        if (safeInt(product.getStockCount()) != availableInventoryCount) {
+            product.setStockCount(availableInventoryCount);
+            pointShopProductRepository.save(product);
+        }
+        return availableInventoryCount;
     }
 
     private ShopRedemptionListItemDTO toRedemptionListItem(PointShopOrder order) {
@@ -731,24 +785,53 @@ public class PointSocialDataService {
         return duration.toDays() + "일 전";
     }
 
-    private int extractCompletedLearningCount(LearningUserStateEntity learningState) {
-        String json = learningState.getCompletedDaysByCourseJson();
-        if (json == null || json.isBlank()) {
-            return 0;
+    private LearningProgressSnapshot getLearningProgress(User user) {
+        return learningUserStateRepository.findById(user.getId())
+                .map(this::toLearningProgressSnapshot)
+                .orElseGet(() -> new LearningProgressSnapshot(1, 0, 300, 0, 0, 0));
+    }
+
+    private LearningProgressSnapshot toLearningProgressSnapshot(LearningUserStateEntity state) {
+        int totalXp = safeInt(state.getPoint());
+        int maxExp = 300;
+        int level = Math.max(1, totalXp / maxExp + 1);
+        int currentExp = Math.max(0, totalXp % maxExp);
+        int completedDays = countCompletedLearningDays(state);
+        int learningTimeMinutes = completedDays * 15;
+        return new LearningProgressSnapshot(
+                level,
+                currentExp,
+                maxExp,
+                totalXp,
+                safeInt(state.getStreakDays()),
+                learningTimeMinutes
+        );
+    }
+
+    private int countCompletedLearningDays(LearningUserStateEntity learningState) {
+        int total = 0;
+        Map<String, Set<Integer>> courseDays = readValue(learningState.getCompletedDaysByCourseJson(), COMPLETED_DAYS_TYPE);
+        for (Set<Integer> days : courseDays.values()) {
+            total += days == null ? 0 : days.size();
         }
-        int digitCount = 0;
-        boolean inNumber = false;
-        for (char ch : json.toCharArray()) {
-            if (Character.isDigit(ch)) {
-                if (!inNumber) {
-                    digitCount++;
-                    inNumber = true;
-                }
-            } else {
-                inNumber = false;
-            }
+        Map<String, Set<Integer>> educationDays = readValue(learningState.getEducationCompletedDaysJson(), EDUCATION_COMPLETED_DAYS_TYPE);
+        for (Set<Integer> days : educationDays.values()) {
+            total += days == null ? 0 : days.size();
         }
-        return Math.max(digitCount, safeInt(learningState.getStreakDays()));
+        Map<String, Integer> educationCurrentDays = readValue(learningState.getEducationCurrentDayJson(), EDUCATION_CURRENT_DAY_TYPE);
+        if (total == 0 && !educationCurrentDays.isEmpty()) {
+            total = Math.max(0, educationCurrentDays.values().stream().mapToInt(value -> value == null ? 0 : value - 1).sum());
+        }
+        return total;
+    }
+
+    private <T> T readValue(String value, TypeReference<T> typeReference) {
+        try {
+            String safeJson = value == null || value.isBlank() ? "{}" : value;
+            return OBJECT_MAPPER.readValue(safeJson, typeReference);
+        } catch (Exception e) {
+            throw new ApiException("failed to read learning progress", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     private String defaultString(String value, String fallback) {
@@ -762,5 +845,15 @@ public class PointSocialDataService {
     private String formatMoney(BigDecimal value) {
         BigDecimal safe = value != null ? value : BigDecimal.ZERO;
         return safe.setScale(0, RoundingMode.HALF_UP).toPlainString() + "원";
+    }
+
+    private record LearningProgressSnapshot(
+            int level,
+            int currentExp,
+            int maxExp,
+            int totalXp,
+            int streakDays,
+            int learningTimeMinutes
+    ) {
     }
 }

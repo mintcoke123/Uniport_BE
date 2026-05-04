@@ -269,8 +269,7 @@ public class EducationContentService {
         state.currentDayByTrack.put(trackKey, day + 1);
         state.point += 30;
         state.level = Math.max(0, state.point / 300);
-        state.streakDays += 1;
-        state.lastCompletedDate = java.time.LocalDate.now();
+        updateStreak(state);
         persistState(user.getId(), state);
 
         return EducationDayCompleteResponseDTO.builder()
@@ -429,6 +428,19 @@ public class EducationContentService {
                 .educationCompletedDaysJson(writeValue(state.completedDaysByTrack))
                 .educationQuizAnswersJson(writeValue(state.quizAnswersByDay))
                 .build());
+    }
+
+    private void updateStreak(EducationProgressState state) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (today.equals(state.lastCompletedDate)) {
+            return;
+        }
+        if (today.minusDays(1).equals(state.lastCompletedDate)) {
+            state.streakDays += 1;
+        } else {
+            state.streakDays = 1;
+        }
+        state.lastCompletedDate = today;
     }
 
     private String buildTrackKey(String track, String sector) {

@@ -4,6 +4,7 @@ import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.dto.FriendListResponseDTO;
 import com.uniport.dto.FriendRequestCreateDTO;
+import com.uniport.dto.FriendRequestDecisionDTO;
 import com.uniport.dto.FriendRequestListResponseDTO;
 import com.uniport.dto.FriendRequestResponseDTO;
 import com.uniport.dto.FriendsDashboardResponseDTO;
@@ -22,6 +23,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -78,6 +81,27 @@ public class FriendsController {
             @RequestBody FriendRequestCreateDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.status(HttpStatus.CREATED).body(pointSocialDataService.requestFriend(user, request));
+    }
+
+    @PatchMapping("/requests/{requestId}")
+    @Operation(summary = "친구 요청 수락 또는 거절", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "친구 요청 상태 변경 성공",
+                    content = @Content(schema = @Schema(implementation = FriendRequestResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "친구 요청 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<FriendRequestResponseDTO> decideFriendRequest(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String requestId,
+            @RequestBody FriendRequestDecisionDTO request) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(pointSocialDataService.decideFriendRequest(user, requestId, request));
     }
 
     @GetMapping("/requests/sent")
