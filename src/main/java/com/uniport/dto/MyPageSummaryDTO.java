@@ -18,4 +18,10 @@ public class MyPageSummaryDTO {
 
     @Schema(example = "5", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer currentStreak;
+
+    @Schema(example = "12", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Integer friendCount;
+
+    @Schema(example = "3", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Integer redemptionCount;
 }

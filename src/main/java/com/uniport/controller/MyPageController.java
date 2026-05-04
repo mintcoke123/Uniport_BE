@@ -2,7 +2,10 @@ package com.uniport.controller;
 
 import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.ErrorResponseDTO;
+import com.uniport.dto.MyPageCharacterSelectRequestDTO;
+import com.uniport.dto.MyPageProfileUpdateRequestDTO;
 import com.uniport.dto.MyPageResponseDTO;
+import com.uniport.dto.MyPageSettingsUpdateRequestDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
 import com.uniport.service.PointSocialDataService;
@@ -16,6 +19,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -47,5 +52,35 @@ public class MyPageController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(pointSocialDataService.getMyPage(user));
+    }
+
+    @PatchMapping("/profile")
+    @Operation(summary = "마이페이지 프로필 수정", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    public ResponseEntity<MyPageResponseDTO> updateProfile(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody MyPageProfileUpdateRequestDTO request) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(pointSocialDataService.updateMyPageProfile(user, request));
+    }
+
+    @PatchMapping("/settings")
+    @Operation(summary = "마이페이지 설정 수정", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    public ResponseEntity<MyPageResponseDTO> updateSettings(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody MyPageSettingsUpdateRequestDTO request) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(pointSocialDataService.updateMyPageSettings(user, request));
+    }
+
+    @PatchMapping("/character")
+    @Operation(summary = "대표 캐릭터 선택", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    public ResponseEntity<MyPageResponseDTO> selectCharacter(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody MyPageCharacterSelectRequestDTO request) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(pointSocialDataService.selectCharacter(user, request));
     }
 }

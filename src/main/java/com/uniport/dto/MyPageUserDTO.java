@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @Schema(description = "마이페이지 사용자 정보")
 public class MyPageUserDTO {
 
-    @Schema(example = "박세종", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(example = "박세조", requiredMode = Schema.RequiredMode.REQUIRED)
     private String nickname;
 
     @Schema(example = "https://cdn.example.com/profile.png")
@@ -25,6 +25,9 @@ public class MyPageUserDTO {
     @Schema(example = "균형 투자형", requiredMode = Schema.RequiredMode.REQUIRED)
     private String investmentMbti;
 
-    @Schema(example = "균형 잡힌 판다", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(example = "균형 잡힌 판다형", requiredMode = Schema.RequiredMode.REQUIRED)
     private String character;
+
+    @Schema(example = "장기 투자와 배당주를 좋아해요.")
+    private String bio;
 }

@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Getter
 @Builder
 @NoArgsConstructor
@@ -20,4 +22,10 @@ public class MyPageResponseDTO {
     private MyPageSummaryDTO summary;
 
     private MyPageSettingsDTO settings;
+
+    private MyPageAssetSummaryDTO assets;
+
+    private List<MyPageCharacterCardDTO> characters;
+
+    private List<MyPageBadgeDTO> badges;
 }
