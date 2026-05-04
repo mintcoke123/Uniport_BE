@@ -15,7 +15,7 @@ import com.uniport.dto.EtfShareRequestDTO;
 import com.uniport.dto.EtfShareResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
-import com.uniport.service.EtfMockService;
+import com.uniport.service.EtfDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -39,11 +39,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Custom ETFs", description = "나만의 ETF 생성, 수정, 분석 API")
 public class CustomEtfController {
 
-    private final EtfMockService etfMockService;
+    private final EtfDataService etfDataService;
     private final CurrentUserResolver currentUserResolver;
 
-    public CustomEtfController(EtfMockService etfMockService, CurrentUserResolver currentUserResolver) {
-        this.etfMockService = etfMockService;
+    public CustomEtfController(EtfDataService etfDataService, CurrentUserResolver currentUserResolver) {
+        this.etfDataService = etfDataService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -59,7 +59,7 @@ public class CustomEtfController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.getCustomEtfs(user));
+        return ResponseEntity.ok(etfDataService.getCustomEtfs(user));
     }
 
     @PostMapping
@@ -77,7 +77,7 @@ public class CustomEtfController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody CustomEtfCreateRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.createCustomEtf(user, request));
+        return ResponseEntity.ok(etfDataService.createCustomEtf(user, request));
     }
 
     @GetMapping("/{etfId}")
@@ -95,7 +95,7 @@ public class CustomEtfController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String etfId) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.getCustomEtf(user, etfId));
+        return ResponseEntity.ok(etfDataService.getCustomEtf(user, etfId));
     }
 
     @PutMapping("/{etfId}")
@@ -116,7 +116,7 @@ public class CustomEtfController {
             @PathVariable String etfId,
             @RequestBody CustomEtfUpdateRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.updateCustomEtf(user, etfId, request));
+        return ResponseEntity.ok(etfDataService.updateCustomEtf(user, etfId, request));
     }
 
     @PostMapping("/{etfId}/analysis")
@@ -137,7 +137,7 @@ public class CustomEtfController {
             @PathVariable String etfId,
             @RequestBody EtfAnalysisRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.analyze(user, etfId, request));
+        return ResponseEntity.ok(etfDataService.analyze(user, etfId, request));
     }
 
     @PostMapping("/{etfId}/analysis-reports/{reportId}/apply")
@@ -159,7 +159,7 @@ public class CustomEtfController {
             @PathVariable String reportId,
             @RequestBody EtfAnalysisApplyRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.applyReport(user, etfId, reportId, request));
+        return ResponseEntity.ok(etfDataService.applyReport(user, etfId, reportId, request));
     }
 
     @PostMapping("/{etfId}/share")
@@ -180,6 +180,6 @@ public class CustomEtfController {
             @PathVariable String etfId,
             @RequestBody EtfShareRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.shareCustomEtf(user, etfId, request));
+        return ResponseEntity.ok(etfDataService.shareCustomEtf(user, etfId, request));
     }
 }

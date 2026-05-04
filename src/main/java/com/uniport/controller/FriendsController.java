@@ -9,7 +9,7 @@ import com.uniport.dto.FriendRequestResponseDTO;
 import com.uniport.dto.FriendsDashboardResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
-import com.uniport.service.MyPageMockService;
+import com.uniport.service.PointSocialDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -34,12 +34,12 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Friends", description = "친구 API")
 public class FriendsController {
 
-    private final MyPageMockService myPageMockService;
+    private final PointSocialDataService pointSocialDataService;
     private final CurrentUserResolver currentUserResolver;
 
-    public FriendsController(MyPageMockService myPageMockService,
+    public FriendsController(PointSocialDataService pointSocialDataService,
                              CurrentUserResolver currentUserResolver) {
-        this.myPageMockService = myPageMockService;
+        this.pointSocialDataService = pointSocialDataService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -56,8 +56,8 @@ public class FriendsController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Parameter(example = "고")
             @RequestParam(value = "keyword", required = false) String keyword) {
-        currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getFriends(keyword));
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(pointSocialDataService.getFriends(user, keyword));
     }
 
     @PostMapping("/requests")
@@ -77,7 +77,7 @@ public class FriendsController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody FriendRequestCreateDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.status(HttpStatus.CREATED).body(myPageMockService.requestFriend(user, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(pointSocialDataService.requestFriend(user, request));
     }
 
     @GetMapping("/requests/sent")
@@ -92,7 +92,7 @@ public class FriendsController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getSentFriendRequests(user));
+        return ResponseEntity.ok(pointSocialDataService.getSentFriendRequests(user));
     }
 
     @GetMapping("/requests/received")
@@ -107,7 +107,7 @@ public class FriendsController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getReceivedFriendRequests(user));
+        return ResponseEntity.ok(pointSocialDataService.getReceivedFriendRequests(user));
     }
 
     @GetMapping("/dashboard")
@@ -122,6 +122,6 @@ public class FriendsController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getFriendsDashboard(user));
+        return ResponseEntity.ok(pointSocialDataService.getFriendsDashboard(user));
     }
 }

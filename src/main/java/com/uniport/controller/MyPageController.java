@@ -5,7 +5,7 @@ import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.dto.MyPageResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
-import com.uniport.service.MyPageMockService;
+import com.uniport.service.PointSocialDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -25,12 +25,12 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "MyPage", description = "마이페이지 API")
 public class MyPageController {
 
-    private final MyPageMockService myPageMockService;
+    private final PointSocialDataService pointSocialDataService;
     private final CurrentUserResolver currentUserResolver;
 
-    public MyPageController(MyPageMockService myPageMockService,
+    public MyPageController(PointSocialDataService pointSocialDataService,
                             CurrentUserResolver currentUserResolver) {
-        this.myPageMockService = myPageMockService;
+        this.pointSocialDataService = pointSocialDataService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -46,6 +46,6 @@ public class MyPageController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getMyPage(user));
+        return ResponseEntity.ok(pointSocialDataService.getMyPage(user));
     }
 }

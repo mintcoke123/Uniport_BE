@@ -7,7 +7,7 @@ import com.uniport.dto.EtfDiscoveryResponseDTO;
 import com.uniport.dto.EtfFavoriteResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
-import com.uniport.service.EtfMockService;
+import com.uniport.service.EtfDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -32,11 +32,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "ETF Discovery", description = "인기 ETF 탐색 API")
 public class EtfDiscoveryController {
 
-    private final EtfMockService etfMockService;
+    private final EtfDataService etfDataService;
     private final CurrentUserResolver currentUserResolver;
 
-    public EtfDiscoveryController(EtfMockService etfMockService, CurrentUserResolver currentUserResolver) {
-        this.etfMockService = etfMockService;
+    public EtfDiscoveryController(EtfDataService etfDataService, CurrentUserResolver currentUserResolver) {
+        this.etfDataService = etfDataService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -55,7 +55,7 @@ public class EtfDiscoveryController {
             @RequestParam(value = "page", required = false) Integer page,
             @Parameter(example = "10")
             @RequestParam(value = "size", required = false) Integer size) {
-        return ResponseEntity.ok(etfMockService.getPopularEtfs(sort, theme, page, size));
+        return ResponseEntity.ok(etfDataService.getPopularEtfs(sort, theme, page, size));
     }
 
     @GetMapping("/{etfId}")
@@ -72,7 +72,7 @@ public class EtfDiscoveryController {
             @PathVariable String etfId,
             @RequestParam(value = "period", required = false) String period) {
         User user = currentUserResolver.resolveNullable(principal, authorization);
-        return ResponseEntity.ok(etfMockService.getDiscoveryDetail(etfId, period, user));
+        return ResponseEntity.ok(etfDataService.getDiscoveryDetail(etfId, period, user));
     }
 
     @PostMapping("/{etfId}/favorite")
@@ -90,7 +90,7 @@ public class EtfDiscoveryController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String etfId) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.favoriteDiscoveryEtf(user, etfId, true));
+        return ResponseEntity.ok(etfDataService.favoriteDiscoveryEtf(user, etfId, true));
     }
 
     @DeleteMapping("/{etfId}/favorite")
@@ -108,6 +108,6 @@ public class EtfDiscoveryController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String etfId) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.favoriteDiscoveryEtf(user, etfId, false));
+        return ResponseEntity.ok(etfDataService.favoriteDiscoveryEtf(user, etfId, false));
     }
 }

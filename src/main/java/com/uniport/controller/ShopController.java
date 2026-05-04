@@ -10,7 +10,7 @@ import com.uniport.dto.ShopRedemptionRequestDTO;
 import com.uniport.dto.ShopRedemptionResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
-import com.uniport.service.MyPageMockService;
+import com.uniport.service.PointSocialDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -36,12 +36,12 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Shop", description = "포인트샵 API")
 public class ShopController {
 
-    private final MyPageMockService myPageMockService;
+    private final PointSocialDataService pointSocialDataService;
     private final CurrentUserResolver currentUserResolver;
 
-    public ShopController(MyPageMockService myPageMockService,
+    public ShopController(PointSocialDataService pointSocialDataService,
                           CurrentUserResolver currentUserResolver) {
-        this.myPageMockService = myPageMockService;
+        this.pointSocialDataService = pointSocialDataService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -62,7 +62,7 @@ public class ShopController {
             @RequestParam(value = "page", required = false) Integer page,
             @Parameter(example = "10")
             @RequestParam(value = "size", required = false) Integer size) {
-        return ResponseEntity.ok(myPageMockService.getShopItems(category, sort, page, size));
+        return ResponseEntity.ok(pointSocialDataService.getShopItems(category, sort, page, size));
     }
 
     @GetMapping("/redemptions")
@@ -77,7 +77,7 @@ public class ShopController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getRedemptions(user));
+        return ResponseEntity.ok(pointSocialDataService.getRedemptions(user));
     }
 
     @GetMapping("/redemptions/{redemptionId}")
@@ -95,7 +95,7 @@ public class ShopController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String redemptionId) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getRedemptionDetail(user, redemptionId));
+        return ResponseEntity.ok(pointSocialDataService.getRedemptionDetail(user, redemptionId));
     }
 
     @GetMapping("/redemptions/preview")
@@ -113,7 +113,7 @@ public class ShopController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam("itemId") String itemId) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getRedemptionPreview(user, itemId));
+        return ResponseEntity.ok(pointSocialDataService.getRedemptionPreview(user, itemId));
     }
 
     @PostMapping("/redemptions")
@@ -135,6 +135,6 @@ public class ShopController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody ShopRedemptionRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.status(HttpStatus.CREATED).body(myPageMockService.redeem(user, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(pointSocialDataService.redeem(user, request));
     }
 }

@@ -5,7 +5,7 @@ import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.dto.EtfAnalysisReportResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
-import com.uniport.service.EtfMockService;
+import com.uniport.service.EtfDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -27,11 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "ETF Analysis Reports", description = "ETF 분석 리포트 조회 API")
 public class EtfAnalysisReportController {
 
-    private final EtfMockService etfMockService;
+    private final EtfDataService etfDataService;
     private final CurrentUserResolver currentUserResolver;
 
-    public EtfAnalysisReportController(EtfMockService etfMockService, CurrentUserResolver currentUserResolver) {
-        this.etfMockService = etfMockService;
+    public EtfAnalysisReportController(EtfDataService etfDataService, CurrentUserResolver currentUserResolver) {
+        this.etfDataService = etfDataService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -51,6 +51,6 @@ public class EtfAnalysisReportController {
             @PathVariable String reportId,
             @RequestParam(value = "period", required = false) String period) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfMockService.getReport(user, reportId, period));
+        return ResponseEntity.ok(etfDataService.getReport(user, reportId, period));
     }
 }

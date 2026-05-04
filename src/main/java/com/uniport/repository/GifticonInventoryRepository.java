@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface GifticonInventoryRepository extends JpaRepository<GifticonInventory, Long> {
     List<GifticonInventory> findByProduct_IdOrderByCreatedAtDesc(Long productId);
+    GifticonInventory findFirstByProduct_IdAndStatusOrderByCreatedAtAsc(Long productId, String status);
 }

@@ -1,44 +1,91 @@
 package com.uniport.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uniport.dto.LearningCourseDetailResponseDTO;
 import com.uniport.dto.LearningCourseStartResponseDTO;
 import com.uniport.dto.LearningCourseSummaryDTO;
 import com.uniport.dto.LearningCoursesResponseDTO;
 import com.uniport.dto.LearningCurrentContentDTO;
 import com.uniport.dto.LearningDayCompleteResponseDTO;
 import com.uniport.dto.LearningDayContentResponseDTO;
+import com.uniport.dto.LearningDayStepDTO;
 import com.uniport.dto.LearningHomeCourseDTO;
 import com.uniport.dto.LearningHomeResponseDTO;
+import com.uniport.dto.LearningKeyConceptDTO;
+import com.uniport.dto.LearningProgressDTO;
 import com.uniport.dto.LearningRoadmapItemDTO;
 import com.uniport.dto.LearningStepSubmitRequestDTO;
 import com.uniport.dto.LearningStepSubmitResponseDTO;
+import com.uniport.entity.LearningCourseEntity;
+import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.repository.LearningCourseRepository;
+import com.uniport.repository.LearningUserStateRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.annotation.PostConstruct;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class LearningService {
 
-    private final LearningMockDataProvider learningMockDataProvider;
-    private final ConcurrentHashMap<Long, LearningUserState> states = new ConcurrentHashMap<>();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final TypeReference<List<LearningMockDataProvider.LearningDayCatalog>> DAY_LIST_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Integer>> CURRENT_DAY_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Set<Integer>>> COMPLETED_DAY_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Set<Long>> SUBMITTED_STEP_TYPE = new TypeReference<>() {};
 
-    public LearningService(LearningMockDataProvider learningMockDataProvider) {
+    private final LearningCourseRepository learningCourseRepository;
+    private final LearningUserStateRepository learningUserStateRepository;
+    private final LearningMockDataProvider learningMockDataProvider;
+
+    public LearningService(LearningCourseRepository learningCourseRepository,
+                           LearningUserStateRepository learningUserStateRepository,
+                           LearningMockDataProvider learningMockDataProvider) {
+        this.learningCourseRepository = learningCourseRepository;
+        this.learningUserStateRepository = learningUserStateRepository;
         this.learningMockDataProvider = learningMockDataProvider;
+    }
+
+    @PostConstruct
+    @Transactional
+    public void seedCatalogIfEmpty() {
+        if (learningCourseRepository.count() > 0) {
+            return;
+        }
+        List<Long> seedIds = List.of(1L, 2L, 3L, 4L, 5L);
+        for (Long courseId : seedIds) {
+            LearningMockDataProvider.LearningCourseCatalog course = learningMockDataProvider.getCourse(courseId);
+            learningCourseRepository.save(LearningCourseEntity.builder()
+                    .id(course.id())
+                    .category(course.category())
+                    .title(course.title())
+                    .description(course.description())
+                    .thumbnailUrl(course.thumbnailUrl())
+                    .locked(course.locked())
+                    .daysJson(writeValue(course.days()))
+                    .build());
+        }
     }
 
     public LearningCoursesResponseDTO getCourses(User user, String category) {
         LearningUserState state = getOrCreateState(user);
-        String selectedCategory = category == null || category.isBlank() ? "MAIN" : category.trim().toUpperCase();
+        String selectedCategory = category == null || category.isBlank() ? "MAIN" : category.trim().toUpperCase(Locale.ROOT);
         if (!Set.of("MAIN", "MINI", "ADVANCED").contains(selectedCategory)) {
             throw new ApiException("Invalid learning category: " + selectedCategory, HttpStatus.BAD_REQUEST);
         }
-        List<LearningCourseSummaryDTO> courses = learningMockDataProvider.getCoursesByCategory(selectedCategory).stream()
+        List<LearningCourseSummaryDTO> courses = learningCourseRepository.findByCategoryOrderByIdAsc(selectedCategory).stream()
+                .map(this::toCourseCatalog)
                 .map(course -> toCourseSummary(course, state))
                 .toList();
         return LearningCoursesResponseDTO.builder()
@@ -48,14 +95,16 @@ public class LearningService {
                 .build();
     }
 
+    @Transactional
     public LearningCourseStartResponseDTO startCourse(User user, long courseId) {
         LearningUserState state = getOrCreateState(user);
-        LearningMockDataProvider.LearningCourseCatalog course = getCourseOrThrow(courseId);
+        LearningCourseCatalog course = getCourseOrThrow(courseId);
         if (course.locked()) {
             throw new ApiException("Locked course cannot be started", HttpStatus.CONFLICT);
         }
         state.activeCourseId = courseId;
         state.currentDayByCourse.putIfAbsent(courseId, 1);
+        persistState(user.getId(), state);
         int currentDay = state.currentDayByCourse.get(courseId);
         return LearningCourseStartResponseDTO.builder()
                 .courseId(courseId)
@@ -71,12 +120,12 @@ public class LearningService {
         if (state.activeCourseId == null) {
             throw new ApiException("No course in progress", HttpStatus.NOT_FOUND);
         }
-        LearningMockDataProvider.LearningCourseCatalog course = getCourseOrThrow(state.activeCourseId);
+        LearningCourseCatalog course = getCourseOrThrow(state.activeCourseId);
         int currentDay = state.currentDayByCourse.getOrDefault(course.id(), 1);
-        LearningMockDataProvider.LearningDayCatalog day = learningMockDataProvider.getDay(course.id(), currentDay);
+        LearningMockDataProvider.LearningDayCatalog day = getDayOrThrow(course.id(), currentDay);
         int completedDays = state.completedDaysByCourse.getOrDefault(course.id(), Set.of()).size();
         int totalDays = course.days().size();
-        int progressPercent = (int) Math.floor((completedDays * 100.0) / totalDays);
+        int progressPercent = totalDays == 0 ? 0 : (int) Math.floor((completedDays * 100.0) / totalDays);
         return LearningHomeResponseDTO.builder()
                 .level(state.level)
                 .point(state.point)
@@ -93,33 +142,54 @@ public class LearningService {
                 .build();
     }
 
-    public com.uniport.dto.LearningCourseDetailResponseDTO getCourseDetail(User user, long courseId) {
+    public LearningCourseDetailResponseDTO getCourseDetail(User user, long courseId) {
         LearningUserState state = getOrCreateState(user);
-        LearningMockDataProvider.LearningCourseCatalog course = getCourseOrThrow(courseId);
+        LearningCourseCatalog course = getCourseOrThrow(courseId);
         int currentDay = state.currentDayByCourse.getOrDefault(courseId, 1);
-        return learningMockDataProvider.toCourseDetail(course, currentDay);
+        LearningMockDataProvider.LearningDayCatalog day = getDayOrThrow(courseId, currentDay);
+        return LearningCourseDetailResponseDTO.builder()
+                .id(course.id())
+                .day(day.day())
+                .chapter(day.chapter())
+                .title(day.title())
+                .description(day.description())
+                .thumbnailUrl(day.thumbnailUrl())
+                .keyConcepts(day.keyConcepts())
+                .progress(new LearningProgressDTO(currentDay, course.days().size()))
+                .status("IN_PROGRESS")
+                .build();
     }
 
     public LearningDayContentResponseDTO getDayContent(User user, long courseId, int dayId) {
         LearningUserState state = getOrCreateState(user);
-        LearningMockDataProvider.LearningCourseCatalog course = getCourseOrThrow(courseId);
+        LearningCourseCatalog course = getCourseOrThrow(courseId);
         LearningMockDataProvider.LearningDayCatalog day = getDayOrThrow(courseId, dayId);
         int currentDay = state.currentDayByCourse.getOrDefault(courseId, 1);
-        return learningMockDataProvider.toDayContent(course, currentDay, day);
+        return LearningDayContentResponseDTO.builder()
+                .courseId(course.id())
+                .day(day.day())
+                .title(day.title())
+                .progress(new LearningProgressDTO(currentDay, course.days().size()))
+                .currentStepOrder(1)
+                .totalSteps(day.steps().size())
+                .steps(day.steps())
+                .build();
     }
 
+    @Transactional
     public LearningStepSubmitResponseDTO submitStep(User user, long stepId, LearningStepSubmitRequestDTO request) {
         LearningUserState state = getOrCreateState(user);
         if (request == null || request.getSelectedAnswerId() == null) {
             throw new ApiException("selectedAnswerId is required", HttpStatus.BAD_REQUEST);
         }
-        LearningMockDataProvider.LearningStepLookup lookup = getStepOrThrow(stepId);
+        LearningStepLookup lookup = getStepOrThrow(stepId);
         if ("THEORY".equals(lookup.step().getType())) {
             throw new ApiException("THEORY step cannot be submitted", HttpStatus.BAD_REQUEST);
         }
         Long correctAnswerId = getCorrectAnswerId(stepId);
         boolean isCorrect = correctAnswerId != null && correctAnswerId.equals(request.getSelectedAnswerId());
         state.submittedStepIds.add(stepId);
+        persistState(user.getId(), state);
         boolean dayCompleted = isDayReadyToComplete(lookup.course().id(), lookup.day().day(), state);
         return LearningStepSubmitResponseDTO.builder()
                 .stepId(stepId)
@@ -129,14 +199,15 @@ public class LearningService {
                 .submitted(true)
                 .nextStepId(getNextStepId(lookup.day().steps(), stepId))
                 .dayCompleted(dayCompleted)
-                .resultTitle(isCorrect ? "정답이에요!" : "다시 생각해볼까요?")
+                .resultTitle(isCorrect ? "Correct!" : "Try again")
                 .resultDescription(getExplanation(stepId))
                 .build();
     }
 
+    @Transactional
     public LearningDayCompleteResponseDTO completeDay(User user, long courseId, int dayId) {
         LearningUserState state = getOrCreateState(user);
-        LearningMockDataProvider.LearningCourseCatalog course = getCourseOrThrow(courseId);
+        LearningCourseCatalog course = getCourseOrThrow(courseId);
         LearningMockDataProvider.LearningDayCatalog day = getDayOrThrow(courseId, dayId);
         if (state.completedDaysByCourse.getOrDefault(courseId, Set.of()).contains(day.day())) {
             throw new ApiException("Day already completed", HttpStatus.BAD_REQUEST);
@@ -147,17 +218,14 @@ public class LearningService {
 
         state.completedDaysByCourse.computeIfAbsent(courseId, ignored -> new HashSet<>()).add(day.day());
         state.point += 50;
-        state.level = state.point / 300;
+        state.level = Math.max(0, state.point / 300);
         state.streakDays += 1;
         state.lastCompletedDate = LocalDate.now();
 
         int nextDay = Math.min(day.day() + 1, course.days().size());
-        if (day.day() < course.days().size()) {
-            state.currentDayByCourse.put(courseId, nextDay);
-        } else {
-            state.currentDayByCourse.put(courseId, course.days().size());
-            state.activeCourseId = courseId;
-        }
+        state.currentDayByCourse.put(courseId, nextDay);
+        state.activeCourseId = courseId;
+        persistState(user.getId(), state);
 
         return LearningDayCompleteResponseDTO.builder()
                 .courseId(courseId)
@@ -166,19 +234,19 @@ public class LearningService {
                 .streakDays(state.streakDays)
                 .earnedPoint(50)
                 .earnedExp(120)
-                .completionTitle("오늘도 정복 완료!")
-                .completionDescription("고생 많으셨어요")
+                .completionTitle("Day completed")
+                .completionDescription("Your progress has been saved to the learning database.")
                 .build();
     }
 
-    private LearningCourseSummaryDTO toCourseSummary(LearningMockDataProvider.LearningCourseCatalog course, LearningUserState state) {
+    private LearningCourseSummaryDTO toCourseSummary(LearningCourseCatalog course, LearningUserState state) {
         Set<Integer> completedDays = state.completedDaysByCourse.getOrDefault(course.id(), Set.of());
         Integer currentDay = state.currentDayByCourse.get(course.id());
         String status;
         if (course.locked()) {
             status = "LOCKED";
             currentDay = null;
-        } else if (completedDays.size() >= course.days().size()) {
+        } else if (completedDays.size() >= course.days().size() && !course.days().isEmpty()) {
             status = "COMPLETED";
         } else if (state.activeCourseId != null && state.activeCourseId.equals(course.id())) {
             status = "IN_PROGRESS";
@@ -209,26 +277,26 @@ public class LearningService {
                 .mapToObj(day -> LearningRoadmapItemDTO.builder()
                         .day(day)
                         .status(completedDays.contains(day) ? "COMPLETED" : day == currentDay ? "CURRENT" : "LOCKED")
-                        .statusLabel(completedDays.contains(day) ? "학습 완료됨" : day == currentDay ? "오늘 학습 진행중" : "잠김")
+                        .statusLabel(completedDays.contains(day) ? "Completed" : day == currentDay ? "Current" : "Locked")
                         .build())
                 .toList();
     }
 
     private String toStatusLabel(String status) {
         return switch (status) {
-            case "IN_PROGRESS" -> "현재 이수중";
-            case "COMPLETED" -> "학습 완료됨";
-            case "LOCKED" -> "잠김";
-            default -> "잠금 해제됨";
+            case "IN_PROGRESS" -> "In progress";
+            case "COMPLETED" -> "Completed";
+            case "LOCKED" -> "Locked";
+            default -> "Available";
         };
     }
 
     private String toActionLabel(String status) {
         return switch (status) {
-            case "IN_PROGRESS" -> "퀴즈 풀기";
-            case "COMPLETED" -> "복습하기";
-            case "LOCKED" -> "잠금";
-            default -> "도전하기";
+            case "IN_PROGRESS" -> "Resume";
+            case "COMPLETED" -> "Review";
+            case "LOCKED" -> "Locked";
+            default -> "Start";
         };
     }
 
@@ -241,37 +309,28 @@ public class LearningService {
 
     private Long getCorrectAnswerId(long stepId) {
         return switch ((int) stepId) {
-            case 1002 -> 1L;
-            case 1003 -> 1L;
+            case 1002, 1003, 302, 2002, 4002, 5002 -> 1L;
             case 102 -> 2L;
             case 103 -> 1L;
-            case 302 -> 1L;
-            case 2002 -> 1L;
-            case 4002 -> 1L;
-            case 5002 -> 1L;
             default -> null;
         };
     }
 
     private String getExplanation(long stepId) {
-        if (stepId == 4002L) {
-            return "매수는 특정 가격에 주식을 사는 행동을 의미합니다.";
-        }
-        if (stepId == 5002L) {
-            return "뉴스는 출처와 날짜를 먼저 확인해야 신뢰도를 판단할 수 있습니다.";
-        }
         return switch ((int) stepId) {
-            case 1002 -> "주식은 기업의 소유권 일부를 의미합니다.";
-            case 1003 -> "매수 관심 증가는 가격 상승 기대와 더 가까운 신호입니다.";
-            case 102 -> "몸통은 시가와 종가의 차이를 의미합니다.";
-            case 103 -> "양봉은 종가가 시가보다 높은 상태를 의미합니다.";
-            case 302 -> "상승과 거래량 증가가 함께 나타나면 상승의 신뢰도가 높다고 해석합니다.";
-            case 2002 -> "이동평균선은 가격 흐름의 추세를 파악할 때 자주 사용됩니다.";
+            case 1002 -> "Stocks represent ownership in a company.";
+            case 1003 -> "Demand growth can be interpreted as a positive signal.";
+            case 102 -> "The candle body reflects the difference between open and close.";
+            case 103 -> "A bullish candle closes above the open.";
+            case 302 -> "Price and volume rising together often supports the move.";
+            case 2002 -> "Moving averages are mainly used for identifying trend direction.";
+            case 4002 -> "Buying means acquiring shares at the given market price.";
+            case 5002 -> "Check source and publication date before trusting a news item.";
             default -> null;
         };
     }
 
-    private Long getNextStepId(List<com.uniport.dto.LearningDayStepDTO> steps, long currentStepId) {
+    private Long getNextStepId(List<LearningDayStepDTO> steps, long currentStepId) {
         for (int i = 0; i < steps.size(); i++) {
             if (steps.get(i).getId() == currentStepId) {
                 return i + 1 < steps.size() ? steps.get(i + 1).getId() : null;
@@ -284,31 +343,124 @@ public class LearningService {
         if (user == null || user.getId() == null) {
             throw new ApiException("Authenticated user is required", HttpStatus.UNAUTHORIZED);
         }
-        return states.computeIfAbsent(user.getId(), ignored -> new LearningUserState());
+        return learningUserStateRepository.findById(user.getId())
+                .map(this::toState)
+                .orElseGet(LearningUserState::new);
     }
 
-    private LearningMockDataProvider.LearningCourseCatalog getCourseOrThrow(long courseId) {
-        try {
-            return learningMockDataProvider.getCourse(courseId);
-        } catch (IllegalArgumentException ex) {
-            throw new ApiException(ex.getMessage(), HttpStatus.NOT_FOUND);
-        }
+    private void persistState(Long userId, LearningUserState state) {
+        learningUserStateRepository.save(LearningUserStateEntity.builder()
+                .userId(userId)
+                .level(state.level)
+                .point(state.point)
+                .activeCourseId(state.activeCourseId)
+                .streakDays(state.streakDays)
+                .lastCompletedDate(state.lastCompletedDate)
+                .currentDayByCourseJson(writeValue(stringifyMap(state.currentDayByCourse)))
+                .completedDaysByCourseJson(writeValue(stringifyCompletedMap(state.completedDaysByCourse)))
+                .submittedStepIdsJson(writeValue(state.submittedStepIds))
+                .build());
+    }
+
+    private Map<String, Integer> stringifyMap(Map<Long, Integer> value) {
+        Map<String, Integer> mapped = new HashMap<>();
+        value.forEach((key, item) -> mapped.put(String.valueOf(key), item));
+        return mapped;
+    }
+
+    private Map<String, Set<Integer>> stringifyCompletedMap(Map<Long, Set<Integer>> value) {
+        Map<String, Set<Integer>> mapped = new HashMap<>();
+        value.forEach((key, item) -> mapped.put(String.valueOf(key), item));
+        return mapped;
+    }
+
+    private LearningUserState toState(LearningUserStateEntity entity) {
+        LearningUserState state = new LearningUserState();
+        state.level = entity.getLevel();
+        state.point = entity.getPoint();
+        state.activeCourseId = entity.getActiveCourseId();
+        state.streakDays = entity.getStreakDays();
+        state.lastCompletedDate = entity.getLastCompletedDate();
+
+        readValue(entity.getCurrentDayByCourseJson(), CURRENT_DAY_TYPE).forEach((key, value) -> state.currentDayByCourse.put(Long.parseLong(key), value));
+        readValue(entity.getCompletedDaysByCourseJson(), COMPLETED_DAY_TYPE).forEach((key, value) -> state.completedDaysByCourse.put(Long.parseLong(key), new HashSet<>(value)));
+        state.submittedStepIds.addAll(readValue(entity.getSubmittedStepIdsJson(), SUBMITTED_STEP_TYPE));
+        return state;
+    }
+
+    private LearningCourseCatalog getCourseOrThrow(long courseId) {
+        LearningCourseEntity entity = learningCourseRepository.findById(courseId)
+                .orElseThrow(() -> new ApiException("Learning course not found: " + courseId, HttpStatus.NOT_FOUND));
+        return toCourseCatalog(entity);
     }
 
     private LearningMockDataProvider.LearningDayCatalog getDayOrThrow(long courseId, int dayId) {
+        return getCourseOrThrow(courseId).days().stream()
+                .filter(day -> day.day() == dayId)
+                .findFirst()
+                .orElseThrow(() -> new ApiException("Learning day not found: " + dayId, HttpStatus.NOT_FOUND));
+    }
+
+    private LearningStepLookup getStepOrThrow(long stepId) {
+        return learningCourseRepository.findAll().stream()
+                .map(this::toCourseCatalog)
+                .flatMap(course -> course.days().stream().map(day -> new LearningStepContainer(course, day)))
+                .flatMap(container -> container.day().steps().stream().map(step -> new LearningStepLookup(container.course(), container.day(), step)))
+                .filter(lookup -> lookup.step().getId() == stepId)
+                .findFirst()
+                .orElseThrow(() -> new ApiException("Learning step not found: " + stepId, HttpStatus.NOT_FOUND));
+    }
+
+    private LearningCourseCatalog toCourseCatalog(LearningCourseEntity entity) {
+        return new LearningCourseCatalog(
+                entity.getId(),
+                entity.getCategory(),
+                entity.getTitle(),
+                entity.getDescription(),
+                entity.getThumbnailUrl(),
+                Boolean.TRUE.equals(entity.getLocked()),
+                readValue(entity.getDaysJson(), DAY_LIST_TYPE)
+        );
+    }
+
+    private String writeValue(Object value) {
         try {
-            return learningMockDataProvider.getDay(courseId, dayId);
-        } catch (IllegalArgumentException ex) {
-            throw new ApiException(ex.getMessage(), HttpStatus.NOT_FOUND);
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new ApiException("Failed to serialize learning data", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
-    private LearningMockDataProvider.LearningStepLookup getStepOrThrow(long stepId) {
+    private <T> T readValue(String value, TypeReference<T> type) {
         try {
-            return learningMockDataProvider.findStep(stepId);
-        } catch (IllegalArgumentException ex) {
-            throw new ApiException(ex.getMessage(), HttpStatus.NOT_FOUND);
+            return OBJECT_MAPPER.readValue(value, type);
+        } catch (Exception e) {
+            throw new ApiException("Failed to read learning data", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private record LearningCourseCatalog(
+            Long id,
+            String category,
+            String title,
+            String description,
+            String thumbnailUrl,
+            boolean locked,
+            List<LearningMockDataProvider.LearningDayCatalog> days
+    ) {
+    }
+
+    private record LearningStepContainer(
+            LearningCourseCatalog course,
+            LearningMockDataProvider.LearningDayCatalog day
+    ) {
+    }
+
+    private record LearningStepLookup(
+            LearningCourseCatalog course,
+            LearningMockDataProvider.LearningDayCatalog day,
+            LearningDayStepDTO step
+    ) {
     }
 
     private static final class LearningUserState {
@@ -317,8 +469,8 @@ public class LearningService {
         private Long activeCourseId;
         private int streakDays = 0;
         private LocalDate lastCompletedDate;
-        private final ConcurrentHashMap<Long, Integer> currentDayByCourse = new ConcurrentHashMap<>();
-        private final ConcurrentHashMap<Long, Set<Integer>> completedDaysByCourse = new ConcurrentHashMap<>();
-        private final Set<Long> submittedStepIds = ConcurrentHashMap.newKeySet();
+        private final Map<Long, Integer> currentDayByCourse = new HashMap<>();
+        private final Map<Long, Set<Integer>> completedDaysByCourse = new HashMap<>();
+        private final Set<Long> submittedStepIds = new HashSet<>();
     }
 }

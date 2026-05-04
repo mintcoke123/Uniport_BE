@@ -33,6 +33,12 @@ public class ManagedEtf extends AuditableEntity {
     @Column(nullable = false, unique = true, length = 50)
     private String etfCode;
 
+    @Column
+    private Long ownerUserId;
+
+    @Column(length = 30)
+    private String sourceType;
+
     @Column(nullable = false, length = 150)
     private String title;
 
@@ -69,6 +75,9 @@ public class ManagedEtf extends AuditableEntity {
 
     @Lob
     private String analysisSummaryJson;
+
+    @Column(length = 100)
+    private String lastReportId;
 
     @Column
     private LocalDateTime publishedAt;

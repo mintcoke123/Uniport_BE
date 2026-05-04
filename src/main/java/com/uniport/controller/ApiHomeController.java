@@ -6,7 +6,7 @@ import com.uniport.dto.GroupInsightsResponseDTO;
 import com.uniport.dto.MockInvestingSummaryResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
-import com.uniport.service.MockInvestingHomeService;
+import com.uniport.service.HomeDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -28,12 +28,12 @@ import java.util.Map;
 @Tag(name = "Mock Investing Home", description = "모의투자 홈 요약 API")
 public class ApiHomeController {
 
-    private final MockInvestingHomeService mockInvestingHomeService;
+    private final HomeDataService homeDataService;
     private final CurrentUserResolver currentUserResolver;
 
-    public ApiHomeController(MockInvestingHomeService mockInvestingHomeService,
+    public ApiHomeController(HomeDataService homeDataService,
                              CurrentUserResolver currentUserResolver) {
-        this.mockInvestingHomeService = mockInvestingHomeService;
+        this.homeDataService = homeDataService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -49,7 +49,7 @@ public class ApiHomeController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(mockInvestingHomeService.getSummary(user));
+        return ResponseEntity.ok(homeDataService.getSummary(user));
     }
 
     @GetMapping("/group-matching-dashboard")
@@ -58,7 +58,7 @@ public class ApiHomeController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(mockInvestingHomeService.getGroupMatchingDashboard(user));
+        return ResponseEntity.ok(homeDataService.getGroupMatchingDashboard(user));
     }
 
     @GetMapping("/group-insights")
@@ -68,6 +68,6 @@ public class ApiHomeController {
                     content = @Content(schema = @Schema(implementation = GroupInsightsResponseDTO.class)))
     })
     public ResponseEntity<GroupInsightsResponseDTO> getGroupInsights() {
-        return ResponseEntity.ok(mockInvestingHomeService.getGroupInsights());
+        return ResponseEntity.ok(homeDataService.getGroupInsights());
     }
 }

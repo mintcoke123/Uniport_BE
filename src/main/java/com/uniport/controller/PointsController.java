@@ -5,7 +5,7 @@ import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.dto.PointBalanceResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
-import com.uniport.service.MyPageMockService;
+import com.uniport.service.PointSocialDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -25,12 +25,12 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Points", description = "포인트 API")
 public class PointsController {
 
-    private final MyPageMockService myPageMockService;
+    private final PointSocialDataService pointSocialDataService;
     private final CurrentUserResolver currentUserResolver;
 
-    public PointsController(MyPageMockService myPageMockService,
+    public PointsController(PointSocialDataService pointSocialDataService,
                             CurrentUserResolver currentUserResolver) {
-        this.myPageMockService = myPageMockService;
+        this.pointSocialDataService = pointSocialDataService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -46,6 +46,6 @@ public class PointsController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(myPageMockService.getPointBalance(user));
+        return ResponseEntity.ok(pointSocialDataService.getPointBalance(user));
     }
 }
