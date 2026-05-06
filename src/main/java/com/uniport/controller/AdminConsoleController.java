@@ -13,6 +13,8 @@ import com.uniport.entity.PointTransaction;
 import com.uniport.entity.PointWallet;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.dto.EducationCatalogResponseDTO;
+import com.uniport.dto.EducationDayContentResponseDTO;
 import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.GifticonInventoryRepository;
 import com.uniport.repository.ManagedCommunityCommentRepository;
@@ -25,6 +27,7 @@ import com.uniport.repository.PointShopProductRepository;
 import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
 import com.uniport.repository.UserRepository;
+import com.uniport.service.EducationContentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +39,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
@@ -65,6 +69,7 @@ public class AdminConsoleController {
     private final PointShopOrderRepository pointShopOrderRepository;
     private final FriendRelationRepository friendRelationRepository;
     private final UserRepository userRepository;
+    private final EducationContentService educationContentService;
 
     public AdminConsoleController(
             ManagedEtfRepository managedEtfRepository,
@@ -78,7 +83,8 @@ public class AdminConsoleController {
             GifticonInventoryRepository gifticonInventoryRepository,
             PointShopOrderRepository pointShopOrderRepository,
             FriendRelationRepository friendRelationRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            EducationContentService educationContentService
     ) {
         this.managedEtfRepository = managedEtfRepository;
         this.managedNewsArticleRepository = managedNewsArticleRepository;
@@ -92,6 +98,7 @@ public class AdminConsoleController {
         this.pointShopOrderRepository = pointShopOrderRepository;
         this.friendRelationRepository = friendRelationRepository;
         this.userRepository = userRepository;
+        this.educationContentService = educationContentService;
     }
 
     @GetMapping("/bootstrap")
@@ -379,6 +386,22 @@ public class AdminConsoleController {
     @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getFriendRelations() {
         return ResponseEntity.ok(friendRelationRepository.findAllByOrderByUpdatedAtDesc().stream().map(this::toFriendMap).toList());
+    }
+
+    @GetMapping("/education/catalog")
+    @Transactional(readOnly = true)
+    public ResponseEntity<EducationCatalogResponseDTO> getEducationCatalog() {
+        return ResponseEntity.ok(educationContentService.getCatalog());
+    }
+
+    @GetMapping("/education/days/{track}/{day}")
+    @Transactional(readOnly = true)
+    public ResponseEntity<EducationDayContentResponseDTO> getEducationDayContent(
+            @PathVariable String track,
+            @PathVariable Integer day,
+            @RequestParam(value = "sector", required = false) String sector
+    ) {
+        return ResponseEntity.ok(educationContentService.getDayContent(track, day, sector));
     }
 
     @PostMapping("/friends")
