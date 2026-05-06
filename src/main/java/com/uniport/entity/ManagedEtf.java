@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -67,13 +66,13 @@ public class ManagedEtf extends AuditableEntity {
     @Column(length = 1000)
     private String shortDescription;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String holdingsJson;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String trendPointsJson;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String analysisSummaryJson;
 
     @Column(length = 100)

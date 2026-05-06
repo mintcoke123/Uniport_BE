@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -50,16 +49,16 @@ public class ManagedNewsArticle extends AuditableEntity {
     @Column(length = 2000)
     private String summary;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String content;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String companyInfoJson;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String tagsJson;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String opinionsJson;
 
     @Column

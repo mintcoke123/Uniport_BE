@@ -3,7 +3,6 @@ package com.uniport.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -41,24 +40,21 @@ public class LearningUserStateEntity extends AuditableEntity {
 
     private LocalDate roadmapLastCompletedDate;
 
-    @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String currentDayByCourseJson;
 
-    @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String completedDaysByCourseJson;
 
-    @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String submittedStepIdsJson;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String educationCurrentDayJson;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String educationCompletedDaysJson;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String educationQuizAnswersJson;
 }

@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -46,6 +45,6 @@ public class ManagedGroupInsight extends AuditableEntity {
     @Column(length = 3000)
     private String comment;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String consensusJson;
 }

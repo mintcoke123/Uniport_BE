@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -42,6 +41,6 @@ public class ManagedEtfAnalysisReport extends AuditableEntity {
     @Column(nullable = false, length = 30)
     private String benchmark;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String reportJson;
 }

@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
@@ -60,7 +59,7 @@ public class EducationCardEntity extends AuditableEntity {
     @Column(length = 300)
     private String title;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String text;
 
     @Column(length = 40)
@@ -69,6 +68,6 @@ public class EducationCardEntity extends AuditableEntity {
     @Column(length = 100)
     private String svgPreset;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String visualJson;
 }

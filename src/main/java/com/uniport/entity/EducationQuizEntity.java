@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
@@ -54,7 +53,7 @@ public class EducationQuizEntity extends AuditableEntity {
     @Column(length = 2000)
     private String question;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String optionsJson;
 
     @Column(nullable = false)

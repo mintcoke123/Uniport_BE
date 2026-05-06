@@ -95,6 +95,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/bootstrap")
+    @Transactional(readOnly = true)
     public ResponseEntity<Map<String, Object>> getBootstrap() {
         return ResponseEntity.ok(Map.of(
                 "counts", Map.of(
@@ -108,6 +109,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/etfs")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getEtfs() {
         return ResponseEntity.ok(managedEtfRepository.findAll().stream().map(this::toEtfMap).toList());
     }
@@ -134,6 +136,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/news")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getNews() {
         return ResponseEntity.ok(managedNewsArticleRepository.findAll().stream().map(this::toNewsMap).toList());
     }
@@ -160,6 +163,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/community/posts")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getCommunityPosts() {
         return ResponseEntity.ok(managedCommunityPostRepository.findAll().stream().map(this::toCommunityPostMap).toList());
     }
@@ -209,6 +213,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/group-insights/home")
+    @Transactional
     public ResponseEntity<Map<String, Object>> getHomeGroupInsight() {
         return ResponseEntity.ok(toGroupInsightMap(getOrCreateGroupInsight()));
     }
@@ -226,6 +231,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/users")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getUsers() {
         return ResponseEntity.ok(userRepository.findAll().stream().map(this::toUserMap).toList());
     }
@@ -262,6 +268,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/point-shop/products")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getPointShopProducts() {
         return ResponseEntity.ok(pointShopProductRepository.findAll().stream().map(this::toProductMap).toList());
     }
@@ -288,6 +295,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/point-shop/inventory")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getGifticonInventory() {
         return ResponseEntity.ok(gifticonInventoryRepository.findAll().stream().map(this::toInventoryMap).toList());
     }
@@ -314,6 +322,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/point-shop/wallets")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getPointWallets() {
         return ResponseEntity.ok(pointWalletRepository.findAllByOrderByUpdatedAtDesc().stream().map(this::toWalletMap).toList());
     }
@@ -340,6 +349,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/point-shop/orders")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getPointShopOrders() {
         return ResponseEntity.ok(pointShopOrderRepository.findAllByOrderByCreatedAtDesc().stream().map(this::toOrderMap).toList());
     }
@@ -366,6 +376,7 @@ public class AdminConsoleController {
     }
 
     @GetMapping("/friends")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getFriendRelations() {
         return ResponseEntity.ok(friendRelationRepository.findAllByOrderByUpdatedAtDesc().stream().map(this::toFriendMap).toList());
     }
