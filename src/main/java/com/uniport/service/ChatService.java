@@ -158,6 +158,7 @@ public class ChatService {
     }
 
     /** 해당 방에 관리자 피드백 메시지가 있으면 true (채팅·거래 비활성화 여부 판단용) */
+    @Transactional(readOnly = true)
     public boolean hasFeedbackMessage(Long roomId) {
         if (roomId == null) return false;
         List<ChatMessage> roomMessages = chatMessageRepository.findByRoomIdOrderByCreatedAtAsc(roomId);
@@ -175,6 +176,7 @@ public class ChatService {
         return false;
     }
 
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getMessages(Long roomId) {
         return chatMessageRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream()
                 .map(this::toMap)
