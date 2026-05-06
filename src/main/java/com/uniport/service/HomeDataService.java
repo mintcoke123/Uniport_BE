@@ -16,6 +16,7 @@ import com.uniport.entity.ManagedGroupInsight;
 import com.uniport.entity.User;
 import com.uniport.repository.ManagedGroupInsightRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -81,6 +82,7 @@ public class HomeDataService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public GroupInsightsResponseDTO getGroupInsights() {
         ManagedGroupInsight insight = getOrCreateInsight();
         return GroupInsightsResponseDTO.builder()
@@ -95,6 +97,7 @@ public class HomeDataService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> getGroupMatchingDashboard(User user) {
         List<Map<String, Object>> rankings = rankingService.getAllGroupsRanking();
         List<Map<String, Object>> rankingPreview = new ArrayList<>();
@@ -152,7 +155,7 @@ public class HomeDataService {
 
     private ManagedGroupInsight getOrCreateInsight() {
         return managedGroupInsightRepository.findByInsightKey(GROUP_INSIGHT_KEY)
-                .orElseGet(() -> managedGroupInsightRepository.save(
+                .orElseGet(() -> 
                         ManagedGroupInsight.builder()
                                 .insightKey(GROUP_INSIGHT_KEY)
                                 .topGroupName("Top Group")
@@ -160,7 +163,7 @@ public class HomeDataService {
                                 .comment("")
                                 .consensusJson("[]")
                                 .build()
-                ));
+                );
     }
 
     private List<GroupInsightConsensusDTO> parseConsensus(String json) {
