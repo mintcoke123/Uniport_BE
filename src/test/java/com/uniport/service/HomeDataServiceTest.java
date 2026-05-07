@@ -1,9 +1,7 @@
 package com.uniport.service;
 
 import com.uniport.dto.GroupInsightsResponseDTO;
-import com.uniport.entity.ManagedGroupInsight;
 import com.uniport.entity.User;
-import com.uniport.repository.ManagedGroupInsightRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -14,7 +12,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,8 +34,6 @@ class HomeDataServiceTest {
     private CompetitionService competitionService;
     @Mock
     private CompetitionParticipationService competitionParticipationService;
-    @Mock
-    private ManagedGroupInsightRepository managedGroupInsightRepository;
 
     @Spy
     @InjectMocks
@@ -70,12 +65,6 @@ class HomeDataServiceTest {
         ));
         when(competitionService.findByStatus("upcoming")).thenReturn(List.of());
         when(competitionParticipationService.getMyApplications(user)).thenReturn(List.of());
-        when(managedGroupInsightRepository.findByInsightKey("HOME_TOP")).thenReturn(Optional.of(
-                ManagedGroupInsight.builder()
-                        .insightKey("HOME_TOP")
-                        .consensusJson("[]")
-                        .build()
-        ));
         doReturn(GroupInsightsResponseDTO.builder().topConsensus(List.of()).topGroup(null).build())
                 .when(homeDataService).getGroupInsights();
 
