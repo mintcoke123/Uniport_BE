@@ -491,6 +491,26 @@ public class KisApiService {
         }
     }
 
+    public Optional<StockPriceDTO> getCachedStockPrice(String stockCode) {
+        if (stockCode == null || stockCode.isBlank()) {
+            return Optional.empty();
+        }
+        String code = stockCode.trim();
+        String normalized = code.length() >= 6 ? code : String.format("%6s", code).replace(' ', '0');
+
+        Optional<PriceSnapshot> cached = priceCache.get(normalized);
+        if (cached.isPresent()) {
+            return Optional.of(mapPriceSnapshotToStockPriceDTO(normalized, cached.get()));
+        }
+
+        CachedHttpPriceEntry httpCached = httpPriceCache.get(normalized);
+        if (httpCached != null && httpCached.dto != null) {
+            return Optional.of(httpCached.dto);
+        }
+
+        return Optional.empty();
+    }
+
     private static final class CachedHttpPriceEntry {
         final StockPriceDTO dto;
         final long expiresAtMillis;

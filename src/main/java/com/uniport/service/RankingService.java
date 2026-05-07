@@ -1,5 +1,6 @@
 package com.uniport.service;
 
+import com.uniport.dto.StockPriceDTO;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.TeamAccount;
@@ -9,6 +10,8 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -21,11 +24,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 랭킹: 시작된 매칭방(팀)별 현재 평가액·수익률 계산 후 순위.
+ * 그룹 랭킹 계산 서비스.
  */
 @Service
 public class RankingService {
 
+    private static final Logger log = LoggerFactory.getLogger(RankingService.class);
     private static final BigDecimal INITIAL_TEAM_BALANCE = new BigDecimal("10000000");
 
     private final MatchingRoomRepository matchingRoomRepository;
@@ -46,31 +50,16 @@ public class RankingService {
         this.kisApiService = kisApiService;
     }
 
-    /** 시작된 모든 팀의 랭킹 (평가액 내림차순). */
     public List<Map<String, Object>> getAllGroupsRanking() {
-        List<MatchingRoom> started = matchingRoomRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(r -> "started".equals(r.getStatus()))
-                .collect(Collectors.toList());
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (MatchingRoom room : started) {
-            BigDecimal totalValue = computeTotalValue(room.getId());
-            BigDecimal profitRate = INITIAL_TEAM_BALANCE.compareTo(BigDecimal.ZERO) != 0
-                    ? totalValue.subtract(INITIAL_TEAM_BALANCE).divide(INITIAL_TEAM_BALANCE, 4, RoundingMode.HALF_UP)
-                    : BigDecimal.ZERO;
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", room.getId());
-            map.put("groupName", room.getName() != null ? room.getName() : "팀 " + room.getId());
-            map.put("currentAssets", totalValue);
-            map.put("profitRate", profitRate);
-            list.add(map);
-        }
-        list.sort(Comparator.<Map<String, Object>, BigDecimal>comparing(m -> (BigDecimal) m.get("currentAssets")).reversed());
-        return list;
+        return buildGroupRankings(true);
+    }
+
+    public List<Map<String, Object>> getAllGroupsRankingSnapshot() {
+        return buildGroupRankings(false);
     }
 
     /**
-     * 경쟁 팀 목록 (대회/홈/관리자용). teamId, groupName, totalValue, investmentAmount, profitLoss, profitLossPercentage, rank, isMyTeam.
-     * competitionId는 현재 미사용(전체 시작된 팀 반환).
+     * 경쟁 중인 팀 목록.
      */
     public List<Map<String, Object>> getCompetingTeams(Long competitionId, User user) {
         List<Map<String, Object>> all = getAllGroupsRanking();
@@ -101,48 +90,138 @@ public class RankingService {
         return result;
     }
 
-    /** 현재 사용자 팀의 랭킹 정보. 팀 미소속 시 null. */
     public Map<String, Object> getMyGroupRanking(User user) {
+        return getMyGroupRanking(user, getAllGroupsRanking());
+    }
+
+    public Map<String, Object> getMyGroupRanking(User user, List<Map<String, Object>> all) {
         Long teamId = parseTeamId(user);
-        // User.teamId가 없어도 참가 중인 'started' 방이 있으면 그 방 기준으로 순위 반환
         if (teamId == null && user != null) {
             teamId = findStartedRoomIdByMember(user.getId());
         }
-        if (teamId == null) return null;
-        List<Map<String, Object>> all = getAllGroupsRanking();
-        int rank = 0;
-        Map<String, Object> my = null;
+        if (teamId == null) {
+            return null;
+        }
+
         for (int i = 0; i < all.size(); i++) {
-            if (teamId.equals(((Number) all.get(i).get("id")).longValue())) {
-                rank = i + 1;
-                my = new HashMap<>(all.get(i));
-                break;
+            Map<String, Object> candidate = all.get(i);
+            if (teamId.equals(((Number) candidate.get("id")).longValue())) {
+                Map<String, Object> my = new HashMap<>(candidate);
+                my.put("rank", i + 1);
+                return my;
             }
         }
-        if (my == null) return null;
-        my.put("rank", rank);
-        return my;
+        return null;
     }
 
-    private BigDecimal computeTotalValue(Long teamId) {
+    private List<Map<String, Object>> buildGroupRankings(boolean allowNetworkPriceFetch) {
+        long startedAt = System.currentTimeMillis();
+        List<MatchingRoom> started = matchingRoomRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(r -> "started".equals(r.getStatus()))
+                .collect(Collectors.toList());
+        List<Map<String, Object>> list = new ArrayList<>();
+        Map<String, BigDecimal> resolvedPrices = new HashMap<>();
+
+        for (MatchingRoom room : started) {
+            BigDecimal totalValue = computeTotalValue(room.getId(), allowNetworkPriceFetch, resolvedPrices);
+            BigDecimal profitRate = INITIAL_TEAM_BALANCE.compareTo(BigDecimal.ZERO) != 0
+                    ? totalValue.subtract(INITIAL_TEAM_BALANCE).divide(INITIAL_TEAM_BALANCE, 4, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", room.getId());
+            map.put("groupName", room.getName() != null ? room.getName() : "팀 " + room.getId());
+            map.put("currentAssets", totalValue);
+            map.put("profitRate", profitRate);
+            list.add(map);
+        }
+
+        list.sort(Comparator.<Map<String, Object>, BigDecimal>comparing(m -> (BigDecimal) m.get("currentAssets")).reversed());
+        log.info("[ranking] completed mode={} startedRooms={} elapsedMs={}",
+                allowNetworkPriceFetch ? "LIVE" : "SNAPSHOT",
+                started.size(),
+                System.currentTimeMillis() - startedAt);
+        return list;
+    }
+
+    private BigDecimal computeTotalValue(Long teamId,
+                                         boolean allowNetworkPriceFetch,
+                                         Map<String, BigDecimal> resolvedPrices) {
+        long startedAt = System.currentTimeMillis();
         BigDecimal cash = teamAccountRepository.findByTeamId(teamId)
                 .map(TeamAccount::getCashBalance)
                 .orElse(INITIAL_TEAM_BALANCE);
         BigDecimal holdingsValue = BigDecimal.ZERO;
-        for (TeamHolding h : teamHoldingRepository.findByTeamId(teamId)) {
-            BigDecimal price = h.getAveragePurchasePrice();
-            try {
-                price = kisApiService.getStockPrice(h.getStockCode()).getCurrentPrice();
-            } catch (Exception ignored) {
-            }
-            holdingsValue = holdingsValue.add(price.multiply(BigDecimal.valueOf(h.getQuantity())));
+
+        for (TeamHolding holding : teamHoldingRepository.findByTeamId(teamId)) {
+            BigDecimal price = resolveHoldingPrice(teamId, holding, allowNetworkPriceFetch, resolvedPrices);
+            holdingsValue = holdingsValue.add(price.multiply(BigDecimal.valueOf(holding.getQuantity())));
+        }
+
+        long elapsedMs = System.currentTimeMillis() - startedAt;
+        if (elapsedMs >= 1000) {
+            log.warn("[ranking] slow team valuation teamId={} mode={} elapsedMs={}",
+                    teamId,
+                    allowNetworkPriceFetch ? "LIVE" : "SNAPSHOT",
+                    elapsedMs);
         }
         return cash.add(holdingsValue);
     }
 
-    /** User.teamId가 없을 때, 참가 중인 'started' 방이 있으면 그 방 ID 반환. */
+    private BigDecimal resolveHoldingPrice(Long teamId,
+                                           TeamHolding holding,
+                                           boolean allowNetworkPriceFetch,
+                                           Map<String, BigDecimal> resolvedPrices) {
+        String stockCode = holding.getStockCode();
+        if (stockCode != null) {
+            BigDecimal cachedResolvedPrice = resolvedPrices.get(stockCode);
+            if (cachedResolvedPrice != null) {
+                return cachedResolvedPrice;
+            }
+        }
+
+        BigDecimal fallbackPrice = holding.getAveragePurchasePrice() != null
+                ? holding.getAveragePurchasePrice()
+                : BigDecimal.ZERO;
+
+        try {
+            BigDecimal resolvedPrice;
+            if (allowNetworkPriceFetch) {
+                long startedAt = System.currentTimeMillis();
+                StockPriceDTO dto = kisApiService.getStockPrice(stockCode);
+                resolvedPrice = dto.getCurrentPrice() != null ? dto.getCurrentPrice() : fallbackPrice;
+                long elapsedMs = System.currentTimeMillis() - startedAt;
+                if (elapsedMs >= 1000) {
+                    log.warn("[ranking] slow stock price lookup teamId={} stockCode={} elapsedMs={}",
+                            teamId, stockCode, elapsedMs);
+                }
+            } else {
+                resolvedPrice = kisApiService.getCachedStockPrice(stockCode)
+                        .map(StockPriceDTO::getCurrentPrice)
+                        .filter(price -> price != null)
+                        .orElse(fallbackPrice);
+            }
+
+            if (stockCode != null) {
+                resolvedPrices.put(stockCode, resolvedPrice);
+            }
+            return resolvedPrice;
+        } catch (Exception ex) {
+            log.warn("[ranking] fallback price used teamId={} stockCode={} mode={} reason={}",
+                    teamId,
+                    stockCode,
+                    allowNetworkPriceFetch ? "LIVE" : "SNAPSHOT",
+                    ex.getMessage());
+            if (stockCode != null) {
+                resolvedPrices.put(stockCode, fallbackPrice);
+            }
+            return fallbackPrice;
+        }
+    }
+
     private Long findStartedRoomIdByMember(Long userId) {
-        if (userId == null) return null;
+        if (userId == null) {
+            return null;
+        }
         return matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(userId).stream()
                 .map(MatchingRoomMember::getMatchingRoom)
                 .filter(r -> r != null && "started".equals(r.getStatus()))
@@ -153,7 +232,9 @@ public class RankingService {
 
     private static Long parseTeamId(User user) {
         String tid = user != null ? user.getTeamId() : null;
-        if (tid == null || tid.isBlank() || !tid.startsWith("team-")) return null;
+        if (tid == null || tid.isBlank() || !tid.startsWith("team-")) {
+            return null;
+        }
         try {
             return Long.parseLong(tid.substring(5));
         } catch (NumberFormatException e) {

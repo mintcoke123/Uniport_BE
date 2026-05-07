@@ -15,17 +15,21 @@ import com.uniport.dto.TopGroupInsightDTO;
 import com.uniport.entity.ManagedGroupInsight;
 import com.uniport.entity.User;
 import com.uniport.repository.ManagedGroupInsightRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
 public class HomeDataService {
 
+    private static final Logger log = LoggerFactory.getLogger(HomeDataService.class);
     private static final String GROUP_INSIGHT_KEY = "HOME_TOP";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -99,7 +103,13 @@ public class HomeDataService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getGroupMatchingDashboard(User user) {
-        List<Map<String, Object>> rankings = rankingService.getAllGroupsRanking();
+        long startedAt = System.currentTimeMillis();
+        Long userId = user != null ? user.getId() : null;
+        log.info("[home-dashboard] start userId={}", userId);
+
+        List<Map<String, Object>> rankings = rankingService.getAllGroupsRankingSnapshot();
+        Map<String, Object> myGroupRanking = user != null ? rankingService.getMyGroupRanking(user, rankings) : null;
+
         List<Map<String, Object>> rankingPreview = new ArrayList<>();
         for (int i = 0; i < Math.min(rankings.size(), 5); i++) {
             Map<String, Object> item = rankings.get(i);
@@ -127,35 +137,57 @@ public class HomeDataService {
                 .toList();
 
         GroupInsightsResponseDTO insights = getGroupInsights();
-        BigDecimal myProfitRate = extractMyProfitRate(user);
+        BigDecimal myProfitRate = extractMyProfitRate(user, myGroupRanking);
         BigDecimal unlockTarget = new BigDecimal("5.0");
         boolean unlocked = myProfitRate.compareTo(unlockTarget) >= 0;
+        List<Map<String, Object>> myApplications = user != null
+                ? competitionParticipationService.getMyApplications(user)
+                : List.of();
 
-        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        Map<String, Object> body = new LinkedHashMap<>();
         body.put("heroCards", List.of(
-                Map.of("type", "GROUP_MATCH", "title", "그룹 매칭", "description", "관심사 기반 친구 매칭", "ctaLabel", "바로 시작하기"),
-                Map.of("type", "TOURNAMENT", "title", "토너먼트 대회", "description", "실전형 수익률 경쟁", "ctaLabel", "대회 둘러보기")
+                Map.of(
+                        "type", "GROUP_MATCH",
+                        "title", "그룹 매칭",
+                        "description", "관심사 기반 친구 매칭",
+                        "ctaLabel", "바로 시작하기"
+                ),
+                Map.of(
+                        "type", "TOURNAMENT",
+                        "title", "토너먼트 대회",
+                        "description", "실전형 수익률 경쟁",
+                        "ctaLabel", "대회 둘러보기"
+                )
         ));
         body.put("topConsensus", insights.getTopConsensus());
         body.put("topGroupInsight", insights.getTopGroup());
         body.put("upcomingTournaments", upcomingCards);
         body.put("realtimeRanking", rankingPreview);
-        body.put("myGroupRanking", user != null ? rankingService.getMyGroupRanking(user) : null);
+        body.put("myGroupRanking", myGroupRanking);
         body.put("insightUnlock", Map.of(
                 "unlocked", unlocked,
                 "targetProfitRate", unlockTarget,
                 "currentProfitRate", myProfitRate,
                 "title", unlocked ? "상위 그룹 인사이트" : "잠금 대기",
-                "description", unlocked ? "이제 수익률 상위 그룹의 인사이트를 확인할 수 있어요." : "수익률 5%를 달성하고 잠금을 해제해보세요.",
+                "description", unlocked
+                        ? "이제 상위 그룹의 인사이트를 확인할 수 있어요."
+                        : "수익률 5%를 달성하면 잠금이 해제돼요.",
                 "ctaLabel", unlocked ? "인사이트 보러가기" : "잠금 대기"
         ));
-        body.put("myApplications", user != null ? competitionParticipationService.getMyApplications(user) : List.of());
+        body.put("myApplications", myApplications);
+
+        log.info("[home-dashboard] completed userId={} rankings={} upcoming={} applications={} elapsedMs={}",
+                userId,
+                rankings.size(),
+                upcomingCards.size(),
+                myApplications.size(),
+                System.currentTimeMillis() - startedAt);
         return body;
     }
 
     private ManagedGroupInsight getOrCreateInsight() {
         return managedGroupInsightRepository.findByInsightKey(GROUP_INSIGHT_KEY)
-                .orElseGet(() -> 
+                .orElseGet(() ->
                         ManagedGroupInsight.builder()
                                 .insightKey(GROUP_INSIGHT_KEY)
                                 .topGroupName("Top Group")
@@ -199,14 +231,20 @@ public class HomeDataService {
     }
 
     private static String normalizeRoomStatus(String status) {
-        if (status == null) return null;
+        if (status == null) {
+            return null;
+        }
         return "started".equalsIgnoreCase(status) ? "STARTED" : "WAITING";
     }
 
     private static Long parseRoomId(Map<String, Object> room) {
-        if (room == null || room.get("id") == null) return null;
+        if (room == null || room.get("id") == null) {
+            return null;
+        }
         String value = String.valueOf(room.get("id"));
-        if (!value.startsWith("room-")) return null;
+        if (!value.startsWith("room-")) {
+            return null;
+        }
         try {
             return Long.parseLong(value.substring(5));
         } catch (NumberFormatException ignored) {
@@ -214,8 +252,7 @@ public class HomeDataService {
         }
     }
 
-    private BigDecimal extractMyProfitRate(User user) {
-        Map<String, Object> myRanking = user != null ? rankingService.getMyGroupRanking(user) : null;
+    private BigDecimal extractMyProfitRate(User user, Map<String, Object> myRanking) {
         if (myRanking != null && myRanking.get("profitRate") instanceof BigDecimal rate) {
             return rate.multiply(BigDecimal.valueOf(100));
         }
@@ -227,8 +264,12 @@ public class HomeDataService {
     }
 
     private String resolveParticipantTeamId(User user) {
-        if (user == null) return null;
-        if (user.getTeamId() != null && !user.getTeamId().isBlank()) return user.getTeamId();
+        if (user == null) {
+            return null;
+        }
+        if (user.getTeamId() != null && !user.getTeamId().isBlank()) {
+            return user.getTeamId();
+        }
         return user.getId() != null ? "solo-" + user.getId() : null;
     }
 }
