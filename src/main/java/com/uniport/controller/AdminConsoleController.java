@@ -28,6 +28,7 @@ import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.EducationContentService;
+import com.uniport.service.MatchingRoomService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,6 +71,7 @@ public class AdminConsoleController {
     private final FriendRelationRepository friendRelationRepository;
     private final UserRepository userRepository;
     private final EducationContentService educationContentService;
+    private final MatchingRoomService matchingRoomService;
 
     public AdminConsoleController(
             ManagedEtfRepository managedEtfRepository,
@@ -84,7 +86,8 @@ public class AdminConsoleController {
             PointShopOrderRepository pointShopOrderRepository,
             FriendRelationRepository friendRelationRepository,
             UserRepository userRepository,
-            EducationContentService educationContentService
+            EducationContentService educationContentService,
+            MatchingRoomService matchingRoomService
     ) {
         this.managedEtfRepository = managedEtfRepository;
         this.managedNewsArticleRepository = managedNewsArticleRepository;
@@ -99,6 +102,7 @@ public class AdminConsoleController {
         this.friendRelationRepository = friendRelationRepository;
         this.userRepository = userRepository;
         this.educationContentService = educationContentService;
+        this.matchingRoomService = matchingRoomService;
     }
 
     @GetMapping("/bootstrap")
@@ -223,6 +227,27 @@ public class AdminConsoleController {
     @Transactional
     public ResponseEntity<Map<String, Object>> getHomeGroupInsight() {
         return ResponseEntity.ok(toGroupInsightMap(getOrCreateGroupInsight()));
+    }
+
+    @GetMapping("/matching-rooms")
+    @Transactional(readOnly = true)
+    public ResponseEntity<List<Map<String, Object>>> getMatchingRooms() {
+        return ResponseEntity.ok(matchingRoomService.list(null));
+    }
+
+    @DeleteMapping("/matching-rooms/{roomId}")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> deleteMatchingRoom(@PathVariable String roomId) {
+        return ResponseEntity.ok(matchingRoomService.deleteRoomByAdmin(roomId));
+    }
+
+    @DeleteMapping("/matching-rooms/{roomId}/members/{userId}")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> removeMatchingRoomMember(
+            @PathVariable String roomId,
+            @PathVariable Long userId
+    ) {
+        return ResponseEntity.ok(matchingRoomService.removeMemberByAdmin(roomId, userId));
     }
 
     @PutMapping("/group-insights/home")
