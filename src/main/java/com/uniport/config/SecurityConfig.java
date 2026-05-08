@@ -50,7 +50,12 @@ public class SecurityConfig {
                         .accessDeniedHandler(restAccessDeniedHandler))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/favicon.ico").permitAll()
+                        .requestMatchers(
+                                "/favicon.ico",
+                                "/.well-known/assetlinks.json",
+                                "/.well-known/apple-app-site-association",
+                                "/apple-app-site-association"
+                        ).permitAll()
                         .requestMatchers("/api/auth/**", "/api/me/**", "/api/market/**", "/api/stocks/**", "/api/news/**", "/api/ohlcv", "/api/trades", "/api/competitions/**", "/api/ranking/**", "/api/groups/**", "/api/admin/**", "/api/admin-console/**", "/api/config/**", "/api/health", "/api/home/group-insights", "/api/shop/items", "/h2-console/**", "/error", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/etf-discovery/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/community/**").permitAll()

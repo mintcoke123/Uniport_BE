@@ -30,6 +30,11 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(FirebaseAuthenticationFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final List<String> AUTH_BYPASS_PATHS = List.of(
+            "/.well-known/assetlinks.json",
+            "/.well-known/apple-app-site-association",
+            "/apple-app-site-association"
+    );
 
     private final FirebaseAuthenticationService firebaseAuthenticationService;
     private final JwtUtil jwtUtil;
@@ -42,6 +47,12 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
         this.firebaseAuthenticationService = firebaseAuthenticationService;
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String requestUri = request.getRequestURI();
+        return requestUri != null && AUTH_BYPASS_PATHS.contains(requestUri);
     }
 
     @Override
