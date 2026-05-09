@@ -26,15 +26,27 @@ public class OnboardingQuestionProvider {
     private static final Map<Long, Integer> LEVEL_VALUES = Map.of(13L, 1, 14L, 2, 15L, 3);
     private static final Map<Long, String> SECTOR_VALUES = Map.ofEntries(
             Map.entry(16L, "AI 반도체"),
-            Map.entry(17L, "2차전지(배터리)"),
-            Map.entry(18L, "로봇·휴머노이드"),
-            Map.entry(19L, "전력·전력기기"),
+            Map.entry(17L, "2차전지"),
+            Map.entry(18L, "로봇"),
+            Map.entry(19L, "전력기기"),
             Map.entry(20L, "방산"),
-            Map.entry(21L, "바이오·비만치료제"),
-            Map.entry(22L, "자율주행·미래차"),
-            Map.entry(23L, "원전·SMR"),
+            Map.entry(21L, "바이오"),
+            Map.entry(22L, "자율주행"),
+            Map.entry(23L, "원전"),
             Map.entry(24L, "양자컴퓨터"),
-            Map.entry(25L, "우주·항공")
+            Map.entry(25L, "우주/로켓")
+    );
+    private static final Map<Long, String> SECTOR_IDS = Map.ofEntries(
+            Map.entry(16L, "ai_semiconductor"),
+            Map.entry(17L, "battery"),
+            Map.entry(18L, "robot"),
+            Map.entry(19L, "power_equipment"),
+            Map.entry(20L, "defense"),
+            Map.entry(21L, "bio"),
+            Map.entry(22L, "autonomous_driving"),
+            Map.entry(23L, "nuclear"),
+            Map.entry(24L, "quantum_computer"),
+            Map.entry(25L, "space_rocket")
     );
 
     public List<OnboardingSurveyQuestionDTO> getQuestions() {
@@ -84,21 +96,21 @@ public class OnboardingQuestionProvider {
                         option(14L, "소액 투자 경험이 있고 기본 용어는 조금 안다.", "LV2"),
                         option(15L, "1년 이상 직접 사고팔아 보며 자기 기준이 조금 생겼다.", "LV3")
                 ),
-                singleQuestion(
+                multiQuestion(
                         QUESTION_SECTOR,
                         6,
-                        "지금 가장 관심 있게 보는 투자 분야는?",
-                        "관심 섹터는 결과 화면과 투자노트에 따로 보여줄게.",
+                        "지금 가장 관심 있게 보는 투자 분야 2개를 골라줘.",
+                        "선택한 2개 섹터가 30일 로드맵의 Day 27~30에 들어가.",
                         option(16L, "AI 반도체", null),
-                        option(17L, "2차전지(배터리)", null),
-                        option(18L, "로봇·휴머노이드", null),
-                        option(19L, "전력·전력기기", null),
+                        option(17L, "2차전지", null),
+                        option(18L, "로봇", null),
+                        option(19L, "전력기기", null),
                         option(20L, "방산", null),
-                        option(21L, "바이오·비만치료제", null),
-                        option(22L, "자율주행·미래차", null),
-                        option(23L, "원전·SMR", null),
+                        option(21L, "바이오", null),
+                        option(22L, "자율주행", null),
+                        option(23L, "원전", null),
                         option(24L, "양자컴퓨터", null),
-                        option(25L, "우주·항공", null)
+                        option(25L, "우주/로켓", null)
                 )
         );
     }
@@ -153,6 +165,14 @@ public class OnboardingQuestionProvider {
         return sector;
     }
 
+    public String getSectorId(Long optionId) {
+        String sectorId = SECTOR_IDS.get(optionId);
+        if (sectorId == null) {
+            throw new IllegalArgumentException("Unknown sector option: " + optionId);
+        }
+        return sectorId;
+    }
+
     private int getRequiredValue(Map<Long, Integer> values, Long optionId, String axisName) {
         Integer value = values.get(optionId);
         if (value == null) {
@@ -174,6 +194,23 @@ public class OnboardingQuestionProvider {
                 .subtitle(subtitle)
                 .minSelection(1)
                 .maxSelection(1)
+                .options(List.of(options))
+                .build();
+    }
+
+    private OnboardingSurveyQuestionDTO multiQuestion(Long id,
+                                                      int order,
+                                                      String title,
+                                                      String subtitle,
+                                                      OnboardingSurveyOptionDTO... options) {
+        return OnboardingSurveyQuestionDTO.builder()
+                .id(id)
+                .order(order)
+                .type("MULTI_SELECT")
+                .title(title)
+                .subtitle(subtitle)
+                .minSelection(2)
+                .maxSelection(2)
                 .options(List.of(options))
                 .build();
     }

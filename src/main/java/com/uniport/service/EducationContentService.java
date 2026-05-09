@@ -385,7 +385,13 @@ public class EducationContentService {
                 .text(entity.getText())
                 .imageType(entity.getImageType())
                 .svgPreset(entity.getSvgPreset())
+                .templateType(resolveTemplateType(entity.getTemplateType(), entity.getImageType()))
+                .visualType(resolveVisualType(entity.getVisualType(), entity.getImageType()))
+                .visualKey(resolveVisualKey(entity.getVisualKey(), entity.getAssetId(), entity.getSourceIdx()))
+                .assetKey(resolveAssetKey(entity.getAssetKey(), entity.getAssetId(), entity.getImageType()))
                 .visual(readJsonNode(entity.getVisualJson()))
+                .visualPayload(readJsonNode(entity.getVisualPayloadJson()))
+                .renderPolicy(readJsonNode(entity.getRenderPolicyJson()))
                 .build();
     }
 
@@ -478,6 +484,8 @@ public class EducationContentService {
                 .educationCurrentDayJson(writeValue(state.currentDayByTrack))
                 .educationCompletedDaysJson(writeValue(state.completedDaysByTrack))
                 .educationQuizAnswersJson(writeValue(state.quizAnswersByDay))
+                .educationCardProgressJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCardProgressJson()))
+                .educationSectorSelectionsJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationSectorSelectionsJson()))
                 .build());
     }
 
@@ -575,7 +583,13 @@ public class EducationContentService {
                 .text(text(node, "text"))
                 .imageType(text(node, "image_type"))
                 .svgPreset(svgPresetByIdx.get(idx))
+                .templateType(resolveTemplateType(null, text(node, "image_type")))
+                .visualType(resolveVisualType(null, text(node, "image_type")))
+                .visualKey(resolveVisualKey(null, nullableText(node, "asset_id"), idx))
+                .assetKey(resolveAssetKey(null, nullableText(node, "asset_id"), text(node, "image_type")))
                 .visualJson(writeValue(node.get("card_visual")))
+                .visualPayloadJson(writeValue(node.get("card_visual")))
+                .renderPolicyJson(defaultRenderPolicyJson())
                 .build();
     }
 
@@ -594,6 +608,55 @@ public class EducationContentService {
                 .area(text(node, "area"))
                 .intent(text(node, "intent"))
                 .build();
+    }
+
+    private String resolveTemplateType(String storedValue, String imageType) {
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        return isTextOnlyImageType(imageType) ? "content_text" : "content_visual";
+    }
+
+    private String resolveVisualType(String storedValue, String imageType) {
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        String normalized = imageType == null ? "" : imageType.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "", "placeholder" -> "none";
+            case "image" -> "raster_asset";
+            case "table", "stat" -> "statement_component";
+            case "diagram", "flow", "formula", "comparison", "checklist" -> "component";
+            default -> "component";
+        };
+    }
+
+    private String resolveVisualKey(String storedValue, String assetId, Integer sourceIdx) {
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        if (assetId != null && !assetId.isBlank()) {
+            return assetId;
+        }
+        return sourceIdx == null ? null : "education_card_" + sourceIdx;
+    }
+
+    private String resolveAssetKey(String storedValue, String assetId, String imageType) {
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        String visualType = resolveVisualType(null, imageType);
+        return "raster_asset".equals(visualType) || "chart_asset".equals(visualType) || "character_raster".equals(visualType)
+                ? assetId
+                : null;
+    }
+
+    private boolean isTextOnlyImageType(String imageType) {
+        return imageType == null || imageType.isBlank() || "placeholder".equalsIgnoreCase(imageType.trim());
+    }
+
+    private String defaultRenderPolicyJson() {
+        return "{\"fit\":\"contain\",\"allow_crop\":false}";
     }
 
     private String cardSector(JsonNode node) {

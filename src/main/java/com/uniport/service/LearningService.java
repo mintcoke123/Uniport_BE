@@ -438,6 +438,8 @@ public class LearningService {
                 .educationCurrentDayJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCurrentDayJson()))
                 .educationCompletedDaysJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCompletedDaysJson()))
                 .educationQuizAnswersJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationQuizAnswersJson()))
+                .educationCardProgressJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCardProgressJson()))
+                .educationSectorSelectionsJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationSectorSelectionsJson()))
                 .build());
     }
 

@@ -57,4 +57,10 @@ public class LearningUserStateEntity extends AuditableEntity {
 
     @Column(columnDefinition = "TEXT")
     private String educationQuizAnswersJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String educationCardProgressJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String educationSectorSelectionsJson;
 }
