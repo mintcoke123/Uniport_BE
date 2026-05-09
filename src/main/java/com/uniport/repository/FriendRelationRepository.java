@@ -58,4 +58,16 @@ public interface FriendRelationRepository extends JpaRepository<FriendRelation, 
             @Param("userId") Long userId,
             @Param("otherUserId") Long otherUserId
     );
+
+    @Query("""
+            select fr from FriendRelation fr
+            where ((fr.requesterUser.id = :userId and fr.addresseeUser.id = :otherUserId)
+                or (fr.requesterUser.id = :otherUserId and fr.addresseeUser.id = :userId))
+              and fr.status = :status
+            """)
+    Optional<FriendRelation> findBetweenUsersByStatus(
+            @Param("userId") Long userId,
+            @Param("otherUserId") Long otherUserId,
+            @Param("status") String status
+    );
 }

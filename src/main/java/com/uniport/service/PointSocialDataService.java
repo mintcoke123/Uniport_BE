@@ -442,6 +442,22 @@ public class PointSocialDataService {
                 .build();
     }
 
+    @Transactional
+    public void deleteFriend(User user, String friendUserId) {
+        if (friendUserId == null || friendUserId.isBlank()) {
+            throw new ApiException("friend user id is required", HttpStatus.BAD_REQUEST);
+        }
+
+        Long targetUserId = parseUserRef(friendUserId);
+        if (user.getId().equals(targetUserId)) {
+            throw new ApiException("friend not found", HttpStatus.NOT_FOUND);
+        }
+
+        FriendRelation relation = friendRelationRepository.findBetweenUsersByStatus(user.getId(), targetUserId, "ACCEPTED")
+                .orElseThrow(() -> new ApiException("friend not found", HttpStatus.NOT_FOUND));
+        friendRelationRepository.delete(relation);
+    }
+
     @Transactional(readOnly = true)
     public FriendRequestListResponseDTO getSentFriendRequests(User user) {
         return FriendRequestListResponseDTO.builder()
