@@ -148,7 +148,15 @@ public class EducationV1Service {
             if (sectorId != null) {
                 dayMap.put("sector_id", sectorId);
             }
-            dayMap.put("status", resolveDayStatus(day, currentDay, completedDays));
+            String status = resolveDayStatus(day, currentDay, completedDays);
+            dayMap.put("status", status);
+            dayMap.put("status_label", statusLabel(status));
+            dayMap.put("is_locked", "locked".equals(status));
+            dayMap.put("locked_reason", lockedReason(status));
+            dayMap.put("progress_label", dayProgressLabel(day));
+            dayMap.put("cta_type", ctaType(status));
+            dayMap.put("action_label", actionLabel(status));
+            dayMap.put("primary_action", actionMap(status, course.id() + "_d" + day));
             dayMap.put("card_count", countCards(target));
             dayMap.put("quiz_count", countQuizzes(target));
             days.add(dayMap);
@@ -209,6 +217,7 @@ public class EducationV1Service {
     public Map<String, Object> getCourseDay(User user, String courseId, int day) {
         EducationApiState state = getOrCreateState(user);
         CourseDefinition course = requirePlayableCourse(courseId);
+        String dayStatus = ensureDayAccessible(course, state, day);
         DayTarget target = resolveDayTarget(course, state, day);
         Optional<EducationOverviewEntity> overview = educationOverviewRepository
                 .findByTrackAndSectorAndDayNumber(target.track(), target.sectorName(), target.sourceDay());
@@ -229,8 +238,9 @@ public class EducationV1Service {
         for (EducationQuizEntity quiz : quizzes.stream().sorted(Comparator.comparingInt(entity -> safeInt(entity.getQuizNumber()))).toList()) {
             flow.add(toQuizStep(course, day, quiz));
         }
+        applyFlowUiContract(flow);
 
-        int completedSteps = state.completedCardIdxByDay.getOrDefault(dayKey(course.id(), day), Set.of()).size();
+        int completedSteps = completedFlowSteps(course.id(), day, state);
         Map<String, Object> response = linkedMap();
         response.put("content_version", CONTENT_VERSION);
         response.put("course_id", course.id());
@@ -238,11 +248,16 @@ public class EducationV1Service {
         response.put("day", day);
         response.put("day_label", course.label() + " Day " + day);
         response.put("module_type", target.moduleType());
+        response.put("status", dayStatus);
+        response.put("status_label", statusLabel(dayStatus));
+        response.put("is_locked", false);
+        response.put("locked_reason", null);
         response.put("title", overview.map(EducationOverviewEntity::getTitle).orElse("Day " + day));
         response.put("estimated_minutes", 5);
         response.put("progress", progressMap(Math.min(completedSteps + 1, Math.max(flow.size(), 1)), Math.max(flow.size(), 1), completedSteps));
+        response.put("primary_action", actionMap(dayStatus, course.id() + "_d" + day));
         response.put("flow", flow);
-        response.put("completion_preview", completionPreviewMap());
+        response.put("completion_preview", completionPreviewMap(state));
         return response;
     }
 
@@ -311,6 +326,7 @@ public class EducationV1Service {
             throw new ApiException("course_id, day and idx are required", HttpStatus.BAD_REQUEST);
         }
         CourseDefinition course = requirePlayableCourse(courseId);
+        ensureDayAccessible(course, state, day);
         DayTarget target = resolveDayTarget(course, state, day);
         List<EducationCardEntity> cards = educationCardRepository
                 .findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(target.track(), target.sectorName(), target.sourceDay());
@@ -323,6 +339,7 @@ public class EducationV1Service {
         persistState(user.getId(), state);
 
         int completedCards = state.completedCardIdxByDay.getOrDefault(dayKey, Set.of()).size();
+        boolean canCompleteDay = completedCards >= cards.size();
         Map<String, Object> response = linkedMap();
         response.put("content_version", CONTENT_VERSION);
         response.put("progress", Map.of(
@@ -331,6 +348,9 @@ public class EducationV1Service {
                 "completed_cards", completedCards,
                 "total_cards", cards.size(),
                 "current_card_index", Math.min(completedCards, Math.max(cards.size() - 1, 0)),
+                "progress_label", completedCards + " / " + cards.size(),
+                "progress_ratio", cards.isEmpty() ? 0.0 : completedCards / (double) cards.size(),
+                "can_complete_day", canCompleteDay,
                 "is_day_completed", state.completedDaysByCourse.getOrDefault(course.id(), Set.of()).contains(day)));
         return response;
     }
@@ -339,7 +359,7 @@ public class EducationV1Service {
     public Map<String, Object> completeCourseDay(User user, String courseId, int day, Map<String, Object> request) {
         EducationApiState state = getOrCreateState(user);
         CourseDefinition course = requirePlayableCourse(courseId);
-        validateDay(day);
+        ensureDayAccessible(course, state, day);
 
         Set<Integer> completedDays = state.completedDaysByCourse.computeIfAbsent(course.id(), ignored -> new HashSet<>());
         boolean alreadyCompleted = completedDays.contains(day);
@@ -373,6 +393,7 @@ public class EducationV1Service {
         nextAction.put("type", "roadmap");
         nextAction.put("label", "로드맵으로 돌아가기");
         nextAction.put("next_day", day >= TOTAL_DAYS ? null : day + 1);
+        nextAction.put("course_completed", completedDays.size() >= TOTAL_DAYS);
         response.put("next_action", nextAction);
         return response;
     }
@@ -399,10 +420,16 @@ public class EducationV1Service {
         map.put("total_days", TOTAL_DAYS);
         map.put("current_day", currentDay);
         map.put("completed_days", completedDays.size());
+        map.put("progress_percent", (int) Math.floor((completedDays.size() * 100.0) / TOTAL_DAYS));
+        map.put("progress_label", dayProgressLabel(currentDay == null ? 0 : currentDay));
         map.put("status", status);
         map.put("status_label", statusLabel(status));
         map.put("cover_asset_key", course.coverAssetKey());
+        map.put("is_locked", "locked".equals(status));
+        map.put("locked_reason", lockedReason(status));
         map.put("cta_type", ctaType(status));
+        map.put("action_label", actionLabel(status));
+        map.put("primary_action", actionMap(status, course.id()));
         return map;
     }
 
@@ -584,6 +611,35 @@ public class EducationV1Service {
         return "locked";
     }
 
+    private String ensureDayAccessible(CourseDefinition course, EducationApiState state, int day) {
+        validateDay(day);
+        String status = resolveDayStatus(day, resolveCurrentDay(course.id(), state), state.completedDaysByCourse.getOrDefault(course.id(), Set.of()));
+        if ("locked".equals(status)) {
+            throw new ApiException("DAY_LOCKED", HttpStatus.CONFLICT);
+        }
+        return status;
+    }
+
+    private int completedFlowSteps(String courseId, int day, EducationApiState state) {
+        String key = dayKey(courseId, day);
+        int completedCards = state.completedCardIdxByDay.getOrDefault(key, Set.of()).size();
+        int answeredQuizzes = state.quizAnswersByDay.getOrDefault(key, Map.of()).size();
+        return completedCards + answeredQuizzes;
+    }
+
+    private void applyFlowUiContract(List<Map<String, Object>> flow) {
+        int totalSteps = flow.size();
+        for (int i = 0; i < totalSteps; i += 1) {
+            Map<String, Object> step = flow.get(i);
+            int stepOrder = i + 1;
+            String nextStepId = i + 1 < totalSteps ? Objects.toString(flow.get(i + 1).get("step_id"), null) : null;
+            step.put("step_order", stepOrder);
+            step.put("total_steps", totalSteps);
+            step.put("progress", progressMap(stepOrder, totalSteps, i));
+            step.put("primary_action", stepActionMap(step, nextStepId));
+        }
+    }
+
     private List<Map<String, Object>> selectedSectorMaps(List<String> selectedSectorIds) {
         List<Map<String, Object>> selected = new ArrayList<>();
         for (int i = 0; i < selectedSectorIds.size(); i += 1) {
@@ -606,16 +662,18 @@ public class EducationV1Service {
         progress.put("current_step", currentStep);
         progress.put("total_steps", totalSteps);
         progress.put("completed_steps", completedSteps);
+        progress.put("progress_label", currentStep + " / " + totalSteps);
         progress.put("progress_ratio", totalSteps == 0 ? 0.0 : currentStep / (double) totalSteps);
+        progress.put("is_completed", totalSteps > 0 && completedSteps >= totalSteps);
         return progress;
     }
 
-    private Map<String, Object> completionPreviewMap() {
+    private Map<String, Object> completionPreviewMap(EducationApiState state) {
         Map<String, Object> preview = linkedMap();
         preview.put("template_type", "day_completion");
         preview.put("reward_exp", DAILY_REWARD_EXP);
         preview.put("reward_point", DAILY_REWARD_POINT);
-        preview.put("streak_days", 0);
+        preview.put("streak_days", state.streakDays);
         preview.put("character_asset_key", "learning_complete_character_default");
         return preview;
     }
@@ -698,6 +756,8 @@ public class EducationV1Service {
     private String statusLabel(String status) {
         return switch (status) {
             case "completed" -> "학습 완료됨";
+            case "current" -> "현재 학습";
+            case "available" -> "학습 가능";
             case "in_progress" -> "현재 이수중";
             case "locked" -> "잠김";
             default -> "잠금 해제됨";
@@ -707,10 +767,46 @@ public class EducationV1Service {
     private String ctaType(String status) {
         return switch (status) {
             case "completed" -> "review";
-            case "in_progress" -> "continue";
+            case "current", "in_progress" -> "continue";
             case "locked" -> "locked";
             default -> "start";
         };
+    }
+
+    private String actionLabel(String status) {
+        return switch (status) {
+            case "completed" -> "복습하기";
+            case "current", "in_progress" -> "이어하기";
+            case "locked" -> "잠김";
+            default -> "학습하기";
+        };
+    }
+
+    private String lockedReason(String status) {
+        return "locked".equals(status) ? "이전 Day를 완료하면 열려요" : null;
+    }
+
+    private String dayProgressLabel(int day) {
+        return String.format("Day %02d / %02d", day, TOTAL_DAYS);
+    }
+
+    private Map<String, Object> actionMap(String status, String targetId) {
+        Map<String, Object> action = linkedMap();
+        action.put("type", ctaType(status));
+        action.put("label", actionLabel(status));
+        action.put("enabled", !"locked".equals(status));
+        action.put("target_id", targetId);
+        return action;
+    }
+
+    private Map<String, Object> stepActionMap(Map<String, Object> step, String nextStepId) {
+        Map<String, Object> action = linkedMap();
+        boolean quiz = "quiz".equals(step.get("step_type"));
+        action.put("type", quiz ? "submit" : "continue");
+        action.put("label", quiz ? "제출" : "계속");
+        action.put("enabled", !quiz);
+        action.put("next_step_id", nextStepId);
+        return action;
     }
 
     private String normalizeSectorId(String rawValue) {
@@ -735,7 +831,7 @@ public class EducationV1Service {
 
     private CourseDefinition requirePlayableCourse(String courseId) {
         CourseDefinition course = COURSE_DEFINITIONS.get(normalizeCourseId(courseId));
-        if (course == null || "intermediate".equals(course.id())) {
+        if (course == null) {
             throw new ApiException("COURSE_NOT_FOUND", HttpStatus.NOT_FOUND);
         }
         return course;

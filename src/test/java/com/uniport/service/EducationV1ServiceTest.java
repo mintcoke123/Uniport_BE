@@ -5,10 +5,12 @@ import com.uniport.entity.EducationOverviewEntity;
 import com.uniport.entity.EducationQuizEntity;
 import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
+import com.uniport.exception.ApiException;
 import com.uniport.repository.EducationCardRepository;
 import com.uniport.repository.EducationOverviewRepository;
 import com.uniport.repository.EducationQuizRepository;
 import com.uniport.repository.LearningUserStateRepository;
+import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +25,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -81,6 +85,101 @@ class EducationV1ServiceTest {
     }
 
     @Test
+    void courseListCarriesFigmaCardStateAndButtonContract() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(LearningUserStateEntity.builder()
+                .userId(1L)
+                .level(0)
+                .point(3000)
+                .streakDays(0)
+                .currentDayByCourseJson("{}")
+                .completedDaysByCourseJson("{}")
+                .submittedStepIdsJson("[]")
+                .educationCurrentDayJson("{\"advanced\":2}")
+                .educationCompletedDaysJson("{\"intro\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],\"advanced\":[1]}")
+                .educationQuizAnswersJson("{}")
+                .educationCardProgressJson("{}")
+                .educationSectorSelectionsJson("{}")
+                .build()));
+
+        Map<String, Object> response = service.getCourses(user, "main");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> courses = (List<Map<String, Object>>) response.get("courses");
+        assertEquals("completed", courses.get(0).get("status"));
+        assertEquals("학습 완료됨", courses.get(0).get("status_label"));
+        assertEquals("Day 30 / 30", courses.get(0).get("progress_label"));
+        assertEquals(false, courses.get(0).get("is_locked"));
+        assertEquals("복습하기", courses.get(0).get("action_label"));
+
+        assertEquals("in_progress", courses.get(1).get("status"));
+        assertEquals("현재 이수중", courses.get(1).get("status_label"));
+        assertEquals("Day 02 / 30", courses.get(1).get("progress_label"));
+        assertEquals("이어하기", courses.get(1).get("action_label"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> advancedAction = (Map<String, Object>) courses.get(1).get("primary_action");
+        assertEquals("continue", advancedAction.get("type"));
+        assertEquals(true, advancedAction.get("enabled"));
+        assertEquals("advanced", advancedAction.get("target_id"));
+
+        assertEquals("unlocked", courses.get(2).get("status"));
+        assertEquals("잠금 해제됨", courses.get(2).get("status_label"));
+        assertEquals("학습하기", courses.get(2).get("action_label"));
+        assertNull(courses.get(2).get("locked_reason"));
+    }
+
+    @Test
+    void roadmapDaysCarryFigmaLockedProgressAndButtonState() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(educationOverviewRepository.findByTrackAndSectorOrderByDayNumberAsc(eq("intro_core"), isNull()))
+                .thenReturn(coreOverviews("intro_core"));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(anyString(), any(), anyInt()))
+                .thenReturn(List.of());
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(anyString(), any(), anyInt()))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseRoadmap(user, "intro");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> days = (List<Map<String, Object>>) response.get("days");
+        assertEquals("current", days.get(0).get("status"));
+        assertEquals("현재 학습", days.get(0).get("status_label"));
+        assertEquals("Day 01 / 30", days.get(0).get("progress_label"));
+        assertEquals(false, days.get(0).get("is_locked"));
+        assertEquals("이어하기", days.get(0).get("action_label"));
+
+        assertEquals("locked", days.get(1).get("status"));
+        assertEquals("잠김", days.get(1).get("status_label"));
+        assertEquals(true, days.get(1).get("is_locked"));
+        assertEquals("이전 Day를 완료하면 열려요", days.get(1).get("locked_reason"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> lockedAction = (Map<String, Object>) days.get(1).get("primary_action");
+        assertEquals("locked", lockedAction.get("type"));
+        assertEquals(false, lockedAction.get("enabled"));
+    }
+
+    @Test
+    void intermediateCourseCanOpenRoadmapUsingConfiguredContentTrack() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(educationOverviewRepository.findByTrackAndSectorOrderByDayNumberAsc(eq("advanced_core"), isNull()))
+                .thenReturn(coreOverviews("advanced_core"));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(anyString(), any(), anyInt()))
+                .thenReturn(List.of());
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(anyString(), any(), anyInt()))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseRoadmap(user, "intermediate");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> course = (Map<String, Object>) response.get("course");
+        assertEquals("intermediate", course.get("course_id"));
+        assertEquals("중급 30일 코스", course.get("title"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> days = (List<Map<String, Object>>) response.get("days");
+        assertEquals(30, days.size());
+        assertEquals("current", days.get(0).get("status"));
+    }
+
+    @Test
     void courseDayBuildsKmpFlowWithTemplateTypesAndDoesNotExposeCorrectQuizChoice() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
         when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_core"), isNull(), eq(1)))
@@ -96,13 +195,73 @@ class EducationV1ServiceTest {
         Map<String, Object> response = service.getCourseDay(user, "intro", 1);
 
         assertEquals("2026-05-09.1", response.get("content_version"));
+        assertEquals("current", response.get("status"));
+        assertEquals("현재 학습", response.get("status_label"));
+        assertEquals(false, response.get("is_locked"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> progress = (Map<String, Object>) response.get("progress");
+        assertEquals("1 / 4", progress.get("progress_label"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> primaryAction = (Map<String, Object>) response.get("primary_action");
+        assertEquals("continue", primaryAction.get("type"));
+        assertEquals("이어하기", primaryAction.get("label"));
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> flow = (List<Map<String, Object>>) response.get("flow");
         assertEquals("day_overview", flow.get(0).get("template_type"));
+        assertEquals(1, flow.get(0).get("step_order"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> overviewAction = (Map<String, Object>) flow.get(0).get("primary_action");
+        assertEquals("continue", overviewAction.get("type"));
+        assertEquals("계속", overviewAction.get("label"));
+        assertEquals(true, overviewAction.get("enabled"));
         assertEquals("content_text", flow.get(1).get("template_type"));
         assertEquals("content_visual", flow.get(2).get("template_type"));
         assertEquals("quiz_single_choice", flow.get(3).get("template_type"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> quizAction = (Map<String, Object>) flow.get(3).get("primary_action");
+        assertEquals("submit", quizAction.get("type"));
+        assertEquals("제출", quizAction.get("label"));
+        assertEquals(false, quizAction.get("enabled"));
         assertFalse(flow.get(3).containsKey("correct_choice_id"));
+    }
+
+    @Test
+    void lockedFutureDayCannotBeOpenedDirectly() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.getCourseDay(user, "intro", 2));
+
+        assertEquals("DAY_LOCKED", exception.getMessage());
+        assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+    }
+
+    @Test
+    void quizAttemptReturnsFigmaFeedbackStateOnlyAfterSubmit() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(learningUserStateRepository.save(any(LearningUserStateEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of(quiz(1)));
+
+        Map<String, Object> quiz = service.getQuiz("intro_d1_q1");
+        assertEquals("quiz_single_choice", quiz.get("template_type"));
+        assertEquals("not_selected", quiz.get("quiz_state"));
+        assertFalse(quiz.containsKey("correct_choice_id"));
+
+        Map<String, Object> correct = service.submitQuizAttempt(user, Map.of("quiz_id", "intro_d1_q1", "selected_choice_id", "a"));
+        assertEquals("submitted_correct", correct.get("quiz_state"));
+        assertEquals(true, correct.get("is_correct"));
+        assertEquals("a", correct.get("correct_choice_id"));
+        assertEquals("정답이에요!", correct.get("feedback_title"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> nextAction = (Map<String, Object>) correct.get("next_action");
+        assertEquals("continue", nextAction.get("type"));
+        assertEquals("intro_d1_completion", nextAction.get("next_step_id"));
+
+        Map<String, Object> wrong = service.submitQuizAttempt(user, Map.of("quiz_id", "intro_d1_q1", "selected_choice_id", "b"));
+        assertEquals("submitted_wrong", wrong.get("quiz_state"));
+        assertEquals(false, wrong.get("is_correct"));
+        assertEquals("a", wrong.get("correct_choice_id"));
+        assertEquals("오답이에요!", wrong.get("feedback_title"));
     }
 
     @Test
@@ -118,6 +277,15 @@ class EducationV1ServiceTest {
         Map<String, Object> first = service.completeCourseDay(user, "intro", 1, Map.of("last_step_id", "intro_d1_card_1"));
         Map<String, Object> second = service.completeCourseDay(user, "intro", 1, Map.of("last_step_id", "intro_d1_card_1"));
 
+        assertEquals("day_completion", first.get("template_type"));
+        assertEquals("오늘도 정복 완료!", first.get("completion_title"));
+        assertEquals("learning_complete_character_default", first.get("character_asset_key"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> nextAction = (Map<String, Object>) first.get("next_action");
+        assertEquals("roadmap", nextAction.get("type"));
+        assertEquals("로드맵으로 돌아가기", nextAction.get("label"));
+        assertEquals(2, nextAction.get("next_day"));
+        assertEquals(false, nextAction.get("course_completed"));
         @SuppressWarnings("unchecked")
         Map<String, Object> firstReward = (Map<String, Object>) first.get("reward");
         @SuppressWarnings("unchecked")
