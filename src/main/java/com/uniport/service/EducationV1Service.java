@@ -53,8 +53,7 @@ public class EducationV1Service {
 
     private static final Map<String, CourseDefinition> COURSE_DEFINITIONS = Map.of(
             "intro", new CourseDefinition("intro", "입문 30일 코스", "투자의 기초를 탄탄하게 다지는 첫걸음", "intro_core", "intro_sector", "입문", "course_cover_intro_main"),
-            "advanced", new CourseDefinition("advanced", "초급 30일 코스", "실전 감각을 익히는 심화 과정", "advanced_core", "advanced_sector", "초급", "course_cover_advanced_main"),
-            "intermediate", new CourseDefinition("intermediate", "중급 30일 코스", "실전 감각을 익히는 심화 과정", "advanced_core", "advanced_sector", "중급", "course_cover_intermediate_main")
+            "advanced", new CourseDefinition("advanced", "초급 30일 코스", "실전 감각을 익히는 심화 과정", "advanced_core", "advanced_sector", "초급", "course_cover_advanced_main")
     );
 
     private static final List<SectorDefinition> SECTORS = List.of(
@@ -110,7 +109,6 @@ public class EducationV1Service {
         if ("main".equals(selectedTab)) {
             courses.add(toCourseSummary(COURSE_DEFINITIONS.get("intro"), state));
             courses.add(toCourseSummary(COURSE_DEFINITIONS.get("advanced"), state));
-            courses.add(toCourseSummary(COURSE_DEFINITIONS.get("intermediate"), state));
         }
 
         Map<String, Object> response = linkedMap();

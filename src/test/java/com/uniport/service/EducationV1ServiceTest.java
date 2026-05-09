@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -105,6 +104,7 @@ class EducationV1ServiceTest {
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> courses = (List<Map<String, Object>>) response.get("courses");
+        assertEquals(2, courses.size());
         assertEquals("completed", courses.get(0).get("status"));
         assertEquals("학습 완료됨", courses.get(0).get("status_label"));
         assertEquals("Day 30 / 30", courses.get(0).get("progress_label"));
@@ -120,11 +120,6 @@ class EducationV1ServiceTest {
         assertEquals("continue", advancedAction.get("type"));
         assertEquals(true, advancedAction.get("enabled"));
         assertEquals("advanced", advancedAction.get("target_id"));
-
-        assertEquals("unlocked", courses.get(2).get("status"));
-        assertEquals("잠금 해제됨", courses.get(2).get("status_label"));
-        assertEquals("학습하기", courses.get(2).get("action_label"));
-        assertNull(courses.get(2).get("locked_reason"));
     }
 
     @Test
@@ -158,25 +153,27 @@ class EducationV1ServiceTest {
     }
 
     @Test
-    void intermediateCourseCanOpenRoadmapUsingConfiguredContentTrack() {
+    void coursesOnlyExposeImplementedIntroAndAdvanced() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
-        when(educationOverviewRepository.findByTrackAndSectorOrderByDayNumberAsc(eq("advanced_core"), isNull()))
-                .thenReturn(coreOverviews("advanced_core"));
-        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(anyString(), any(), anyInt()))
-                .thenReturn(List.of());
-        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(anyString(), any(), anyInt()))
-                .thenReturn(List.of());
 
-        Map<String, Object> response = service.getCourseRoadmap(user, "intermediate");
+        Map<String, Object> response = service.getCourses(user, "main");
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> course = (Map<String, Object>) response.get("course");
-        assertEquals("intermediate", course.get("course_id"));
-        assertEquals("중급 30일 코스", course.get("title"));
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> days = (List<Map<String, Object>>) response.get("days");
-        assertEquals(30, days.size());
-        assertEquals("current", days.get(0).get("status"));
+        List<Map<String, Object>> courses = (List<Map<String, Object>>) response.get("courses");
+        assertEquals(2, courses.size());
+        assertEquals("intro", courses.get(0).get("course_id"));
+        assertEquals("advanced", courses.get(1).get("course_id"));
+        assertFalse(courses.stream().anyMatch(course -> "intermediate".equals(course.get("course_id"))));
+    }
+
+    @Test
+    void intermediateCourseCannotBeOpenedUntilContentExists() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.getCourseRoadmap(user, "intermediate"));
+
+        assertEquals("COURSE_NOT_FOUND", exception.getMessage());
+        assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
     }
 
     @Test
@@ -262,6 +259,19 @@ class EducationV1ServiceTest {
         assertEquals(false, wrong.get("is_correct"));
         assertEquals("a", wrong.get("correct_choice_id"));
         assertEquals("오답이에요!", wrong.get("feedback_title"));
+    }
+
+    @Test
+    void intermediateQuizIdsAreRejectedUntilCourseExists() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+
+        ApiException readException = assertThrows(ApiException.class, () -> service.getQuiz("intermediate_d1_q1"));
+        assertEquals("QUIZ_NOT_FOUND", readException.getMessage());
+        assertEquals(HttpStatus.NOT_FOUND, readException.getStatus());
+
+        ApiException submitException = assertThrows(ApiException.class, () -> service.submitQuizAttempt(user, Map.of("quiz_id", "intermediate_d1_q1", "selected_choice_id", "a")));
+        assertEquals("QUIZ_NOT_FOUND", submitException.getMessage());
+        assertEquals(HttpStatus.NOT_FOUND, submitException.getStatus());
     }
 
     @Test
