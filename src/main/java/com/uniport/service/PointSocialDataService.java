@@ -362,6 +362,7 @@ public class PointSocialDataService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public FriendListResponseDTO getFriends(User user, String keyword) {
         String normalized = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
         List<FriendListItemDTO> items;
@@ -441,6 +442,23 @@ public class PointSocialDataService {
                 .build();
     }
 
+    @Transactional
+    public void deleteFriend(User user, String friendUserId) {
+        if (friendUserId == null || friendUserId.isBlank()) {
+            throw new ApiException("friend user id is required", HttpStatus.BAD_REQUEST);
+        }
+
+        Long targetUserId = parseUserRef(friendUserId);
+        if (user.getId().equals(targetUserId)) {
+            throw new ApiException("friend not found", HttpStatus.NOT_FOUND);
+        }
+
+        FriendRelation relation = friendRelationRepository.findBetweenUsersByStatus(user.getId(), targetUserId, "ACCEPTED")
+                .orElseThrow(() -> new ApiException("friend not found", HttpStatus.NOT_FOUND));
+        friendRelationRepository.delete(relation);
+    }
+
+    @Transactional(readOnly = true)
     public FriendRequestListResponseDTO getSentFriendRequests(User user) {
         return FriendRequestListResponseDTO.builder()
                 .items(friendRelationRepository.findByRequesterUser_IdAndStatusOrderByCreatedAtDesc(user.getId(), "REQUESTED").stream()
@@ -449,6 +467,7 @@ public class PointSocialDataService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public FriendRequestListResponseDTO getReceivedFriendRequests(User user) {
         return FriendRequestListResponseDTO.builder()
                 .items(friendRelationRepository.findByAddresseeUser_IdAndStatusOrderByCreatedAtDesc(user.getId(), "REQUESTED").stream()
@@ -457,6 +476,7 @@ public class PointSocialDataService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public FriendsDashboardResponseDTO getFriendsDashboard(User user) {
         List<User> rankingPool = friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(user.getId(), user.getId()).stream()
                 .filter(relation -> "ACCEPTED".equalsIgnoreCase(relation.getStatus()))
