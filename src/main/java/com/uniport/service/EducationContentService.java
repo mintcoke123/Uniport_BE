@@ -55,7 +55,7 @@ import java.util.regex.Pattern;
 public class EducationContentService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String CONTENT_VERSION = "2026-04-29";
+    private static final String CONTENT_VERSION = "2026-05-09.1";
     private static final Set<String> SUPPORTED_TRACKS = Set.of("intro_core", "advanced_core", "intro_sector", "advanced_sector");
     private static final Pattern SVG_MAP_PATTERN = Pattern.compile("(\\d+)\\s*:\\s*'([^']+)'");
     private static final TypeReference<Map<String, Integer>> CURRENT_DAY_TYPE = new TypeReference<>() {};
