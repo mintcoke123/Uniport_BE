@@ -22,6 +22,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -102,6 +103,26 @@ public class FriendsController {
             @RequestBody FriendRequestDecisionDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(pointSocialDataService.decideFriendRequest(user, requestId, request));
+    }
+
+    @DeleteMapping("/{friendUserId}")
+    @Operation(summary = "친구 제거", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "친구 제거 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 사용자 ID",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "친구 관계 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<Void> deleteFriend(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String friendUserId) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        pointSocialDataService.deleteFriend(user, friendUserId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/requests/sent")
