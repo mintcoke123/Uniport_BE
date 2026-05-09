@@ -2,6 +2,9 @@ package com.uniport.controller;
 
 import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.ErrorResponseDTO;
+import com.uniport.dto.FriendInviteAcceptResponseDTO;
+import com.uniport.dto.FriendInviteCreateResponseDTO;
+import com.uniport.dto.FriendInviteDetailResponseDTO;
 import com.uniport.dto.FriendListResponseDTO;
 import com.uniport.dto.FriendRequestCreateDTO;
 import com.uniport.dto.FriendRequestDecisionDTO;
@@ -10,6 +13,7 @@ import com.uniport.dto.FriendRequestResponseDTO;
 import com.uniport.dto.FriendsDashboardResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
+import com.uniport.service.FriendInviteService;
 import com.uniport.service.PointSocialDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -39,11 +43,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class FriendsController {
 
     private final PointSocialDataService pointSocialDataService;
+    private final FriendInviteService friendInviteService;
     private final CurrentUserResolver currentUserResolver;
 
     public FriendsController(PointSocialDataService pointSocialDataService,
+                             FriendInviteService friendInviteService,
                              CurrentUserResolver currentUserResolver) {
         this.pointSocialDataService = pointSocialDataService;
+        this.friendInviteService = friendInviteService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -82,6 +89,59 @@ public class FriendsController {
             @RequestBody FriendRequestCreateDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.status(HttpStatus.CREATED).body(pointSocialDataService.requestFriend(user, request));
+    }
+
+    @PostMapping("/invites")
+    @Operation(summary = "친구 초대 링크 생성", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "친구 초대 링크 생성 성공",
+                    content = @Content(schema = @Schema(implementation = FriendInviteCreateResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<FriendInviteCreateResponseDTO> createInvite(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.status(HttpStatus.CREATED).body(friendInviteService.createInvite(user));
+    }
+
+    @GetMapping("/invites/{inviteCode}")
+    @Operation(summary = "친구 초대 링크 조회")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "친구 초대 조회 성공",
+                    content = @Content(schema = @Schema(implementation = FriendInviteDetailResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "친구 초대 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "410", description = "친구 초대 만료 또는 취소",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<FriendInviteDetailResponseDTO> getInviteDetail(@PathVariable String inviteCode) {
+        return ResponseEntity.ok(friendInviteService.getInviteDetail(inviteCode));
+    }
+
+    @PostMapping("/invites/{inviteCode}/accept")
+    @Operation(summary = "친구 초대 수락", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "친구 초대 수락 성공",
+                    content = @Content(schema = @Schema(implementation = FriendInviteAcceptResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "잘못된 초대 수락",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "친구 초대 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "409", description = "이미 친구이거나 처리된 초대",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "410", description = "친구 초대 만료 또는 취소",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<FriendInviteAcceptResponseDTO> acceptInvite(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String inviteCode) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(friendInviteService.acceptInvite(user, inviteCode));
     }
 
     @PatchMapping("/requests/{requestId}")
