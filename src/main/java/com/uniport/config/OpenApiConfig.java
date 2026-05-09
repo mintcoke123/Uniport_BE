@@ -82,7 +82,6 @@ public class OpenApiConfig {
         String normalizedMethod = httpMethod == null ? "" : httpMethod.toUpperCase(Locale.ROOT);
 
         return normalizedPath.startsWith("/api/onboarding/")
-                || normalizedPath.startsWith("/api/learning/")
                 || normalizedPath.startsWith("/api/chat/")
                 || normalizedPath.startsWith("/api/matching-rooms/")
                 || normalizedPath.startsWith("/api/custom-etfs/")

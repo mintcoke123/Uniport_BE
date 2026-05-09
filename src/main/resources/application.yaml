@@ -78,3 +78,6 @@ uniport:
     password: ${UNIPORT_SISU_ADMIN_PASSWORD:SISUadmin123!!}
   seed:
     test-user-enabled: ${UNIPORT_SEED_TEST_USER_ENABLED:true}
+  education:
+    seed:
+      force-refresh: ${UNIPORT_EDUCATION_SEED_FORCE_REFRESH:false}

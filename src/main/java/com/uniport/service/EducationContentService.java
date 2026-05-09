@@ -28,6 +28,7 @@ import com.uniport.repository.EducationOverviewRepository;
 import com.uniport.repository.EducationQuizRepository;
 import com.uniport.repository.LearningUserStateRepository;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -67,23 +68,27 @@ public class EducationContentService {
     private final EducationOverviewRepository educationOverviewRepository;
     private final EducationCardRepository educationCardRepository;
     private final EducationQuizRepository educationQuizRepository;
+    private final boolean forceRefreshOnStartup;
 
     public EducationContentService(LearningUserStateRepository learningUserStateRepository,
                                    EducationOverviewRepository educationOverviewRepository,
                                    EducationCardRepository educationCardRepository,
-                                   EducationQuizRepository educationQuizRepository) {
+                                   EducationQuizRepository educationQuizRepository,
+                                   @Value("${uniport.education.seed.force-refresh:false}") boolean forceRefreshOnStartup) {
         this.learningUserStateRepository = learningUserStateRepository;
         this.educationOverviewRepository = educationOverviewRepository;
         this.educationCardRepository = educationCardRepository;
         this.educationQuizRepository = educationQuizRepository;
+        this.forceRefreshOnStartup = forceRefreshOnStartup;
     }
 
     @PostConstruct
     @Transactional
     public void seedDatabaseIfNeeded() {
-        if (educationOverviewRepository.count() > 0
+        boolean hasExistingContent = educationOverviewRepository.count() > 0
                 && educationCardRepository.count() > 0
-                && educationQuizRepository.count() > 0) {
+                && educationQuizRepository.count() > 0;
+        if (hasExistingContent && !forceRefreshOnStartup) {
             return;
         }
 
@@ -91,6 +96,12 @@ public class EducationContentService {
         List<JsonNode> cardNodes = readArray("education/cards.json");
         List<JsonNode> quizNodes = readArray("education/education_quizzes.json");
         Map<Integer, String> svgPresetByIdx = parseSvgPresetMap("education/chart_svgs.js");
+
+        if (forceRefreshOnStartup) {
+            educationQuizRepository.deleteAllInBatch();
+            educationCardRepository.deleteAllInBatch();
+            educationOverviewRepository.deleteAllInBatch();
+        }
 
         if (educationOverviewRepository.count() == 0) {
             List<EducationOverviewEntity> overviewEntities = overviewNodes.stream()

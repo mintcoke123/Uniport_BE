@@ -62,7 +62,6 @@ public class SecurityConfig {
                         .requestMatchers("/groups/*/chat", "/prices").permitAll()
                         .requestMatchers(
                                 "/api/onboarding/**",
-                                "/api/learning/**",
                                 "/api/chat/**",
                                 "/api/matching-rooms/**",
                                 "/api/custom-etfs/**",
