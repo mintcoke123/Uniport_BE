@@ -98,24 +98,31 @@ public class CachedFallbackHistoricalPriceProvider implements HistoricalPricePro
         String normalized = assetId == null || assetId.isBlank() ? "LOCAL_SYNTHETIC" : normalizeAssetId(assetId);
         int hash = Math.floorMod(normalized.hashCode(), 10_000);
         BigDecimal base = BigDecimal.valueOf(1_000L + Math.floorMod(hash, 900));
-        BigDecimal dailyTrend = BigDecimal.valueOf(Math.floorMod(hash, 11) - 3)
-                .divide(BigDecimal.valueOf(10_000), 12, RoundingMode.HALF_UP);
-        BigDecimal shortCycle = BigDecimal.valueOf(Math.floorMod(hash / 11, 7) - 3)
-                .divide(BigDecimal.valueOf(10_000), 12, RoundingMode.HALF_UP);
+        BigDecimal annualReturnRate = syntheticAnnualReturnRate(normalized, hash);
         List<BacktestPricePoint> points = new ArrayList<>();
         LocalDate cursor = startDate;
-        int tradingDay = 0;
+        int elapsedDays = 0;
         while (!cursor.isAfter(endDate)) {
             if (cursor.getDayOfWeek().getValue() <= 5) {
-                BigDecimal trend = dailyTrend.multiply(BigDecimal.valueOf(tradingDay));
-                BigDecimal cycle = shortCycle.multiply(BigDecimal.valueOf(tradingDay % 21L));
-                BigDecimal multiplier = BigDecimal.ONE.add(trend).add(cycle).max(new BigDecimal("0.1"));
+                BigDecimal growth = annualReturnRate
+                        .multiply(BigDecimal.valueOf(elapsedDays))
+                        .divide(BigDecimal.valueOf(365), 12, RoundingMode.HALF_UP);
+                BigDecimal multiplier = BigDecimal.ONE.add(growth);
                 points.add(new BacktestPricePoint(cursor, base.multiply(multiplier).setScale(6, RoundingMode.HALF_UP)));
-                tradingDay++;
             }
+            elapsedDays++;
             cursor = cursor.plusDays(1);
         }
         return points;
+    }
+
+    private BigDecimal syntheticAnnualReturnRate(String normalizedAssetId, int hash) {
+        if (normalizedAssetId.startsWith("BENCHMARK_")) {
+            return new BigDecimal("0.055").add(BigDecimal.valueOf(Math.floorMod(hash, 31))
+                    .divide(BigDecimal.valueOf(1_000), 12, RoundingMode.HALF_UP));
+        }
+        return new BigDecimal("0.045").add(BigDecimal.valueOf(Math.floorMod(hash, 81))
+                .divide(BigDecimal.valueOf(1_000), 12, RoundingMode.HALF_UP));
     }
 
     private List<BacktestPricePoint> fixedYieldSyntheticSeries(LocalDate startDate, LocalDate endDate, BigDecimal annualReturnRate) {

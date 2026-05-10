@@ -10,10 +10,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -64,6 +66,26 @@ class CachedFallbackHistoricalPriceProviderTest {
     }
 
     @Test
+    void getSecurityPriceSeries_fallbackCumulativeReturnIncreasesForLongerPeriods() {
+        LocalDate endDate = LocalDate.parse("2026-05-11");
+        LocalDate oneYearStart = endDate.minusYears(1);
+        LocalDate fiveYearStart = endDate.minusYears(5);
+        CachedFallbackHistoricalPriceProvider provider = new CachedFallbackHistoricalPriceProvider(
+                assetPriceDailyRepository,
+                true
+        );
+        when(assetPriceDailyRepository.findByAssetIdAndTradeDateBetweenOrderByTradeDateAsc("US_MSFT", oneYearStart, endDate))
+                .thenReturn(List.of());
+        when(assetPriceDailyRepository.findByAssetIdAndTradeDateBetweenOrderByTradeDateAsc("US_MSFT", fiveYearStart, endDate))
+                .thenReturn(List.of());
+
+        BigDecimal oneYearReturn = cumulativeReturn(provider.getSecurityPriceSeries("US_MSFT", oneYearStart, endDate));
+        BigDecimal fiveYearReturn = cumulativeReturn(provider.getSecurityPriceSeries("US_MSFT", fiveYearStart, endDate));
+
+        assertTrue(fiveYearReturn.compareTo(oneYearReturn) > 0);
+    }
+
+    @Test
     void getSecurityPriceSeries_returnsEmptyOnCacheMissWhenFallbackDisabled() {
         LocalDate startDate = LocalDate.parse("2025-01-01");
         LocalDate endDate = LocalDate.parse("2025-01-10");
@@ -110,5 +132,11 @@ class CachedFallbackHistoricalPriceProviderTest {
                 .currency(currency)
                 .source(source)
                 .build();
+    }
+
+    private BigDecimal cumulativeReturn(List<BacktestPricePoint> points) {
+        BigDecimal first = points.get(0).adjustedCloseKrw();
+        BigDecimal last = points.get(points.size() - 1).adjustedCloseKrw();
+        return last.divide(first, 12, RoundingMode.HALF_UP).subtract(BigDecimal.ONE);
     }
 }
