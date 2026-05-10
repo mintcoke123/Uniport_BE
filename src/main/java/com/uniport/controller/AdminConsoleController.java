@@ -1,5 +1,6 @@
 package com.uniport.controller;
 
+import com.uniport.entity.Competition;
 import com.uniport.entity.FriendRelation;
 import com.uniport.entity.GifticonInventory;
 import com.uniport.entity.ManagedCommunityComment;
@@ -27,6 +28,7 @@ import com.uniport.repository.PointShopProductRepository;
 import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
 import com.uniport.repository.UserRepository;
+import com.uniport.service.CompetitionService;
 import com.uniport.service.EducationContentService;
 import com.uniport.service.MatchingRoomService;
 import org.springframework.http.HttpStatus;
@@ -70,6 +72,7 @@ public class AdminConsoleController {
     private final PointShopOrderRepository pointShopOrderRepository;
     private final FriendRelationRepository friendRelationRepository;
     private final UserRepository userRepository;
+    private final CompetitionService competitionService;
     private final EducationContentService educationContentService;
     private final MatchingRoomService matchingRoomService;
 
@@ -86,6 +89,7 @@ public class AdminConsoleController {
             PointShopOrderRepository pointShopOrderRepository,
             FriendRelationRepository friendRelationRepository,
             UserRepository userRepository,
+            CompetitionService competitionService,
             EducationContentService educationContentService,
             MatchingRoomService matchingRoomService
     ) {
@@ -101,6 +105,7 @@ public class AdminConsoleController {
         this.pointShopOrderRepository = pointShopOrderRepository;
         this.friendRelationRepository = friendRelationRepository;
         this.userRepository = userRepository;
+        this.competitionService = competitionService;
         this.educationContentService = educationContentService;
         this.matchingRoomService = matchingRoomService;
     }
@@ -116,6 +121,25 @@ public class AdminConsoleController {
                         "products", pointShopProductRepository.count(),
                         "users", userRepository.count()
                 )
+        ));
+    }
+
+    @GetMapping("/competitions")
+    @Transactional(readOnly = true)
+    public ResponseEntity<List<Map<String, Object>>> getCompetitions() {
+        return ResponseEntity.ok(competitionService.findAll().stream().map(competitionService::toMap).toList());
+    }
+
+    @PostMapping("/competitions")
+    public ResponseEntity<Map<String, Object>> createCompetition(@RequestBody Map<String, String> body) {
+        String name = body != null && body.containsKey("name") ? body.get("name") : "새 토너먼트";
+        String startDate = body != null && body.containsKey("startDate") ? body.get("startDate") : "2025-03-01T00:00:00";
+        String endDate = body != null && body.containsKey("endDate") ? body.get("endDate") : "2025-03-31T23:59:59";
+        Competition created = competitionService.create(name, startDate, endDate);
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Created",
+                "competition", competitionService.toMap(created)
         ));
     }
 
