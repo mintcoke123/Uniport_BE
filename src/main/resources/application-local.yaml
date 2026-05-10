@@ -9,3 +9,8 @@ kis:
     # appkey/appsecret 은 application.yaml 에서 ${KIS_APPKEY_2:}, ${KIS_APPSECRET_2:} 로 로드.
     # 로컬에서 사용 시 환경 변수 또는 .env 에 설정.
     use-mock: false
+
+backtest:
+  price-fallback:
+    # 로컬에서 KIS 키가 없더라도 나만의 ETF 분석 플로우를 개발할 수 있도록 합성 가격 시계열 사용.
+    enabled: true

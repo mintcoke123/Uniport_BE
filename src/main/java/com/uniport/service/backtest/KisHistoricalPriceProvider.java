@@ -8,6 +8,7 @@ import com.uniport.repository.AssetMasterRepository;
 import com.uniport.repository.AssetPriceDailyRepository;
 import com.uniport.service.KisApiService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -34,16 +35,26 @@ public class KisHistoricalPriceProvider implements HistoricalPriceProvider {
     private final FxRateProvider fxRateProvider;
     private final AssetPriceDailyRepository assetPriceDailyRepository;
     private final AssetMasterRepository assetMasterRepository;
+    private final boolean localSyntheticPriceFallbackEnabled;
 
     @Autowired
     public KisHistoricalPriceProvider(KisApiService kisApiService,
                                       FxRateProvider fxRateProvider,
                                       AssetPriceDailyRepository assetPriceDailyRepository,
-                                      AssetMasterRepository assetMasterRepository) {
+                                      AssetMasterRepository assetMasterRepository,
+                                      @Value("${backtest.price-fallback.enabled:false}") boolean localSyntheticPriceFallbackEnabled) {
         this.kisApiService = kisApiService;
         this.fxRateProvider = fxRateProvider;
         this.assetPriceDailyRepository = assetPriceDailyRepository;
         this.assetMasterRepository = assetMasterRepository;
+        this.localSyntheticPriceFallbackEnabled = localSyntheticPriceFallbackEnabled;
+    }
+
+    public KisHistoricalPriceProvider(KisApiService kisApiService,
+                                      FxRateProvider fxRateProvider,
+                                      AssetPriceDailyRepository assetPriceDailyRepository,
+                                      AssetMasterRepository assetMasterRepository) {
+        this(kisApiService, fxRateProvider, assetPriceDailyRepository, assetMasterRepository, false);
     }
 
     public KisHistoricalPriceProvider(KisApiService kisApiService,
@@ -68,6 +79,9 @@ public class KisHistoricalPriceProvider implements HistoricalPriceProvider {
         List<BacktestPricePoint> cached = cachedPriceSeries(normalizedSecurityId, startDate, endDate);
         if (cacheCovers(cached, startDate, endDate)) {
             return cached;
+        }
+        if (shouldUseLocalSyntheticPriceFallback()) {
+            return localSyntheticPriceSeries(normalizedSecurityId, startDate, endDate);
         }
         OverseasSymbol overseasSymbol = toOverseasSymbol(securityId);
         if (overseasSymbol != null) {
@@ -126,6 +140,9 @@ public class KisHistoricalPriceProvider implements HistoricalPriceProvider {
         List<BacktestPricePoint> cached = cachedPriceSeries(cacheAssetId, startDate, endDate);
         if (cacheCovers(cached, startDate, endDate)) {
             return cached;
+        }
+        if (shouldUseLocalSyntheticPriceFallback()) {
+            return localSyntheticPriceSeries(cacheAssetId, startDate, endDate);
         }
         if ("SP500".equals(normalized)) {
             List<IndexChartPriceItemDTO> rows = fetchOverseasDailyRows(new OverseasSymbol("AMS", "SPY"), startDate, endDate);
@@ -195,6 +212,38 @@ public class KisHistoricalPriceProvider implements HistoricalPriceProvider {
             cursorEnd = oldest.minusDays(1);
         }
         return rows;
+    }
+
+    private boolean shouldUseLocalSyntheticPriceFallback() {
+        return localSyntheticPriceFallbackEnabled
+                && (kisApiService == null || !kisApiService.isKisConfigured());
+    }
+
+    private List<BacktestPricePoint> localSyntheticPriceSeries(String assetId, LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
+            return List.of();
+        }
+        String normalized = assetId == null || assetId.isBlank() ? "LOCAL_SYNTHETIC" : assetId.trim().toUpperCase(Locale.ROOT);
+        int hash = Math.floorMod(normalized.hashCode(), 10_000);
+        BigDecimal base = BigDecimal.valueOf(1_000L + Math.floorMod(hash, 900));
+        BigDecimal dailyTrend = BigDecimal.valueOf(Math.floorMod(hash, 11) - 3)
+                .divide(BigDecimal.valueOf(10_000), 12, RoundingMode.HALF_UP);
+        BigDecimal shortCycle = BigDecimal.valueOf(Math.floorMod(hash / 11, 7) - 3)
+                .divide(BigDecimal.valueOf(10_000), 12, RoundingMode.HALF_UP);
+        List<BacktestPricePoint> points = new ArrayList<>();
+        LocalDate cursor = startDate;
+        int tradingDay = 0;
+        while (!cursor.isAfter(endDate)) {
+            if (cursor.getDayOfWeek().getValue() <= 5) {
+                BigDecimal trend = dailyTrend.multiply(BigDecimal.valueOf(tradingDay));
+                BigDecimal cycle = shortCycle.multiply(BigDecimal.valueOf(tradingDay % 21L));
+                BigDecimal multiplier = BigDecimal.ONE.add(trend).add(cycle).max(new BigDecimal("0.1"));
+                points.add(new BacktestPricePoint(cursor, base.multiply(multiplier).setScale(6, RoundingMode.HALF_UP)));
+                tradingDay++;
+            }
+            cursor = cursor.plusDays(1);
+        }
+        return points;
     }
 
     private String toDomesticStockCode(String securityId) {

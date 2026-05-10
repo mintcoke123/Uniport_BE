@@ -217,6 +217,36 @@ class KisHistoricalPriceProviderTest {
         verify(kisApiService, never()).getStockDailyChartPrice(eq("CASH_KRW"), any(), any(), any());
     }
 
+    @Test
+    void getSecurityPriceSeries_usesLocalSyntheticFallbackWhenKisIsNotConfigured() {
+        FxRateProvider fxRateProvider = (currency, date) -> BigDecimal.valueOf(1300);
+        KisHistoricalPriceProvider provider = new KisHistoricalPriceProvider(
+                kisApiService,
+                fxRateProvider,
+                assetPriceDailyRepository,
+                assetMasterRepository,
+                true
+        );
+        LocalDate startDate = LocalDate.parse("2025-01-01");
+        LocalDate endDate = LocalDate.parse("2025-01-10");
+        when(assetPriceDailyRepository.findByAssetIdAndTradeDateBetweenOrderByTradeDateAsc("US_AAPL", startDate, endDate))
+                .thenReturn(List.of());
+        when(assetPriceDailyRepository.findByAssetIdAndTradeDateBetweenOrderByTradeDateAsc("BENCHMARK_SP500", startDate, endDate))
+                .thenReturn(List.of());
+        when(kisApiService.isKisConfigured()).thenReturn(false);
+
+        List<BacktestPricePoint> security = provider.getSecurityPriceSeries("US_AAPL", startDate, endDate);
+        List<BacktestPricePoint> benchmark = provider.getBenchmarkSeries("SP500", startDate, endDate);
+
+        assertEquals(true, security.size() >= 2);
+        assertEquals(true, benchmark.size() >= 2);
+        assertEquals(startDate, security.get(0).date());
+        assertEquals(true, security.get(security.size() - 1).adjustedCloseKrw()
+                .compareTo(security.get(0).adjustedCloseKrw()) != 0);
+        verify(kisApiService, never()).getOverseasStockDailyChartPrice(any(), any(), any(), any(), any());
+        verify(kisApiService, never()).getStockDailyChartPrice(any(), any(), any(), any());
+    }
+
     private IndexChartPriceItemDTO chart(String date, String close) {
         return IndexChartPriceItemDTO.builder()
                 .date(date)
