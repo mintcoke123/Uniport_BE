@@ -875,24 +875,26 @@ public class EducationV1Service {
     }
 
     private void persistState(Long userId, EducationApiState state) {
-        LearningUserStateEntity existing = learningUserStateRepository.findById(userId).orElse(null);
-        learningUserStateRepository.save(LearningUserStateEntity.builder()
-                .userId(userId)
-                .level(state.level)
-                .point(state.point)
-                .activeCourseId(existing == null ? null : existing.getActiveCourseId())
-                .streakDays(state.streakDays)
-                .lastCompletedDate(state.lastCompletedDate)
-                .roadmapLastCompletedDate(existing == null ? null : existing.getRoadmapLastCompletedDate())
-                .currentDayByCourseJson(existing == null ? "{}" : defaultObjectJson(existing.getCurrentDayByCourseJson()))
-                .completedDaysByCourseJson(existing == null ? "{}" : defaultObjectJson(existing.getCompletedDaysByCourseJson()))
-                .submittedStepIdsJson(existing == null ? "[]" : defaultArrayJson(existing.getSubmittedStepIdsJson()))
-                .educationCurrentDayJson(writeValue(state.currentDayByCourse))
-                .educationCompletedDaysJson(writeValue(state.completedDaysByCourse))
-                .educationQuizAnswersJson(writeValue(state.quizAnswersByDay))
-                .educationCardProgressJson(writeValue(state.completedCardIdxByDay))
-                .educationSectorSelectionsJson(writeValue(state.sectorSelectionsByCourse))
-                .build());
+        LearningUserStateEntity entity = learningUserStateRepository.findById(userId)
+                .orElseGet(() -> LearningUserStateEntity.builder()
+                        .userId(userId)
+                        .currentDayByCourseJson("{}")
+                        .completedDaysByCourseJson("{}")
+                        .submittedStepIdsJson("[]")
+                        .build());
+        entity.setLevel(state.level);
+        entity.setPoint(state.point);
+        entity.setStreakDays(state.streakDays);
+        entity.setLastCompletedDate(state.lastCompletedDate);
+        entity.setCurrentDayByCourseJson(defaultObjectJson(entity.getCurrentDayByCourseJson()));
+        entity.setCompletedDaysByCourseJson(defaultObjectJson(entity.getCompletedDaysByCourseJson()));
+        entity.setSubmittedStepIdsJson(defaultArrayJson(entity.getSubmittedStepIdsJson()));
+        entity.setEducationCurrentDayJson(writeValue(state.currentDayByCourse));
+        entity.setEducationCompletedDaysJson(writeValue(state.completedDaysByCourse));
+        entity.setEducationQuizAnswersJson(writeValue(state.quizAnswersByDay));
+        entity.setEducationCardProgressJson(writeValue(state.completedCardIdxByDay));
+        entity.setEducationSectorSelectionsJson(writeValue(state.sectorSelectionsByCourse));
+        learningUserStateRepository.save(entity);
     }
 
     private void updateStreak(EducationApiState state) {

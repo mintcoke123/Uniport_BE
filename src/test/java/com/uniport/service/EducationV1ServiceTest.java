@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -262,6 +263,27 @@ class EducationV1ServiceTest {
     }
 
     @Test
+    void quizAttemptPreservesExistingLearningStateCreatedAtWhenSavingProgress() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 5, 10, 9, 30);
+        LearningUserStateEntity existing = existingLearningState();
+        existing.setCreatedAt(createdAt);
+        existing.setUpdatedAt(createdAt);
+        AtomicReference<LearningUserStateEntity> savedState = new AtomicReference<>();
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(learningUserStateRepository.save(any(LearningUserStateEntity.class))).thenAnswer(invocation -> {
+            LearningUserStateEntity entity = invocation.getArgument(0);
+            savedState.set(entity);
+            return entity;
+        });
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of(quiz(1)));
+
+        service.submitQuizAttempt(user, Map.of("quiz_id", "intro_d1_q1", "selected_choice_id", "a"));
+
+        assertEquals(createdAt, savedState.get().getCreatedAt());
+    }
+
+    @Test
     void intermediateQuizIdsAreRejectedUntilCourseExists() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
 
@@ -306,6 +328,25 @@ class EducationV1ServiceTest {
         assertEquals(500, secondReward.get("total_point"));
     }
 
+    @Test
+    void dayCompletionPreservesExistingLearningStateCreatedAtWhenSavingProgress() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 5, 10, 10, 15);
+        LearningUserStateEntity existing = existingLearningState();
+        existing.setCreatedAt(createdAt);
+        existing.setUpdatedAt(createdAt);
+        AtomicReference<LearningUserStateEntity> savedState = new AtomicReference<>();
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(learningUserStateRepository.save(any(LearningUserStateEntity.class))).thenAnswer(invocation -> {
+            LearningUserStateEntity entity = invocation.getArgument(0);
+            savedState.set(entity);
+            return entity;
+        });
+
+        service.completeCourseDay(user, "intro", 1, Map.of("last_step_id", "intro_d1_completion"));
+
+        assertEquals(createdAt, savedState.get().getCreatedAt());
+    }
+
     private LearningUserStateEntity stateWithSelectedSectors() {
         return LearningUserStateEntity.builder()
                 .userId(1L)
@@ -320,6 +361,23 @@ class EducationV1ServiceTest {
                 .educationQuizAnswersJson("{}")
                 .educationCardProgressJson("{}")
                 .educationSectorSelectionsJson("{\"intro\":[\"ai_semiconductor\",\"quantum_computer\"]}")
+                .build();
+    }
+
+    private LearningUserStateEntity existingLearningState() {
+        return LearningUserStateEntity.builder()
+                .userId(1L)
+                .level(0)
+                .point(0)
+                .streakDays(0)
+                .currentDayByCourseJson("{}")
+                .completedDaysByCourseJson("{}")
+                .submittedStepIdsJson("[]")
+                .educationCurrentDayJson("{}")
+                .educationCompletedDaysJson("{}")
+                .educationQuizAnswersJson("{}")
+                .educationCardProgressJson("{}")
+                .educationSectorSelectionsJson("{}")
                 .build();
     }
 
