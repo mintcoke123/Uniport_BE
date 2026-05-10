@@ -232,6 +232,83 @@ class EducationV1ServiceTest {
     }
 
     @Test
+    void contentVisualTableUsesComponentPayloadContract() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(Optional.of(overview("intro_core", null, 1, "캔들스틱 차트의 이해")));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of(card(
+                        1,
+                        "table",
+                        "보통주와 우선주",
+                        "{\"headers\":[\"구분\",\"보통주\",\"우선주\"],\"rows\":[[\"권리\",\"의결권\",\"배당 우선\"]]}"
+                )));
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseDay(user, "intro", 1);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> flow = (List<Map<String, Object>>) response.get("flow");
+        Map<String, Object> cardStep = flow.get(1);
+        assertEquals("content_visual", cardStep.get("template_type"));
+        assertEquals("component", cardStep.get("visual_type"));
+        assertEquals("template_table", cardStep.get("visual_key"));
+        assertEquals(null, cardStep.get("asset_key"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> visual = (Map<String, Object>) cardStep.get("visual");
+        assertEquals("component", visual.get("visual_type"));
+        assertEquals("template_table", visual.get("visual_key"));
+        assertEquals(null, visual.get("asset_key"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = (Map<String, Object>) visual.get("payload");
+        assertEquals("table", payload.get("template_visual_type"));
+        assertTrue(payload.containsKey("headers"));
+        assertTrue(payload.containsKey("rows"));
+    }
+
+    @Test
+    void contentVisualImageWithEmptyUrlFallsBackToComponentPayload() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(Optional.of(overview("intro_core", null, 1, "캔들스틱 차트의 이해")));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of(EducationCardEntity.builder()
+                        .sourceIdx(2)
+                        .assetId("asset-2")
+                        .sheet("입문_카드_FINAL")
+                        .track("intro_core")
+                        .dayNumber(1)
+                        .section("섹션")
+                        .cardNumber("1/2")
+                        .title("인플레이션 핵심")
+                        .text("• 물가가 오르면 구매력이 줄어요.\n• 현금만 보유하면 실질 가치가 낮아질 수 있어요.")
+                        .imageType("image")
+                        .visualJson("{\"image_url\":\"\",\"alt\":\"인플레이션 핵심\"}")
+                        .build()));
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseDay(user, "intro", 1);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> flow = (List<Map<String, Object>>) response.get("flow");
+        Map<String, Object> cardStep = flow.get(1);
+        assertEquals("content_visual", cardStep.get("template_type"));
+        assertEquals("component", cardStep.get("visual_type"));
+        assertEquals("template_diagram", cardStep.get("visual_key"));
+        assertEquals(null, cardStep.get("asset_key"));
+        assertNotEquals("image", cardStep.get("image_type"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> visual = (Map<String, Object>) cardStep.get("visual");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = (Map<String, Object>) visual.get("payload");
+        assertEquals("diagram", payload.get("template_visual_type"));
+        assertTrue(payload.containsKey("items"));
+        assertFalse(containsEmptyImageUrl(cardStep));
+    }
+
+    @Test
     void lockedFutureDayCannotBeOpenedDirectly() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
 
@@ -488,6 +565,23 @@ class EducationV1ServiceTest {
                 .imageType(imageType)
                 .visualJson(visualJson)
                 .build();
+    }
+
+    private boolean containsEmptyImageUrl(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            if ("".equals(map.get("image_url"))) {
+                return true;
+            }
+            return map.values().stream().anyMatch(this::containsEmptyImageUrl);
+        }
+        if (value instanceof Iterable<?> iterable) {
+            for (Object item : iterable) {
+                if (containsEmptyImageUrl(item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private EducationQuizEntity quiz(int quizNumber) {

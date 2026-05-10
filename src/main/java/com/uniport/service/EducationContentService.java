@@ -383,6 +383,20 @@ public class EducationContentService {
     }
 
     private EducationCardDTO toCardDto(EducationCardEntity entity) {
+        JsonNode visual = readJsonNode(entity.getVisualJson());
+        JsonNode visualPayload = readJsonNode(entity.getVisualPayloadJson());
+        EducationVisualContractNormalizer.NormalizedVisual normalizedVisual = EducationVisualContractNormalizer.normalize(
+                entity.getImageType(),
+                null,
+                entity.getVisualType(),
+                entity.getVisualKey(),
+                entity.getAssetKey(),
+                entity.getAssetId(),
+                entity.getSourceIdx(),
+                visual,
+                visualPayload,
+                entity.getTitle(),
+                entity.getText());
         return EducationCardDTO.builder()
                 .idx(safeInt(entity.getSourceIdx()))
                 .sheet(entity.getSheet())
@@ -397,11 +411,11 @@ public class EducationContentService {
                 .imageType(entity.getImageType())
                 .svgPreset(entity.getSvgPreset())
                 .templateType(resolveTemplateType(entity.getTemplateType(), entity.getImageType()))
-                .visualType(resolveVisualType(entity.getVisualType(), entity.getImageType()))
-                .visualKey(resolveVisualKey(entity.getVisualKey(), entity.getAssetId(), entity.getSourceIdx()))
-                .assetKey(resolveAssetKey(entity.getAssetKey(), entity.getAssetId(), entity.getImageType()))
-                .visual(readJsonNode(entity.getVisualJson()))
-                .visualPayload(readJsonNode(entity.getVisualPayloadJson()))
+                .visualType(normalizedVisual.visualType())
+                .visualKey(normalizedVisual.visualKey())
+                .assetKey(normalizedVisual.assetKey())
+                .visual(visual)
+                .visualPayload(visualPayload)
                 .renderPolicy(readJsonNode(entity.getRenderPolicyJson()))
                 .build();
     }
@@ -581,9 +595,22 @@ public class EducationContentService {
 
     private EducationCardEntity toCardEntity(JsonNode node, Map<Integer, String> svgPresetByIdx) {
         int idx = node.path("idx").asInt();
+        String assetId = nullableText(node, "asset_id");
+        EducationVisualContractNormalizer.NormalizedVisual normalizedVisual = EducationVisualContractNormalizer.normalize(
+                text(node, "image_type"),
+                nullableText(node, "image_type_old"),
+                null,
+                null,
+                null,
+                assetId,
+                idx,
+                node.get("card_visual"),
+                node.get("card_visual"),
+                text(node, "title"),
+                text(node, "text"));
         return EducationCardEntity.builder()
                 .sourceIdx(idx)
-                .assetId(nullableText(node, "asset_id"))
+                .assetId(assetId)
                 .sheet(text(node, "sheet"))
                 .track(normalizeTrack(text(node, "track")))
                 .sector(cardSector(node))
@@ -592,14 +619,14 @@ public class EducationContentService {
                 .cardNumber(text(node, "card_number"))
                 .title(text(node, "title"))
                 .text(text(node, "text"))
-                .imageType(text(node, "image_type"))
+                .imageType(normalizedVisual.imageType())
                 .svgPreset(svgPresetByIdx.get(idx))
-                .templateType(resolveTemplateType(null, text(node, "image_type")))
-                .visualType(resolveVisualType(null, text(node, "image_type")))
-                .visualKey(resolveVisualKey(null, nullableText(node, "asset_id"), idx))
-                .assetKey(resolveAssetKey(null, nullableText(node, "asset_id"), text(node, "image_type")))
-                .visualJson(writeValue(node.get("card_visual")))
-                .visualPayloadJson(writeValue(node.get("card_visual")))
+                .templateType(resolveTemplateType(null, normalizedVisual.imageType()))
+                .visualType(normalizedVisual.visualType())
+                .visualKey(normalizedVisual.visualKey())
+                .assetKey(normalizedVisual.assetKey())
+                .visualJson(writeValue(normalizedVisual.cardVisual()))
+                .visualPayloadJson(writeValue(normalizedVisual.payload()))
                 .renderPolicyJson(defaultRenderPolicyJson())
                 .build();
     }
@@ -626,40 +653,6 @@ public class EducationContentService {
             return storedValue;
         }
         return isTextOnlyImageType(imageType) ? "content_text" : "content_visual";
-    }
-
-    private String resolveVisualType(String storedValue, String imageType) {
-        if (storedValue != null && !storedValue.isBlank()) {
-            return storedValue;
-        }
-        String normalized = imageType == null ? "" : imageType.trim().toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "", "placeholder" -> "none";
-            case "image" -> "raster_asset";
-            case "table", "stat" -> "statement_component";
-            case "diagram", "flow", "formula", "comparison", "checklist" -> "component";
-            default -> "component";
-        };
-    }
-
-    private String resolveVisualKey(String storedValue, String assetId, Integer sourceIdx) {
-        if (storedValue != null && !storedValue.isBlank()) {
-            return storedValue;
-        }
-        if (assetId != null && !assetId.isBlank()) {
-            return assetId;
-        }
-        return sourceIdx == null ? null : "education_card_" + sourceIdx;
-    }
-
-    private String resolveAssetKey(String storedValue, String assetId, String imageType) {
-        if (storedValue != null && !storedValue.isBlank()) {
-            return storedValue;
-        }
-        String visualType = resolveVisualType(null, imageType);
-        return "raster_asset".equals(visualType) || "chart_asset".equals(visualType) || "character_raster".equals(visualType)
-                ? assetId
-                : null;
     }
 
     private boolean isTextOnlyImageType(String imageType) {

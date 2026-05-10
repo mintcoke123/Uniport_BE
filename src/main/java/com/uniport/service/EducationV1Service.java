@@ -494,7 +494,20 @@ public class EducationV1Service {
 
     private Map<String, Object> toCardStep(CourseDefinition course, int day, EducationCardEntity card) {
         String templateType = resolveTemplateType(card.getTemplateType(), card.getImageType());
-        String visualType = resolveVisualType(card.getVisualType(), card.getImageType());
+        JsonNode cardVisual = readJsonNode(card.getVisualJson());
+        JsonNode visualPayload = readJsonNode(card.getVisualPayloadJson());
+        EducationVisualContractNormalizer.NormalizedVisual normalizedVisual = EducationVisualContractNormalizer.normalize(
+                card.getImageType(),
+                null,
+                card.getVisualType(),
+                card.getVisualKey(),
+                card.getAssetKey(),
+                card.getAssetId(),
+                card.getSourceIdx(),
+                cardVisual,
+                visualPayload,
+                card.getTitle(),
+                card.getText());
         Map<String, Object> step = linkedMap();
         step.put("step_id", course.id() + "_d" + day + "_card_" + card.getSourceIdx());
         step.put("step_type", "card");
@@ -509,13 +522,13 @@ public class EducationV1Service {
         step.put("asset_id", card.getAssetId());
         step.put("title", card.getTitle());
         step.put("text", card.getText());
-        step.put("image_type", card.getImageType());
-        step.put("visual_type", visualType);
-        step.put("visual_key", resolveVisualKey(card.getVisualKey(), card.getAssetId(), card.getSourceIdx()));
-        step.put("asset_key", resolveAssetKey(card.getAssetKey(), card.getAssetId(), card.getImageType()));
-        step.put("card_visual", readJsonNode(card.getVisualJson()));
+        step.put("image_type", normalizedVisual.imageType());
+        step.put("visual_type", normalizedVisual.visualType());
+        step.put("visual_key", normalizedVisual.visualKey());
+        step.put("asset_key", normalizedVisual.assetKey());
+        step.put("card_visual", normalizedVisual.cardVisual());
         if (!"content_text".equals(templateType)) {
-            step.put("visual", visualMap(card, visualType));
+            step.put("visual", visualMap(card, normalizedVisual));
         }
         return step;
     }
@@ -538,13 +551,13 @@ public class EducationV1Service {
         return map;
     }
 
-    private Map<String, Object> visualMap(EducationCardEntity card, String visualType) {
+    private Map<String, Object> visualMap(EducationCardEntity card, EducationVisualContractNormalizer.NormalizedVisual normalizedVisual) {
         Map<String, Object> visual = linkedMap();
-        visual.put("visual_type", visualType);
-        visual.put("visual_key", resolveVisualKey(card.getVisualKey(), card.getAssetId(), card.getSourceIdx()));
-        visual.put("asset_key", resolveAssetKey(card.getAssetKey(), card.getAssetId(), card.getImageType()));
+        visual.put("visual_type", normalizedVisual.visualType());
+        visual.put("visual_key", normalizedVisual.visualKey());
+        visual.put("asset_key", normalizedVisual.assetKey());
         visual.put("alt", altText(card));
-        visual.put("payload", readJsonNode(card.getVisualPayloadJson() == null ? card.getVisualJson() : card.getVisualPayloadJson()));
+        visual.put("payload", normalizedVisual.payload());
         visual.put("render_policy", readJsonNode(card.getRenderPolicyJson()));
         return visual;
     }
@@ -771,40 +784,6 @@ public class EducationV1Service {
             return storedValue;
         }
         return isTextOnlyImageType(imageType) ? "content_text" : "content_visual";
-    }
-
-    private String resolveVisualType(String storedValue, String imageType) {
-        if (storedValue != null && !storedValue.isBlank()) {
-            return storedValue;
-        }
-        String normalized = imageType == null ? "" : imageType.trim().toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "", "placeholder" -> "none";
-            case "image" -> "raster_asset";
-            case "table", "stat" -> "statement_component";
-            case "diagram", "flow", "formula", "comparison", "checklist" -> "component";
-            default -> "component";
-        };
-    }
-
-    private String resolveVisualKey(String storedValue, String assetId, Integer sourceIdx) {
-        if (storedValue != null && !storedValue.isBlank()) {
-            return storedValue;
-        }
-        if (assetId != null && !assetId.isBlank()) {
-            return assetId;
-        }
-        return sourceIdx == null ? null : "education_card_" + sourceIdx;
-    }
-
-    private String resolveAssetKey(String storedValue, String assetId, String imageType) {
-        if (storedValue != null && !storedValue.isBlank()) {
-            return storedValue;
-        }
-        String visualType = resolveVisualType(null, imageType);
-        return "raster_asset".equals(visualType) || "chart_asset".equals(visualType) || "character_raster".equals(visualType)
-                ? assetId
-                : null;
     }
 
     private boolean isTextOnlyImageType(String imageType) {
