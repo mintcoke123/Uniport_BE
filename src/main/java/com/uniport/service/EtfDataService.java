@@ -97,6 +97,7 @@ public class EtfDataService {
     private static final int DEFAULT_ASSET_SEARCH_SIZE = 10;
     private static final int MAX_ASSET_SEARCH_SIZE = 30;
     private static final int ASSET_SEARCH_POOL_SIZE = 200;
+    private static final int ON_DEMAND_VERIFICATION_LOOKBACK_DAYS = 45;
     private static final String ASSET_TYPE_STOCK = "STOCK";
     private static final String ASSET_TYPE_BOND = "BOND";
     private static final String ASSET_TYPE_CASH = "CASH";
@@ -1116,7 +1117,7 @@ public class EtfDataService {
             if (item.getWeight() == null || item.getWeight() < 1 || item.getWeight() > 100) {
                 throw new ApiException("weight must be between 1 and 100", HttpStatus.BAD_REQUEST);
             }
-            requireResolvableAsset(item.getStockId());
+            requireSupportedCustomEtfAsset(item.getStockId());
             totalWeight += item.getWeight();
         }
         if (totalWeight != 100) {
@@ -1124,13 +1125,13 @@ public class EtfDataService {
         }
     }
 
-    private void requireResolvableAsset(String stockId) {
+    private void requireSupportedCustomEtfAsset(String stockId) {
         Optional<EtfAssetCatalogItem> catalogItem = findCatalogItem(stockId);
         if (catalogItem.isPresent()) {
             if (!ASSET_TYPE_STOCK.equals(catalogItem.get().assetType())) {
                 throw unsupportedCustomEtfAssetTypeException(catalogItem.get());
             }
-            if (!isBacktestEligible(catalogItem.get())) {
+            if (isKnownPriceUnavailable(catalogItem.get())) {
                 throw unsupportedAssetException(catalogItem.get());
             }
             return;
@@ -1139,20 +1140,79 @@ public class EtfDataService {
         if (normalized.startsWith("KRX_")) {
             String code = normalized.substring(4);
             if (code.matches("\\d{6}") && stockMasterRepository.findById(code).isPresent()) {
-                StockMaster stock = stockMasterRepository.findById(code).get();
-                throw unsupportedAssetException(toAssetCatalogItem(stock));
+                return;
             }
         }
         if (normalized.matches("\\d{6}") && stockMasterRepository.findById(normalized).isPresent()) {
-            StockMaster stock = stockMasterRepository.findById(normalized).get();
-            throw unsupportedAssetException(toAssetCatalogItem(stock));
+            return;
         }
         throw new ApiException("Unknown ETF assetId: " + normalized, HttpStatus.BAD_REQUEST);
     }
 
     private void validateBacktestEligibleHoldings(List<HoldingPayload> holdings) {
         for (HoldingPayload holding : holdings) {
-            requireResolvableAsset(holding.stockId());
+            requireBacktestEligibleAsset(holding.stockId());
+        }
+    }
+
+    private void requireBacktestEligibleAsset(String stockId) {
+        Optional<EtfAssetCatalogItem> catalogItem = findCatalogItem(stockId);
+        if (catalogItem.isPresent()) {
+            EtfAssetCatalogItem item = catalogItem.get();
+            if (!ASSET_TYPE_STOCK.equals(item.assetType())) {
+                throw unsupportedCustomEtfAssetTypeException(item);
+            }
+            if (isBacktestEligible(item) || verifyBacktestDataOnDemand(item.assetId())) {
+                return;
+            }
+            throw unsupportedAssetException(item);
+        }
+
+        String normalized = stockId == null ? "" : stockId.trim();
+        if (normalized.startsWith("KRX_")) {
+            String code = normalized.substring(4);
+            if (code.matches("\\d{6}") && stockMasterRepository.findById(code).isPresent()) {
+                StockMaster stock = stockMasterRepository.findById(code).get();
+                EtfAssetCatalogItem item = toAssetCatalogItem(stock);
+                if (verifyBacktestDataOnDemand(item.assetId())) {
+                    return;
+                }
+                throw unsupportedAssetException(item);
+            }
+        }
+        if (normalized.matches("\\d{6}") && stockMasterRepository.findById(normalized).isPresent()) {
+            StockMaster stock = stockMasterRepository.findById(normalized).get();
+            EtfAssetCatalogItem item = toAssetCatalogItem(stock);
+            if (verifyBacktestDataOnDemand(item.assetId())) {
+                return;
+            }
+            throw unsupportedAssetException(item);
+        }
+        throw new ApiException("Unknown ETF assetId: " + normalized, HttpStatus.BAD_REQUEST);
+    }
+
+    private boolean isKnownPriceUnavailable(EtfAssetCatalogItem item) {
+        return !isBacktestEligible(item) && DATA_STATUS_PRICE_UNAVAILABLE.equals(item.priceSourceStatus());
+    }
+
+    private boolean verifyBacktestDataOnDemand(String assetId) {
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(ON_DEMAND_VERIFICATION_LOOKBACK_DAYS);
+        try {
+            List<BacktestPricePoint> series = historicalPriceProvider.getSecurityPriceSeries(assetId, startDate, endDate);
+            if (series == null || series.size() < 2) {
+                return false;
+            }
+            assetMasterRepository.findByAssetIdAndActiveTrue(assetId).ifPresent(asset -> {
+                asset.setBacktestEnabled(true);
+                asset.setPriceSourceStatus(DATA_STATUS_VERIFIED);
+                asset.setLastPriceError(null);
+                asset.setLastPriceVerifiedAt(LocalDateTime.now());
+                assetMasterRepository.save(asset);
+            });
+            return true;
+        } catch (Exception ignored) {
+            return false;
         }
     }
 

@@ -8,6 +8,7 @@ import com.uniport.dto.CustomEtfItemRequestDTO;
 import com.uniport.dto.CustomEtfMutationResponseDTO;
 import com.uniport.dto.EtfAnalysisReportResponseDTO;
 import com.uniport.dto.EtfAnalysisRequestDTO;
+import com.uniport.dto.EtfAnalysisStartResponseDTO;
 import com.uniport.dto.EtfDiscoveryDetailResponseDTO;
 import com.uniport.dto.EtfDiscoveryResponseDTO;
 import com.uniport.dto.StockVisualDTO;
@@ -314,6 +315,35 @@ class EtfDataServiceTest {
     }
 
     @Test
+    void createCustomEtf_acceptsPendingStockAssetBeforeBacktestVerification() {
+        User user = User.builder().id(1L).build();
+        AssetMaster pending = asset("KRX_373220", "STOCK", "LG에너지솔루션", "373220", "KOSPI", "KRW");
+        pending.setBacktestEnabled(false);
+        pending.setPriceSourceStatus("PENDING_VERIFICATION");
+        pending.setLastPriceError("Price data has not been verified");
+        CustomEtfCreateRequestDTO request = CustomEtfCreateRequestDTO.builder()
+                .title("기본 ETF")
+                .items(List.of(CustomEtfItemRequestDTO.builder()
+                        .stockId("KRX_373220")
+                        .weight(100)
+                        .build()))
+                .build();
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_373220"))
+                .thenReturn(Optional.of(pending));
+        when(managedEtfRepository.save(any(ManagedEtf.class))).thenAnswer(invocation -> {
+            ManagedEtf saved = invocation.getArgument(0);
+            saved.setCreatedAt(java.time.LocalDateTime.parse("2026-05-10T09:00:00"));
+            saved.setUpdatedAt(java.time.LocalDateTime.parse("2026-05-10T09:00:00"));
+            return saved;
+        });
+
+        CustomEtfMutationResponseDTO response = etfDataService.createCustomEtf(user, request);
+
+        assertEquals("기본 ETF", response.getTitle());
+        assertEquals(100, response.getTotalWeight());
+    }
+
+    @Test
     void createCustomEtf_rejectsUnsupportedAssetMasterAsset() {
         User user = User.builder().id(1L).build();
         AssetMaster unsupported = asset("US_FAKE", "STOCK", "Fake Corp.", "FAKE", "NASDAQ", "USD");
@@ -375,6 +405,51 @@ class EtfDataServiceTest {
                 EtfAnalysisRequestDTO.builder().period("1Y").benchmark("SP500").build()));
 
         assertEquals("ETF asset is not backtest-enabled: US_FAKE (No recent KIS price)", ex.getMessage());
+    }
+
+    @Test
+    void analyze_verifiesPendingStockAssetOnDemandBeforeBacktest() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("기본 ETF")
+                .theme("테크")
+                .holdingsJson("[{\"stockId\":\"KRX_373220\",\"weight\":100}]")
+                .build();
+        AssetMaster pending = asset("KRX_373220", "STOCK", "LG에너지솔루션", "373220", "KOSPI", "KRW");
+        pending.setBacktestEnabled(false);
+        pending.setPriceSourceStatus("PENDING_VERIFICATION");
+        pending.setLastPriceError("Price data has not been verified");
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_373220")).thenReturn(Optional.of(pending));
+        when(historicalPriceProvider.getSecurityPriceSeries(eq("KRX_373220"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point("2025-01-02", "100"), point("2025-01-03", "101")));
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point("2025-01-02", "100"), point("2025-01-03", "101")));
+        BacktestResult result = backtestResult();
+        when(etfBacktestEngine.run(any())).thenReturn(result);
+        InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
+        when(etfAiFeedbackService.buildInsightFacts(eq("기본 ETF"), eq("1년"), eq("S&P 500"), eq(result))).thenReturn(facts);
+        when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "백테스트 기준 요약입니다.",
+                List.of(),
+                "BALANCED",
+                "과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.",
+                true
+        ));
+
+        EtfAnalysisStartResponseDTO response = etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("1Y").benchmark("SP500").build());
+
+        assertEquals("ETF_CUSTOM", response.getEtfId());
+        assertEquals("COMPLETED", response.getStatus());
+        assertEquals(true, pending.getBacktestEnabled());
+        assertEquals("VERIFIED", pending.getPriceSourceStatus());
+        assertEquals(null, pending.getLastPriceError());
+        org.mockito.Mockito.verify(assetMasterRepository).save(pending);
     }
 
     @Test
