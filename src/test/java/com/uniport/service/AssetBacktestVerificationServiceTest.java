@@ -3,7 +3,7 @@ package com.uniport.service;
 import com.uniport.entity.AssetMaster;
 import com.uniport.repository.AssetMasterRepository;
 import com.uniport.service.backtest.BacktestPricePoint;
-import com.uniport.service.backtest.HistoricalPriceProvider;
+import com.uniport.service.backtest.KisHistoricalPriceProvider;
 import com.uniport.service.importer.ImportResult;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -29,7 +29,7 @@ class AssetBacktestVerificationServiceTest {
         AssetMaster fake = asset("US_FAKE", "STOCK", "Fake Corp.", "FAKE", "NASDAQ", "USD");
         AssetMaster cash = asset("CASH_KRW", "CASH", "원화 현금", "KRW", "CASH", "KRW");
         AssetMasterRepository repository = mock(AssetMasterRepository.class);
-        HistoricalPriceProvider priceProvider = mock(HistoricalPriceProvider.class);
+        KisHistoricalPriceProvider priceProvider = mock(KisHistoricalPriceProvider.class);
         AssetBacktestVerificationService service = new AssetBacktestVerificationService(repository, priceProvider);
         when(repository.findByActiveTrue(any(Pageable.class))).thenReturn(List.of(apple, fake, cash));
         when(priceProvider.getSecurityPriceSeries(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))

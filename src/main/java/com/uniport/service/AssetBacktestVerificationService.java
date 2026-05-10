@@ -4,6 +4,7 @@ import com.uniport.entity.AssetMaster;
 import com.uniport.repository.AssetMasterRepository;
 import com.uniport.service.backtest.BacktestPricePoint;
 import com.uniport.service.backtest.HistoricalPriceProvider;
+import com.uniport.service.backtest.KisHistoricalPriceProvider;
 import com.uniport.service.importer.ImportResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +33,7 @@ public class AssetBacktestVerificationService {
     private final HistoricalPriceProvider historicalPriceProvider;
 
     public AssetBacktestVerificationService(AssetMasterRepository assetMasterRepository,
-                                            HistoricalPriceProvider historicalPriceProvider) {
+                                            KisHistoricalPriceProvider historicalPriceProvider) {
         this.assetMasterRepository = assetMasterRepository;
         this.historicalPriceProvider = historicalPriceProvider;
     }
