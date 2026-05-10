@@ -265,32 +265,61 @@ public class MatchingRoomService {
         String normalizedMode = mode != null ? mode.trim().toUpperCase() : "RANDOM";
         return switch (normalizedMode) {
             case "SOLO" -> {
-                Map<String, Object> created = create("나 혼자 주식 왕", VISIBILITY_PRIVATE, 1, "RANDOM", marketType, List.of(), creator);
+                Map<String, Object> created = create("Solo Room", VISIBILITY_PRIVATE, 1, "RANDOM", marketType, List.of(), creator);
                 @SuppressWarnings("unchecked")
                 Map<String, Object> room = (Map<String, Object>) created.get("room");
                 String roomId = room != null && room.get("id") != null ? String.valueOf(room.get("id")) : null;
                 Map<String, Object> started = start(roomId, creator);
                 yield Map.of(
                         "mode", "SOLO",
-                        "message", "혼자 하기 방을 만들고 바로 시작했어요.",
+                        "message", "Solo match started.",
                         "detail", started.get("detail"),
                         "teamId", started.get("teamId")
                 );
             }
             case "FRIEND" -> {
-                Map<String, Object> created = create("친구와 함께 수익률 경쟁!", VISIBILITY_PRIVATE, 3, "FRIEND", marketType, inviteeUserIds, creator);
+                Map<String, Object> created = create("Friend Match Room", VISIBILITY_PRIVATE, 3, "FRIEND", marketType, inviteeUserIds, creator);
                 yield Map.of(
                         "mode", "FRIEND",
-                        "message", "친구 초대형 방을 만들었어요.",
+                        "message", "Friend match room created.",
                         "room", created.get("room"),
                         "detail", created.get("detail")
                 );
             }
             default -> {
-                Map<String, Object> created = create("랜덤 매칭 방", VISIBILITY_PUBLIC, 3, "RANDOM", marketType, List.of(), creator);
+                if (creator != null && creator.getId() != null
+                        && !matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(creator.getId()).isEmpty()) {
+                    throw new ApiException("You are already participating in another room.", HttpStatus.BAD_REQUEST);
+                }
+
+                String resolvedMarketType = normalizeMarketType(marketType);
+                MatchingRoom joinableRoom = findJoinableRandomRoom(resolvedMarketType);
+                if (joinableRoom != null) {
+                    Map<String, Object> joined = doJoin(joinableRoom, creator);
+                    long memberCount = matchingRoomMemberRepository.countByMatchingRoomId(joinableRoom.getId());
+                    if (memberCount >= Math.min(joinableRoom.getCapacity(), 2)) {
+                        Map<String, Object> started = start(toApiId(joinableRoom.getId()), creator);
+                        yield Map.of(
+                                "mode", "RANDOM",
+                                "message", "Random match completed and started.",
+                                "room", joined.get("room"),
+                                "detail", started.get("detail"),
+                                "teamId", started.get("teamId"),
+                                "competitionId", started.get("competitionId")
+                        );
+                    }
+                    yield Map.of(
+                            "mode", "RANDOM",
+                            "message", "Joined an existing random match room.",
+                            "room", joined.get("room"),
+                            "detail", joined.get("detail")
+                    );
+                }
+
+                Map<String, Object> created = create("Random Match Room", VISIBILITY_PUBLIC, 3, "RANDOM", resolvedMarketType, List.of(), creator);
                 yield Map.of(
                         "mode", "RANDOM",
-                        "message", "랜덤 매칭 방을 만들었어요.",
+                        "message", "Random match waiting room created.",
                         "room", created.get("room"),
                         "detail", created.get("detail")
                 );
@@ -387,6 +416,19 @@ public class MatchingRoomService {
                 "room", Map.of("id", toApiId(room.getId()), "memberCount", room.getMemberCount()),
                 "detail", getRoomDetail(toApiId(room.getId()), user)
         );
+    }
+
+    private MatchingRoom findJoinableRandomRoom(String marketType) {
+        for (MatchingRoom room : matchingRoomRepository.findAllByOrderByCreatedAtDesc()) {
+            if (!"waiting".equalsIgnoreCase(room.getStatus())) continue;
+            if (!"RANDOM".equalsIgnoreCase(room.getMatchType())) continue;
+            if (!VISIBILITY_PUBLIC.equalsIgnoreCase(room.getVisibility())) continue;
+            if (!normalizeMarketType(room.getMarketType()).equals(normalizeMarketType(marketType))) continue;
+            long currentCount = matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
+            if (currentCount >= room.getCapacity()) continue;
+            return room;
+        }
+        return null;
     }
 
     private String generateUniqueInviteCode() {

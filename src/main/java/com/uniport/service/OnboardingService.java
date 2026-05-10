@@ -121,14 +121,9 @@ public class OnboardingService {
         int style = getSingleValue(answersByQuestion, OnboardingQuestionProvider.QUESTION_STYLE, onboardingQuestionProvider::getStyleValue);
         String investmentLevel = onboardingQuestionProvider.getLevelLabel(
                 getSingleSelectedOptionId(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_LEVEL)));
-        List<Long> sectorOptionIds = getSelectedOptionIds(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_SECTOR), 2);
-        List<String> interestSectors = sectorOptionIds.stream()
-                .map(onboardingQuestionProvider::getSectorLabel)
-                .toList();
-        List<String> educationSectorIds = sectorOptionIds.stream()
-                .map(onboardingQuestionProvider::getSectorId)
-                .toList();
-        String interestSector = String.join(", ", interestSectors);
+        long sectorOptionId = getSingleSelectedOptionId(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_SECTOR));
+        String interestSector = onboardingQuestionProvider.getSectorLabel(sectorOptionId);
+        List<String> educationSectorIds = List.of(onboardingQuestionProvider.getSectorId(sectorOptionId));
 
         OnboardingSurveyResultDTO result = onboardingResultProvider.classify(
                 risk,
@@ -233,13 +228,6 @@ public class OnboardingService {
         return answer.getOptionIds().get(0);
     }
 
-    private List<Long> getSelectedOptionIds(OnboardingSurveyAnswerDTO answer, int expectedCount) {
-        if (answer == null || answer.getOptionIds() == null || answer.getOptionIds().size() != expectedCount) {
-            throw new ApiException("Onboarding sector question must have exactly " + expectedCount + " selected options", HttpStatus.BAD_REQUEST);
-        }
-        return answer.getOptionIds();
-    }
-
     private void persistEducationRoadmapSeed(User user, String investmentLevel, List<String> sectorIds) {
         String courseId = resolveEducationCourseId(investmentLevel);
         LearningUserStateEntity existing = learningUserStateRepository.findById(user.getId()).orElse(null);
@@ -287,7 +275,8 @@ public class OnboardingService {
                 && user.getInvestmentLevel() != null
                 && !user.getInvestmentLevel().isBlank()
                 && user.getInterestSector() != null
-                && !user.getInterestSector().isBlank();
+                && !user.getInterestSector().isBlank()
+                && !user.getInterestSector().contains(",");
     }
 
     private <T> T readObject(String json, TypeReference<T> typeReference, T defaultValue) {
