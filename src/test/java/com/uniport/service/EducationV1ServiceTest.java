@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -249,7 +251,9 @@ class EducationV1ServiceTest {
         assertEquals("submitted_correct", correct.get("quiz_state"));
         assertEquals(true, correct.get("is_correct"));
         assertEquals("a", correct.get("correct_choice_id"));
+        assertEquals("시가", correct.get("correct_choice_text"));
         assertEquals("정답이에요!", correct.get("feedback_title"));
+        assertTrue(correct.get("explanation").toString().contains("시가"));
         @SuppressWarnings("unchecked")
         Map<String, Object> nextAction = (Map<String, Object>) correct.get("next_action");
         assertEquals("continue", nextAction.get("type"));
@@ -259,7 +263,27 @@ class EducationV1ServiceTest {
         assertEquals("submitted_wrong", wrong.get("quiz_state"));
         assertEquals(false, wrong.get("is_correct"));
         assertEquals("a", wrong.get("correct_choice_id"));
+        assertEquals("시가", wrong.get("correct_choice_text"));
+        assertEquals("종가", wrong.get("selected_choice_text"));
         assertEquals("오답이에요!", wrong.get("feedback_title"));
+    }
+
+    @Test
+    void quizAttemptExplanationVariesByQuestionEvenWhenIntentIsShared() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(learningUserStateRepository.save(any(LearningUserStateEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of(
+                        quiz(1, "현금 가치 질문", "[\"현금 구매력이 떨어진다\",\"배당이 늘어난다\"]", 1, "공통 의도"),
+                        quiz(2, "복리 조건 질문", "[\"매일 확인한다\",\"수익을 다시 투자한다\"]", 2, "공통 의도")
+                ));
+
+        Map<String, Object> first = service.submitQuizAttempt(user, Map.of("quiz_id", "intro_d1_q1", "selected_choice_id", "a"));
+        Map<String, Object> second = service.submitQuizAttempt(user, Map.of("quiz_id", "intro_d1_q2", "selected_choice_id", "b"));
+
+        assertNotEquals(first.get("explanation"), second.get("explanation"));
+        assertTrue(first.get("explanation").toString().contains("현금 구매력이 떨어진다"));
+        assertTrue(second.get("explanation").toString().contains("수익을 다시 투자한다"));
     }
 
     @Test
@@ -421,18 +445,22 @@ class EducationV1ServiceTest {
     }
 
     private EducationQuizEntity quiz(int quizNumber) {
+        return quiz(quizNumber, "질문", "[\"시가\",\"종가\",\"고가\",\"저가\"]", 1, "해설");
+    }
+
+    private EducationQuizEntity quiz(int quizNumber, String question, String optionsJson, int answerIndex, String intent) {
         return EducationQuizEntity.builder()
                 .sourceMode("daily")
                 .track("intro_core")
                 .dayNumber(1)
                 .quizNumber(quizNumber)
                 .quizType("MCQ")
-                .question("질문")
-                .optionsJson("[\"시가\",\"종가\",\"고가\",\"저가\"]")
-                .answerIndex(1)
+                .question(question)
+                .optionsJson(optionsJson)
+                .answerIndex(answerIndex)
                 .topic("캔들")
                 .area("차트")
-                .intent("해설")
+                .intent(intent)
                 .build();
     }
 }

@@ -295,6 +295,8 @@ public class EducationV1Service {
         }
         int correctChoiceIndex = Math.max(1, safeInt(lookup.quiz().getAnswerIndex()));
         boolean isCorrect = selectedChoiceIndex == correctChoiceIndex;
+        String selectedChoiceText = choiceText(lookup.quiz(), selectedChoiceIndex);
+        String correctChoiceText = choiceText(lookup.quiz(), correctChoiceIndex);
 
         String dayKey = dayKey(lookup.course().id(), lookup.day());
         state.quizAnswersByDay.computeIfAbsent(dayKey, ignored -> new HashMap<>()).put(quizId, selectedChoiceIndex);
@@ -306,10 +308,16 @@ public class EducationV1Service {
         response.put("quiz_id", quizId);
         response.put("selected_choice_id", selectedChoiceId);
         response.put("correct_choice_id", choiceId(correctChoiceIndex));
+        if (selectedChoiceText != null) {
+            response.put("selected_choice_text", selectedChoiceText);
+        }
+        if (correctChoiceText != null) {
+            response.put("correct_choice_text", correctChoiceText);
+        }
         response.put("is_correct", isCorrect);
         response.put("quiz_state", isCorrect ? "submitted_correct" : "submitted_wrong");
         response.put("feedback_title", isCorrect ? "정답이에요!" : "오답이에요!");
-        response.put("explanation", explanation(lookup.quiz(), isCorrect));
+        response.put("explanation", explanation(lookup.quiz(), isCorrect, correctChoiceText));
         response.put("next_action", Map.of("type", "continue", "next_step_id", lookup.course().id() + "_d" + lookup.day() + "_completion"));
         return response;
     }
@@ -513,6 +521,15 @@ public class EducationV1Service {
         return choices;
     }
 
+    private String choiceText(EducationQuizEntity quiz, int oneBasedIndex) {
+        List<String> optionTexts = readStringList(quiz.getOptionsJson());
+        int index = oneBasedIndex - 1;
+        if (index < 0 || index >= optionTexts.size()) {
+            return null;
+        }
+        return optionTexts.get(index);
+    }
+
     private QuizLookup findQuizById(String quizId) {
         if (quizId == null || quizId.isBlank()) {
             throw new ApiException("QUIZ_NOT_FOUND", HttpStatus.NOT_FOUND);
@@ -699,9 +716,15 @@ public class EducationV1Service {
         return course.id() + "_d" + day + "_q" + safeInt(quiz.getQuizNumber());
     }
 
-    private String explanation(EducationQuizEntity quiz, boolean isCorrect) {
+    private String explanation(EducationQuizEntity quiz, boolean isCorrect, String correctChoiceText) {
+        String prefix = correctChoiceText == null || correctChoiceText.isBlank()
+                ? null
+                : "정답은 \"" + correctChoiceText + "\"입니다.";
         if (quiz.getIntent() != null && !quiz.getIntent().isBlank()) {
-            return quiz.getIntent();
+            return prefix == null ? quiz.getIntent() : prefix + " " + quiz.getIntent();
+        }
+        if (prefix != null) {
+            return prefix;
         }
         return isCorrect ? "정답 선택지를 잘 골랐어요." : "정답 선택지와 해설을 다시 확인해 주세요.";
     }
