@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -33,7 +32,7 @@ class OnboardingServiceTest {
     private LearningUserStateRepository learningUserStateRepository;
 
     @Test
-    void submitSurvey_persistsCharacterLevelAndSingleSectorForEducationRoadmap() {
+    void submitSurvey_persistsCharacterLevelAndTwoSectorsForEducationRoadmap() {
         OnboardingService onboardingService = new OnboardingService(
                 new OnboardingQuestionProvider(),
                 new OnboardingResultProvider(),
@@ -56,27 +55,27 @@ class OnboardingServiceTest {
                 new OnboardingSurveyAnswerDTO(3L, List.of(7L)),
                 new OnboardingSurveyAnswerDTO(4L, List.of(10L)),
                 new OnboardingSurveyAnswerDTO(5L, List.of(13L)),
-                new OnboardingSurveyAnswerDTO(6L, List.of(16L))
+                new OnboardingSurveyAnswerDTO(6L, List.of(16L, 24L))
         ));
 
         OnboardingSurveyResultDTO result = onboardingService.submitSurvey(user, request);
 
         assertEquals("조심스러운 거북이", result.getCharacterName());
         assertEquals("입문", result.getInvestmentLevel());
-        assertEquals("AI 반도체", result.getInterestSector());
+        assertEquals("AI 반도체, 양자컴퓨터", result.getInterestSector());
         assertEquals("조심스러운 거북이", user.getInvestmentProfileResult());
         assertEquals("입문", user.getInvestmentLevel());
-        assertEquals("AI 반도체", user.getInterestSector());
+        assertEquals("AI 반도체, 양자컴퓨터", user.getInterestSector());
 
         ArgumentCaptor<LearningUserStateEntity> stateCaptor = ArgumentCaptor.forClass(LearningUserStateEntity.class);
         verify(learningUserStateRepository).save(stateCaptor.capture());
         LearningUserStateEntity savedState = stateCaptor.getValue();
         assertEquals("{\"intro\":1}", savedState.getEducationCurrentDayJson());
-        assertTrue(savedState.getEducationSectorSelectionsJson().contains("\"intro\":[\"ai_semiconductor\"]"));
+        assertTrue(savedState.getEducationSectorSelectionsJson().contains("\"intro\":[\"ai_semiconductor\",\"quantum_computer\"]"));
     }
 
     @Test
-    void getSurveyFlow_treatsLegacyMultiSectorResultAsIncomplete() {
+    void getSurveyFlow_treatsMultiSectorResultAsComplete() {
         OnboardingService onboardingService = new OnboardingService(
                 new OnboardingQuestionProvider(),
                 new OnboardingResultProvider(),
@@ -92,6 +91,6 @@ class OnboardingServiceTest {
                 .interestSector("AI 반도체, 방산")
                 .build();
 
-        assertFalse(onboardingService.getSurveyFlow(user).isHasResult());
+        assertTrue(onboardingService.getSurveyFlow(user).isHasResult());
     }
 }

@@ -66,6 +66,8 @@ kis:
 backtest:
   fx:
     usd-krw-rate: ${BACKTEST_USD_KRW_RATE:0}
+  price-fallback:
+    enabled: ${BACKTEST_PRICE_FALLBACK_ENABLED:true}
 
 openai:
   api-key: ${OPENAI_API_KEY:}

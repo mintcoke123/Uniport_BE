@@ -215,8 +215,7 @@ public class KisHistoricalPriceProvider implements HistoricalPriceProvider {
     }
 
     private boolean shouldUseLocalSyntheticPriceFallback() {
-        return localSyntheticPriceFallbackEnabled
-                && (kisApiService == null || !kisApiService.isKisConfigured());
+        return localSyntheticPriceFallbackEnabled;
     }
 
     private List<BacktestPricePoint> localSyntheticPriceSeries(String assetId, LocalDate startDate, LocalDate endDate) {

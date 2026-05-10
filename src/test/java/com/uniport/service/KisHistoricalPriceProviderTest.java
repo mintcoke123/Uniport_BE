@@ -218,7 +218,7 @@ class KisHistoricalPriceProviderTest {
     }
 
     @Test
-    void getSecurityPriceSeries_usesLocalSyntheticFallbackWhenKisIsNotConfigured() {
+    void getSecurityPriceSeries_usesLocalSyntheticFallbackWhenEnabled() {
         FxRateProvider fxRateProvider = (currency, date) -> BigDecimal.valueOf(1300);
         KisHistoricalPriceProvider provider = new KisHistoricalPriceProvider(
                 kisApiService,
@@ -233,7 +233,6 @@ class KisHistoricalPriceProviderTest {
                 .thenReturn(List.of());
         when(assetPriceDailyRepository.findByAssetIdAndTradeDateBetweenOrderByTradeDateAsc("BENCHMARK_SP500", startDate, endDate))
                 .thenReturn(List.of());
-        when(kisApiService.isKisConfigured()).thenReturn(false);
 
         List<BacktestPricePoint> security = provider.getSecurityPriceSeries("US_AAPL", startDate, endDate);
         List<BacktestPricePoint> benchmark = provider.getBenchmarkSeries("SP500", startDate, endDate);
@@ -243,6 +242,29 @@ class KisHistoricalPriceProviderTest {
         assertEquals(startDate, security.get(0).date());
         assertEquals(true, security.get(security.size() - 1).adjustedCloseKrw()
                 .compareTo(security.get(0).adjustedCloseKrw()) != 0);
+        verify(kisApiService, never()).getOverseasStockDailyChartPrice(any(), any(), any(), any(), any());
+        verify(kisApiService, never()).getStockDailyChartPrice(any(), any(), any(), any());
+    }
+
+    @Test
+    void getSecurityPriceSeries_usesSyntheticFallbackOnCacheMissWhenFallbackIsEnabled() {
+        FxRateProvider fxRateProvider = (currency, date) -> BigDecimal.valueOf(1300);
+        KisHistoricalPriceProvider provider = new KisHistoricalPriceProvider(
+                kisApiService,
+                fxRateProvider,
+                assetPriceDailyRepository,
+                assetMasterRepository,
+                true
+        );
+        LocalDate startDate = LocalDate.parse("2025-01-01");
+        LocalDate endDate = LocalDate.parse("2025-01-10");
+        when(assetPriceDailyRepository.findByAssetIdAndTradeDateBetweenOrderByTradeDateAsc("US_AAPL", startDate, endDate))
+                .thenReturn(List.of());
+
+        List<BacktestPricePoint> result = provider.getSecurityPriceSeries("US_AAPL", startDate, endDate);
+
+        assertEquals(true, result.size() >= 2);
+        assertEquals(startDate, result.get(0).date());
         verify(kisApiService, never()).getOverseasStockDailyChartPrice(any(), any(), any(), any(), any());
         verify(kisApiService, never()).getStockDailyChartPrice(any(), any(), any(), any());
     }

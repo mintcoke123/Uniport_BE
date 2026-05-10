@@ -121,9 +121,13 @@ public class OnboardingService {
         int style = getSingleValue(answersByQuestion, OnboardingQuestionProvider.QUESTION_STYLE, onboardingQuestionProvider::getStyleValue);
         String investmentLevel = onboardingQuestionProvider.getLevelLabel(
                 getSingleSelectedOptionId(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_LEVEL)));
-        long sectorOptionId = getSingleSelectedOptionId(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_SECTOR));
-        String interestSector = onboardingQuestionProvider.getSectorLabel(sectorOptionId);
-        List<String> educationSectorIds = List.of(onboardingQuestionProvider.getSectorId(sectorOptionId));
+        List<Long> sectorOptionIds = getSelectedOptionIds(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_SECTOR));
+        String interestSector = sectorOptionIds.stream()
+                .map(onboardingQuestionProvider::getSectorLabel)
+                .collect(Collectors.joining(", "));
+        List<String> educationSectorIds = sectorOptionIds.stream()
+                .map(onboardingQuestionProvider::getSectorId)
+                .toList();
 
         OnboardingSurveyResultDTO result = onboardingResultProvider.classify(
                 risk,
@@ -190,6 +194,9 @@ public class OnboardingService {
             if (answer.getOptionIds().size() < minSelection || answer.getOptionIds().size() > maxSelection) {
                 throw new ApiException("Invalid number of options for question: " + answer.getQuestionId(), HttpStatus.BAD_REQUEST);
             }
+            if (new HashSet<>(answer.getOptionIds()).size() != answer.getOptionIds().size()) {
+                throw new ApiException("Duplicate optionId is not allowed for question: " + answer.getQuestionId(), HttpStatus.BAD_REQUEST);
+            }
 
             Set<Long> validOptionIds = question.getOptions().stream()
                     .map(option -> option.getId())
@@ -226,6 +233,13 @@ public class OnboardingService {
             throw new ApiException("Each onboarding question must have exactly one selected option", HttpStatus.BAD_REQUEST);
         }
         return answer.getOptionIds().get(0);
+    }
+
+    private List<Long> getSelectedOptionIds(OnboardingSurveyAnswerDTO answer) {
+        if (answer == null || answer.getOptionIds() == null || answer.getOptionIds().isEmpty()) {
+            throw new ApiException("Each onboarding question must have selected options", HttpStatus.BAD_REQUEST);
+        }
+        return answer.getOptionIds();
     }
 
     private void persistEducationRoadmapSeed(User user, String investmentLevel, List<String> sectorIds) {
@@ -275,8 +289,7 @@ public class OnboardingService {
                 && user.getInvestmentLevel() != null
                 && !user.getInvestmentLevel().isBlank()
                 && user.getInterestSector() != null
-                && !user.getInterestSector().isBlank()
-                && !user.getInterestSector().contains(",");
+                && !user.getInterestSector().isBlank();
     }
 
     private <T> T readObject(String json, TypeReference<T> typeReference, T defaultValue) {

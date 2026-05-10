@@ -41,14 +41,14 @@ public class OnboardingQuestionProvider {
     private static final Map<Long, String> SECTOR_IDS = Map.ofEntries(
             Map.entry(16L, "ai_semiconductor"),
             Map.entry(17L, "battery"),
-            Map.entry(18L, "robot_humanoid"),
+            Map.entry(18L, "robot"),
             Map.entry(19L, "power_equipment"),
             Map.entry(20L, "defense"),
-            Map.entry(21L, "bio_obesity_treatment"),
-            Map.entry(22L, "autonomous_driving_future_mobility"),
-            Map.entry(23L, "nuclear_smr"),
-            Map.entry(24L, "quantum_computing"),
-            Map.entry(25L, "space_aerospace")
+            Map.entry(21L, "bio"),
+            Map.entry(22L, "autonomous_driving"),
+            Map.entry(23L, "nuclear"),
+            Map.entry(24L, "quantum_computer"),
+            Map.entry(25L, "space_rocket")
     );
 
     public List<OnboardingSurveyQuestionDTO> getQuestions() {
@@ -98,11 +98,11 @@ public class OnboardingQuestionProvider {
                         option(14L, "소액 투자 경험이 있고 기본 용어는 조금 안다.", "LV2"),
                         option(15L, "1년 이상 직접 사고팔아 보며 자기 기준이 조금 생겼다.", "LV3")
                 ),
-                singleQuestion(
+                multiQuestion(
                         QUESTION_SECTOR,
                         6,
-                        "지금 가장 관심 있게 보는 투자 분야는?",
-                        "C는 관심 섹터다. 캐릭터 매칭에는 직접 사용하지 않는다.",
+                        "지금 가장 관심 있게 보는 투자 분야 2가지는?",
+                        "C는 관심 섹터다. 2가지를 선택하면 30일 로드맵 후반부에 반영된다.",
                         option(16L, "AI 반도체", null),
                         option(17L, "2차전지(배터리)", null),
                         option(18L, "로봇·휴머노이드", null),
@@ -196,6 +196,23 @@ public class OnboardingQuestionProvider {
                 .subtitle(subtitle)
                 .minSelection(1)
                 .maxSelection(1)
+                .options(List.of(options))
+                .build();
+    }
+
+    private OnboardingSurveyQuestionDTO multiQuestion(Long id,
+                                                       int order,
+                                                       String title,
+                                                       String subtitle,
+                                                       OnboardingSurveyOptionDTO... options) {
+        return OnboardingSurveyQuestionDTO.builder()
+                .id(id)
+                .order(order)
+                .type("MULTI_SELECT")
+                .title(title)
+                .subtitle(subtitle)
+                .minSelection(2)
+                .maxSelection(2)
                 .options(List.of(options))
                 .build();
     }

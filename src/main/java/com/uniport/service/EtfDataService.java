@@ -101,7 +101,7 @@ public class EtfDataService {
     private static final List<String> SUPPORTED_REBALANCE_POLICIES = List.of("MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "NONE");
     private static final String ANALYSIS_VERSION = "backtest-v1.0.0";
     private static final String MESSAGE_VERSION = "ai-feedback-v1.0.0";
-    private static final String PRICE_SOURCE = "asset_price_daily cache -> KIS_DOMESTIC_ADJUSTED_CLOSE + KIS_OVERSEAS_DAILY_PRICE";
+    private static final String PRICE_SOURCE = "asset_price_daily cache -> KIS price APIs or synthetic fallback";
     private static final String PRICE_CACHE_POLICY = "asset_price_daily";
     private static final String FX_CACHE_POLICY = "fx_rate_daily";
     private static final int DEFAULT_ASSET_SEARCH_SIZE = 10;
