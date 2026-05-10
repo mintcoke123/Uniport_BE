@@ -10,11 +10,14 @@ import com.uniport.dto.CustomEtfListResponseDTO;
 import com.uniport.dto.CustomEtfMutationResponseDTO;
 import com.uniport.dto.CustomEtfSummaryDTO;
 import com.uniport.dto.CustomEtfUpdateRequestDTO;
+import com.uniport.dto.EtfAnalysisAiFeedbackDTO;
 import com.uniport.dto.EtfAnalysisAllocationDTO;
 import com.uniport.dto.EtfAnalysisAllocationItemDTO;
 import com.uniport.dto.EtfAnalysisApplyRequestDTO;
 import com.uniport.dto.EtfAnalysisApplyResponseDTO;
+import com.uniport.dto.EtfAnalysisBacktestMetadataDTO;
 import com.uniport.dto.EtfAnalysisCumulativeProfitDTO;
+import com.uniport.dto.EtfAnalysisFeedbackBulletDTO;
 import com.uniport.dto.EtfAnalysisHighlightsDTO;
 import com.uniport.dto.EtfAnalysisReportResponseDTO;
 import com.uniport.dto.EtfAnalysisRequestDTO;
@@ -39,16 +42,27 @@ import com.uniport.repository.ManagedEtfAnalysisReportRepository;
 import com.uniport.repository.ManagedEtfFavoriteRepository;
 import com.uniport.repository.ManagedEtfRepository;
 import com.uniport.repository.StockMasterRepository;
+import com.uniport.service.backtest.BacktestHolding;
+import com.uniport.service.backtest.BacktestPricePoint;
+import com.uniport.service.backtest.BacktestRequest;
+import com.uniport.service.backtest.BacktestResult;
+import com.uniport.service.backtest.EtfAiFeedbackService;
+import com.uniport.service.backtest.EtfBacktestEngine;
+import com.uniport.service.backtest.HistoricalPriceProvider;
+import com.uniport.service.backtest.InsightFacts;
+import com.uniport.service.backtest.RuleBasedFeedback;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -61,20 +75,37 @@ public class EtfDataService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<List<HoldingPayload>> HOLDING_LIST_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> MAP_LIST_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final BigDecimal DEFAULT_PRINCIPAL_KRW = BigDecimal.valueOf(100_000_000L);
+    private static final BigDecimal TRANSACTION_FEE_RATE = new BigDecimal("0.0005");
+    private static final BigDecimal SLIPPAGE_RATE = new BigDecimal("0.0003");
+    private static final String DEFAULT_REBALANCE_POLICY = "MONTHLY";
+    private static final String ANALYSIS_VERSION = "backtest-v1.0.0";
+    private static final String MESSAGE_VERSION = "ai-feedback-v1.0.0";
+    private static final String PRICE_SOURCE = "KIS_DOMESTIC_ADJUSTED_CLOSE + KIS_OVERSEAS_DAILY_PRICE";
 
     private final ManagedEtfRepository managedEtfRepository;
     private final ManagedEtfAnalysisReportRepository managedEtfAnalysisReportRepository;
     private final ManagedEtfFavoriteRepository managedEtfFavoriteRepository;
     private final StockMasterRepository stockMasterRepository;
+    private final HistoricalPriceProvider historicalPriceProvider;
+    private final EtfBacktestEngine etfBacktestEngine;
+    private final EtfAiFeedbackService etfAiFeedbackService;
 
     public EtfDataService(ManagedEtfRepository managedEtfRepository,
                           ManagedEtfAnalysisReportRepository managedEtfAnalysisReportRepository,
                           ManagedEtfFavoriteRepository managedEtfFavoriteRepository,
-                          StockMasterRepository stockMasterRepository) {
+                          StockMasterRepository stockMasterRepository,
+                          HistoricalPriceProvider historicalPriceProvider,
+                          EtfBacktestEngine etfBacktestEngine,
+                          EtfAiFeedbackService etfAiFeedbackService) {
         this.managedEtfRepository = managedEtfRepository;
         this.managedEtfAnalysisReportRepository = managedEtfAnalysisReportRepository;
         this.managedEtfFavoriteRepository = managedEtfFavoriteRepository;
         this.stockMasterRepository = stockMasterRepository;
+        this.historicalPriceProvider = historicalPriceProvider;
+        this.etfBacktestEngine = etfBacktestEngine;
+        this.etfAiFeedbackService = etfAiFeedbackService;
     }
 
     public CustomEtfListResponseDTO getCustomEtfs(User user) {
@@ -132,9 +163,11 @@ public class EtfDataService {
         String benchmark = safeUpper(request != null ? request.getBenchmark() : null);
         validatePeriod(period);
         validateBenchmark(benchmark);
+        BigDecimal principalAmount = resolvePrincipal(request != null ? request.getPrincipalAmountKrw() : null);
+        String rebalancePolicy = resolveRebalancePolicy(request != null ? request.getRebalancePolicy() : null);
 
         String reportId = "REPORT_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.ROOT);
-        EtfAnalysisReportResponseDTO response = buildReport(reportId, etf, period, benchmark);
+        EtfAnalysisReportResponseDTO response = buildReport(reportId, etf, period, benchmark, principalAmount, rebalancePolicy);
         managedEtfAnalysisReportRepository.save(ManagedEtfAnalysisReport.builder()
                 .reportId(reportId)
                 .ownerUserId(user.getId())
@@ -166,7 +199,13 @@ public class EtfDataService {
         String period = safeUpper(periodOverride);
         validatePeriod(period);
         ManagedEtf etf = getRequiredCustomEtf(user, report.getEtfCode());
-        return buildReport(reportId, etf, period, report.getBenchmark());
+        BigDecimal principalAmount = stored.getMetadata() != null && stored.getMetadata().getPrincipalAmountKrw() != null
+                ? BigDecimal.valueOf(stored.getMetadata().getPrincipalAmountKrw())
+                : DEFAULT_PRINCIPAL_KRW;
+        String rebalancePolicy = stored.getMetadata() != null && stored.getMetadata().getRebalancePolicy() != null
+                ? stored.getMetadata().getRebalancePolicy()
+                : DEFAULT_REBALANCE_POLICY;
+        return buildReport(reportId, etf, period, report.getBenchmark(), principalAmount, rebalancePolicy);
     }
 
     @Transactional
@@ -182,7 +221,9 @@ public class EtfDataService {
         }
         EtfAnalysisReportResponseDTO response = readValue(report.getReportJson(), EtfAnalysisReportResponseDTO.class);
         List<HoldingPayload> holdings = response.getAllocation().getItems().stream()
-                .map(item -> new HoldingPayload(resolveStockId(item.getName()), item.getWeight()))
+                .map(item -> new HoldingPayload(item.getSecurityId() != null && !item.getSecurityId().isBlank()
+                        ? item.getSecurityId()
+                        : resolveStockId(item.getName()), item.getWeight()))
                 .toList();
         etf.setHoldingsJson(writeValue(holdings));
         etf.setLastReportId(reportId);
@@ -195,7 +236,7 @@ public class EtfDataService {
                 .build();
     }
 
-    public EtfDiscoveryResponseDTO getPopularEtfs(String sort, String theme, Integer page, Integer size) {
+    public EtfDiscoveryResponseDTO getPopularEtfs(String sort, String theme, String query, Integer page, Integer size, User user) {
         int safePage = page == null || page < 0 ? 0 : page;
         int safeSize = size == null || size < 1 ? 10 : Math.min(size, 20);
         List<ManagedEtf> all = managedEtfRepository.findAll().stream()
@@ -203,13 +244,15 @@ public class EtfDataService {
                 .toList();
         List<EtfDiscoveryItemDTO> filtered = all.stream()
                 .filter(etf -> theme == null || theme.isBlank() || theme.equalsIgnoreCase(etf.getTheme()))
+                .filter(etf -> matchesDiscoveryQuery(etf, query))
                 .sorted(resolveComparator(sort))
-                .map(etf -> toDiscoveryItem(etf, null))
+                .map(etf -> toDiscoveryItem(etf, user))
                 .toList();
         int fromIndex = Math.min(safePage * safeSize, filtered.size());
         int toIndex = Math.min(fromIndex + safeSize, filtered.size());
         return EtfDiscoveryResponseDTO.builder()
                 .items(filtered.subList(fromIndex, toIndex))
+                .totalCount(filtered.size())
                 .page(safePage)
                 .size(safeSize)
                 .hasNext(toIndex < filtered.size())
@@ -345,13 +388,15 @@ public class EtfDataService {
 
     private EtfDiscoveryItemDTO toDiscoveryItem(ManagedEtf etf, User user) {
         boolean favorite = user != null && user.getId() != null && managedEtfFavoriteRepository.existsByUserIdAndEtfCode(user.getId(), etf.getEtfCode());
+        double returnRate = etf.getReturnRate() != null ? etf.getReturnRate().doubleValue() : 0.0;
         return EtfDiscoveryItemDTO.builder()
                 .etfId(etf.getEtfCode())
                 .title(etf.getTitle())
                 .subtitle(Optional.ofNullable(etf.getShortDescription()).orElse(""))
                 .theme(Optional.ofNullable(etf.getTheme()).orElse(""))
                 .badgeLabel(Optional.ofNullable(etf.getRiskLevel()).orElse("DISCOVERY"))
-                .returnRate3M(etf.getReturnRate() != null ? etf.getReturnRate().doubleValue() : 0.0)
+                .returnRate3M(returnRate)
+                .dailyExpectedReturnRate(returnRate)
                 .followerCount((int) managedEtfFavoriteRepository.countByEtfCode(etf.getEtfCode()))
                 .favorite(favorite)
                 .thumbnailUrl(etf.getImageUrl())
@@ -362,17 +407,107 @@ public class EtfDataService {
         if ("POPULAR".equalsIgnoreCase(sort)) {
             return Comparator.comparingLong((ManagedEtf etf) -> managedEtfFavoriteRepository.countByEtfCode(etf.getEtfCode())).reversed();
         }
-        return Comparator.comparing((ManagedEtf etf) -> Optional.ofNullable(etf.getReturnRate()).orElse(BigDecimal.ZERO)).reversed();
+        if ("RETURN".equalsIgnoreCase(sort)) {
+            return Comparator.comparing((ManagedEtf etf) -> Optional.ofNullable(etf.getReturnRate()).orElse(BigDecimal.ZERO)).reversed();
+        }
+        return Comparator.comparing(this::discoveryPublishedAt).reversed();
     }
 
-    private EtfAnalysisReportResponseDTO buildReport(String reportId, ManagedEtf etf, String period, String benchmark) {
+    private LocalDateTime discoveryPublishedAt(ManagedEtf etf) {
+        LocalDateTime publishedAt = etf.getPublishedAt();
+        return publishedAt != null ? publishedAt : Optional.ofNullable(etf.getCreatedAt()).orElse(LocalDateTime.MIN);
+    }
+
+    private boolean matchesDiscoveryQuery(ManagedEtf etf, String query) {
+        String needle = normalizeSearch(query);
+        if (needle.isBlank()) {
+            return true;
+        }
+        if (containsSearch(etf.getTitle(), needle)
+                || containsSearch(etf.getShortDescription(), needle)
+                || containsSearch(etf.getTheme(), needle)
+                || containsSearch(etf.getRiskLevel(), needle)) {
+            return true;
+        }
+        for (String tag : parseTags(etf.getAnalysisSummaryJson())) {
+            if (containsSearch(tag, needle)) {
+                return true;
+            }
+        }
+        for (HoldingPayload holding : readHoldings(etf.getHoldingsJson())) {
+            StockRef stock = resolveStock(holding.stockId());
+            if (containsSearch(holding.stockId(), needle)
+                    || containsSearch(stock.name(), needle)
+                    || containsSearch(stock.symbol(), needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsSearch(String value, String needle) {
+        return value != null && normalizeSearch(value).contains(needle);
+    }
+
+    private String normalizeSearch(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private EtfAnalysisReportResponseDTO buildReport(String reportId,
+                                                     ManagedEtf etf,
+                                                     String period,
+                                                     String benchmark,
+                                                     BigDecimal principalAmount,
+                                                     String rebalancePolicy) {
         List<HoldingPayload> holdings = readHoldings(etf.getHoldingsJson());
-        int weightedScore = holdings.stream().mapToInt(holding -> holding.weight() * holding.weight()).sum();
-        double returnRate = Math.round((weightedScore / 250.0) * periodMultiplier(period) * 10.0) / 10.0;
-        double benchmarkExcess = Math.round((returnRate - benchmarkBase(benchmark)) * 10.0) / 10.0;
-        double volatility = Math.round((12.0 + holdings.size() * 1.4) * 10.0) / 10.0;
-        double maxDrawdown = Math.round((-4.0 - holdings.size() * 0.9) * 10.0) / 10.0;
-        int finalValue = 1_000_000 + (int) Math.round(returnRate * 12_500);
+        if (holdings.isEmpty()) {
+            throw new ApiException("ETF holdings are required for analysis", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = startDateForPeriod(period, endDate);
+        List<BacktestHolding> backtestHoldings = holdings.stream()
+                .map(holding -> {
+                    StockRef ref = resolveStock(holding.stockId());
+                    return new BacktestHolding(
+                            holding.stockId(),
+                            ref.name(),
+                            BigDecimal.valueOf(holding.weight()),
+                            etf.getTheme()
+                    );
+                })
+                .toList();
+        Map<String, List<BacktestPricePoint>> priceSeriesBySecurityId = new LinkedHashMap<>();
+        for (HoldingPayload holding : holdings) {
+            priceSeriesBySecurityId.put(
+                    holding.stockId(),
+                    historicalPriceProvider.getSecurityPriceSeries(holding.stockId(), startDate, endDate)
+            );
+        }
+        List<BacktestPricePoint> benchmarkSeries = historicalPriceProvider.getBenchmarkSeries(benchmark, startDate, endDate);
+
+        BacktestResult backtestResult;
+        try {
+            backtestResult = etfBacktestEngine.run(BacktestRequest.builder()
+                    .principalAmountKrw(principalAmount)
+                    .transactionFeeRate(TRANSACTION_FEE_RATE)
+                    .slippageRate(SLIPPAGE_RATE)
+                    .rebalancePolicy(rebalancePolicy)
+                    .periodLabel(periodLabel(period))
+                    .benchmarkName(benchmarkDisplayName(benchmark))
+                    .holdings(backtestHoldings)
+                    .priceSeriesBySecurityId(priceSeriesBySecurityId)
+                    .benchmarkSeries(benchmarkSeries)
+                    .build());
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(e.getMessage(), HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        InsightFacts facts = etfAiFeedbackService.buildInsightFacts(
+                etf.getTitle(),
+                periodLabel(period),
+                benchmarkDisplayName(benchmark),
+                backtestResult
+        );
+        RuleBasedFeedback feedback = etfAiFeedbackService.buildFeedback(facts);
 
         return EtfAnalysisReportResponseDTO.builder()
                 .reportId(reportId)
@@ -380,38 +515,135 @@ public class EtfDataService {
                 .period(period)
                 .benchmark(benchmark)
                 .highlights(EtfAnalysisHighlightsDTO.builder()
-                        .returnRate(returnRate)
-                        .benchmarkExcessReturn(benchmarkExcess)
-                        .volatility(volatility)
-                        .maxDrawdown(maxDrawdown)
+                        .returnRate(toDouble(backtestResult.totalReturnPercent()))
+                        .benchmarkExcessReturn(toDouble(backtestResult.excessReturnPercent()))
+                        .volatility(toDouble(backtestResult.volatilityPercent()))
+                        .maxDrawdown(toDouble(backtestResult.maxDrawdownPercent()))
+                        .annualizedReturn(toDouble(backtestResult.annualizedReturnPercent()))
+                        .benchmarkReturn(toDouble(backtestResult.benchmarkReturnPercent()))
+                        .sharpeRatio(toDouble(backtestResult.sharpeRatio()))
                         .build())
                 .cumulativeProfit(EtfAnalysisCumulativeProfitDTO.builder()
-                        .amount(finalValue)
-                        .series(buildSeries(period, finalValue))
+                        .amount(toKrwInt(backtestResult.profitAmountKrw()))
+                        .series(backtestResult.navSeries().stream()
+                                .map(point -> seriesPoint(point.date(), toKrwInt(point.valueKrw())))
+                                .toList())
                         .build())
                 .riskDiagnosis(EtfAnalysisRiskDiagnosisDTO.builder()
-                        .summary(buildRiskSummary(holdings.size(), etf.getRiskLevel()))
+                        .summary(feedback.summary())
+                        .riskGrade(backtestResult.riskGrade())
+                        .riskGradeLabel(backtestResult.riskGradeLabel())
+                        .riskScore(backtestResult.riskScore())
+                        .positiveFacts(facts.positiveFacts())
+                        .riskFacts(facts.riskFacts())
                         .build())
                 .allocation(EtfAnalysisAllocationDTO.builder()
                         .items(holdings.stream()
                                 .map(holding -> EtfAnalysisAllocationItemDTO.builder()
+                                        .securityId(holding.stockId())
                                         .name(resolveStock(holding.stockId()).name())
                                         .weight(holding.weight())
                                         .build())
                                 .toList())
                         .build())
+                .aiFeedback(toAiFeedbackDto(feedback))
+                .metadata(EtfAnalysisBacktestMetadataDTO.builder()
+                        .analysisVersion(ANALYSIS_VERSION)
+                        .messageVersion(MESSAGE_VERSION)
+                        .rebalancePolicy(rebalancePolicy)
+                        .transactionFeeRate(TRANSACTION_FEE_RATE.doubleValue())
+                        .slippageRate(SLIPPAGE_RATE.doubleValue())
+                        .principalAmountKrw(principalAmount.setScale(0, RoundingMode.HALF_UP).longValue())
+                        .tradingDays(backtestResult.tradingDays())
+                        .usedFallbackMessage(feedback.usedFallback())
+                        .priceSource(PRICE_SOURCE)
+                        .llmModel(etfAiFeedbackService.modelName())
+                        .promptVersion(etfAiFeedbackService.promptVersion())
+                        .build())
+                .insightFacts(OBJECT_MAPPER.convertValue(facts, MAP_TYPE))
                 .createdAt(java.time.OffsetDateTime.now(ZoneOffset.UTC).toString())
                 .build();
     }
 
-    private List<EtfAnalysisSeriesPointDTO> buildSeries(String period, int finalValue) {
-        LocalDate end = LocalDate.now();
+    private BigDecimal resolvePrincipal(Long principalAmountKrw) {
+        if (principalAmountKrw == null) {
+            return DEFAULT_PRINCIPAL_KRW;
+        }
+        if (principalAmountKrw <= 0) {
+            throw new ApiException("principalAmountKrw must be greater than 0", HttpStatus.BAD_REQUEST);
+        }
+        return BigDecimal.valueOf(principalAmountKrw);
+    }
+
+    private String resolveRebalancePolicy(String rebalancePolicy) {
+        String normalized = rebalancePolicy == null || rebalancePolicy.isBlank()
+                ? DEFAULT_REBALANCE_POLICY
+                : rebalancePolicy.trim().toUpperCase(Locale.ROOT);
+        if (!DEFAULT_REBALANCE_POLICY.equals(normalized)) {
+            throw new ApiException("rebalancePolicy must be MONTHLY", HttpStatus.BAD_REQUEST);
+        }
+        return normalized;
+    }
+
+    private LocalDate startDateForPeriod(String period, LocalDate endDate) {
         return switch (period) {
-            case "3Y" -> List.of(seriesPoint(end.minusYears(3), 1_000_000), seriesPoint(end.minusMonths(18), 1_180_000), seriesPoint(end, finalValue));
-            case "5Y" -> List.of(seriesPoint(end.minusYears(5), 1_000_000), seriesPoint(end.minusYears(2), 1_260_000), seriesPoint(end, finalValue));
-            case "ALL" -> List.of(seriesPoint(end.minusYears(7), 1_000_000), seriesPoint(end.minusYears(4), 1_220_000), seriesPoint(end.minusYears(2), 1_340_000), seriesPoint(end, finalValue));
-            default -> List.of(seriesPoint(end.minusYears(1), 1_000_000), seriesPoint(end.minusMonths(6), 1_090_000), seriesPoint(end, finalValue));
+            case "3Y" -> endDate.minusYears(3);
+            case "5Y" -> endDate.minusYears(5);
+            case "ALL" -> endDate.minusYears(5);
+            default -> endDate.minusYears(1);
         };
+    }
+
+    private String periodLabel(String period) {
+        return switch (period) {
+            case "3Y" -> "3년";
+            case "5Y" -> "5년";
+            case "ALL" -> "전체";
+            default -> "1년";
+        };
+    }
+
+    private String benchmarkDisplayName(String benchmark) {
+        return switch (benchmark) {
+            case "SP500" -> "S&P 500";
+            case "NASDAQ" -> "NASDAQ";
+            case "KOSPI" -> "KOSPI";
+            default -> benchmark;
+        };
+    }
+
+    private Double toDouble(BigDecimal value) {
+        return value != null ? value.doubleValue() : null;
+    }
+
+    private int toKrwInt(BigDecimal value) {
+        if (value == null) {
+            return 0;
+        }
+        BigDecimal rounded = value.setScale(0, RoundingMode.HALF_UP);
+        if (rounded.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
+            return Integer.MAX_VALUE;
+        }
+        if (rounded.compareTo(BigDecimal.valueOf(Integer.MIN_VALUE)) < 0) {
+            return Integer.MIN_VALUE;
+        }
+        return rounded.intValue();
+    }
+
+    private EtfAnalysisAiFeedbackDTO toAiFeedbackDto(RuleBasedFeedback feedback) {
+        return EtfAnalysisAiFeedbackDTO.builder()
+                .title(feedback.title())
+                .summary(feedback.summary())
+                .bullets(feedback.bullets() == null ? List.of() : feedback.bullets().stream()
+                        .map(bullet -> EtfAnalysisFeedbackBulletDTO.builder()
+                                .type(bullet.type())
+                                .message(bullet.message())
+                                .build())
+                        .toList())
+                .tone(feedback.tone())
+                .disclaimer(feedback.disclaimer())
+                .usedFallback(feedback.usedFallback())
+                .build();
     }
 
     private EtfAnalysisSeriesPointDTO seriesPoint(LocalDate date, int value) {
@@ -536,28 +768,6 @@ public class EtfDataService {
 
     private String generateEtfCode() {
         return "ETF_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase(Locale.ROOT);
-    }
-
-    private double periodMultiplier(String period) {
-        return switch (period) {
-            case "3Y" -> 1.45;
-            case "5Y" -> 1.9;
-            case "ALL" -> 2.3;
-            default -> 1.0;
-        };
-    }
-
-    private double benchmarkBase(String benchmark) {
-        return switch (benchmark) {
-            case "NASDAQ" -> 10.5;
-            case "KOSPI" -> 6.0;
-            default -> 8.0;
-        };
-    }
-
-    private String buildRiskSummary(int holdingCount, String riskLevel) {
-        String normalizedRisk = riskLevel == null || riskLevel.isBlank() ? "MEDIUM" : riskLevel.toUpperCase(Locale.ROOT);
-        return "Holdings: " + holdingCount + ", risk level: " + normalizedRisk + ". Diversification and rebalancing are based on the saved ETF composition.";
     }
 
     private StockRef resolveStock(String stockId) {

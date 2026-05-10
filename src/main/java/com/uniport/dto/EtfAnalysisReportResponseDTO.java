@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 @Getter
 @Builder
 @NoArgsConstructor
@@ -32,6 +34,13 @@ public class EtfAnalysisReportResponseDTO {
     private EtfAnalysisRiskDiagnosisDTO riskDiagnosis;
 
     private EtfAnalysisAllocationDTO allocation;
+
+    private EtfAnalysisAiFeedbackDTO aiFeedback;
+
+    private EtfAnalysisBacktestMetadataDTO metadata;
+
+    @Schema(description = "AI 문장 생성에 넘길 수 있는 검증된 숫자/사실 원본. MVP에서는 룰 기반 피드백 생성에 사용합니다.")
+    private Map<String, Object> insightFacts;
 
     @Schema(example = "2026-03-11T16:30:00Z", requiredMode = Schema.RequiredMode.REQUIRED)
     private String createdAt;

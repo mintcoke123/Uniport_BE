@@ -18,4 +18,10 @@ public class EtfAnalysisRequestDTO {
 
     @Schema(example = "SP500", allowableValues = {"SP500", "KOSPI", "NASDAQ"}, requiredMode = Schema.RequiredMode.REQUIRED)
     private String benchmark;
+
+    @Schema(example = "100000000", description = "백테스트 시작 원금. 미전달 시 1억원 기준으로 계산합니다.")
+    private Long principalAmountKrw;
+
+    @Schema(example = "MONTHLY", allowableValues = {"MONTHLY"}, description = "리밸런싱 방식. MVP는 월간 리밸런싱만 지원합니다.")
+    private String rebalancePolicy;
 }

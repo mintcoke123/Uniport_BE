@@ -13,6 +13,9 @@ import lombok.NoArgsConstructor;
 @Schema(description = "자산 비중 아이템")
 public class EtfAnalysisAllocationItemDTO {
 
+    @Schema(example = "KRX_005930", description = "원본 종목 ID")
+    private String securityId;
+
     @Schema(example = "Apple Inc.", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
 
