@@ -483,6 +483,8 @@ class EtfDataServiceTest {
         assertEquals(true, pending.getBacktestEnabled());
         assertEquals("VERIFIED", pending.getPriceSourceStatus());
         assertEquals(null, pending.getLastPriceError());
+        org.mockito.Mockito.verify(historicalPriceProvider, org.mockito.Mockito.times(1))
+                .getSecurityPriceSeries(eq("KRX_373220"), any(LocalDate.class), any(LocalDate.class));
         org.mockito.Mockito.verify(assetMasterRepository).save(pending);
     }
 
@@ -560,7 +562,7 @@ class EtfDataServiceTest {
         when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_005930")).thenReturn(Optional.of(samsung));
         when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_000660")).thenReturn(Optional.of(hynix));
 
-        CyclicBarrier barrier = new CyclicBarrier(4);
+        CyclicBarrier barrier = new CyclicBarrier(2);
         when(historicalPriceProvider.getSecurityPriceSeries(any(), any(LocalDate.class), any(LocalDate.class)))
                 .thenAnswer(invocation -> {
                     awaitConcurrentPriceFetch(barrier);
@@ -653,7 +655,7 @@ class EtfDataServiceTest {
         try {
             barrier.await(1, TimeUnit.SECONDS);
         } catch (Exception e) {
-            throw new AssertionError("price fetches should run concurrently", e);
+            throw new AssertionError("price fetches should overlap", e);
         }
     }
 

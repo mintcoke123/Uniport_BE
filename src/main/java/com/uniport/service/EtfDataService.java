@@ -107,8 +107,7 @@ public class EtfDataService {
     private static final int DEFAULT_ASSET_SEARCH_SIZE = 10;
     private static final int MAX_ASSET_SEARCH_SIZE = 30;
     private static final int ASSET_SEARCH_POOL_SIZE = 200;
-    private static final int ON_DEMAND_VERIFICATION_LOOKBACK_DAYS = 45;
-    private static final int PRICE_FETCH_POOL_SIZE = 6;
+    private static final int PRICE_FETCH_POOL_SIZE = 2;
     private static final int PRICE_FETCH_TIMEOUT_SECONDS = 8;
     private static final String ASSET_TYPE_STOCK = "STOCK";
     private static final String ASSET_TYPE_BOND = "BOND";
@@ -963,6 +962,7 @@ public class EtfDataService {
                 throw new ApiException("ETF asset has insufficient price data for backtest: " + priceSeries.securityId(),
                         HttpStatus.UNPROCESSABLE_ENTITY);
             }
+            markBacktestDataVerified(priceSeries.securityId());
             priceSeriesBySecurityId.put(priceSeries.securityId(), priceSeries.series());
         }
         return new BacktestPriceSeries(priceSeriesBySecurityId, joinPriceFetch(benchmarkFuture));
@@ -1247,7 +1247,7 @@ public class EtfDataService {
             if (!ASSET_TYPE_STOCK.equals(item.assetType())) {
                 throw unsupportedCustomEtfAssetTypeException(item);
             }
-            if (isBacktestEligible(item) || verifyBacktestDataOnDemand(item.assetId())) {
+            if (isBacktestEligible(item) || isPendingBacktestVerification(item)) {
                 return;
             }
             throw unsupportedAssetException(item);
@@ -1257,21 +1257,11 @@ public class EtfDataService {
         if (normalized.startsWith("KRX_")) {
             String code = normalized.substring(4);
             if (code.matches("\\d{6}") && stockMasterRepository.findById(code).isPresent()) {
-                StockMaster stock = stockMasterRepository.findById(code).get();
-                EtfAssetCatalogItem item = toAssetCatalogItem(stock);
-                if (verifyBacktestDataOnDemand(item.assetId())) {
-                    return;
-                }
-                throw unsupportedAssetException(item);
+                return;
             }
         }
         if (normalized.matches("\\d{6}") && stockMasterRepository.findById(normalized).isPresent()) {
-            StockMaster stock = stockMasterRepository.findById(normalized).get();
-            EtfAssetCatalogItem item = toAssetCatalogItem(stock);
-            if (verifyBacktestDataOnDemand(item.assetId())) {
-                return;
-            }
-            throw unsupportedAssetException(item);
+            return;
         }
         throw new ApiException("Unknown ETF assetId: " + normalized, HttpStatus.BAD_REQUEST);
     }
@@ -1280,25 +1270,23 @@ public class EtfDataService {
         return !isBacktestEligible(item) && DATA_STATUS_PRICE_UNAVAILABLE.equals(item.priceSourceStatus());
     }
 
-    private boolean verifyBacktestDataOnDemand(String assetId) {
-        LocalDate endDate = LocalDate.now();
-        LocalDate startDate = endDate.minusDays(ON_DEMAND_VERIFICATION_LOOKBACK_DAYS);
-        try {
-            List<BacktestPricePoint> series = historicalPriceProvider.getSecurityPriceSeries(assetId, startDate, endDate);
-            if (series == null || series.size() < 2) {
-                return false;
-            }
-            assetMasterRepository.findByAssetIdAndActiveTrue(assetId).ifPresent(asset -> {
+    private boolean isPendingBacktestVerification(EtfAssetCatalogItem item) {
+        return DATA_STATUS_PENDING.equals(item.priceSourceStatus());
+    }
+
+    private void markBacktestDataVerified(String assetId) {
+        assetMasterRepository.findByAssetIdAndActiveTrue(assetId).ifPresent(asset -> {
+            if (ASSET_TYPE_STOCK.equals(asset.getAssetType())
+                    && (!Boolean.TRUE.equals(asset.getBacktestEnabled())
+                    || DATA_STATUS_PENDING.equals(asset.getPriceSourceStatus())
+                    || asset.getLastPriceError() != null)) {
                 asset.setBacktestEnabled(true);
                 asset.setPriceSourceStatus(DATA_STATUS_VERIFIED);
                 asset.setLastPriceError(null);
                 asset.setLastPriceVerifiedAt(LocalDateTime.now());
                 assetMasterRepository.save(asset);
-            });
-            return true;
-        } catch (Exception ignored) {
-            return false;
-        }
+            }
+        });
     }
 
     private ApiException unsupportedAssetException(EtfAssetCatalogItem item) {
