@@ -282,26 +282,25 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void searchAssets_filtersUnsupportedAssetsAndExposesDataStatus() {
-        AssetMaster apple = asset("US_AAPL", "STOCK", "Apple Inc.", "AAPL", "NASDAQ", "USD");
+    void searchAssets_includesPriceUnavailableStockForFallbackAnalysis() {
         AssetMaster unsupported = asset("US_FAKE", "STOCK", "Fake Corp.", "FAKE", "NASDAQ", "USD");
         unsupported.setBacktestEnabled(false);
         unsupported.setPriceSourceStatus("PRICE_UNAVAILABLE");
         unsupported.setLastPriceError("No recent KIS price");
-        when(assetMasterRepository.searchActive(eq("apple"), eq("STOCK"), eq(null), any(Pageable.class)))
-                .thenReturn(List.of(unsupported, apple));
-        when(assetAliasRepository.searchActiveAssetMatches(eq("apple"), eq("STOCK"), eq(null), any(Pageable.class)))
+        when(assetMasterRepository.searchActive(eq("fake"), eq("STOCK"), eq(null), any(Pageable.class)))
+                .thenReturn(List.of(unsupported));
+        when(assetAliasRepository.searchActiveAssetMatches(eq("fake"), eq("STOCK"), eq(null), any(Pageable.class)))
                 .thenReturn(List.of());
-        when(stockMasterRepository.searchForEtfAssetCandidates(eq("apple"), any()))
+        when(stockMasterRepository.searchForEtfAssetCandidates(eq("fake"), any()))
                 .thenReturn(List.of());
-        when(stockVisualAssetResolver.resolve("NASDAQ", "AAPL", "Apple Inc.", null)).thenReturn(visual("AAPL"));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "FAKE", "Fake Corp.", null)).thenReturn(visual("FAKE"));
 
-        CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("apple", "STOCK", null, 0, 10);
+        CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("fake", "STOCK", null, 0, 10);
 
         assertEquals(1, response.getItems().size());
-        assertEquals("US_AAPL", response.getItems().get(0).getAssetId());
+        assertEquals("US_FAKE", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
-        assertEquals("VERIFIED", response.getItems().get(0).getDataStatus());
+        assertEquals("PRICE_UNAVAILABLE", response.getItems().get(0).getDataStatus());
         assertEquals(null, response.getItems().get(0).getDataStatusMessage());
     }
 
@@ -378,7 +377,7 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void createCustomEtf_rejectsUnsupportedAssetMasterAsset() {
+    void createCustomEtf_acceptsPriceUnavailableStockForFallbackAnalysis() {
         User user = User.builder().id(1L).build();
         AssetMaster unsupported = asset("US_FAKE", "STOCK", "Fake Corp.", "FAKE", "NASDAQ", "USD");
         unsupported.setBacktestEnabled(false);
@@ -393,10 +392,17 @@ class EtfDataServiceTest {
                 .build();
         when(assetMasterRepository.findByAssetIdAndActiveTrue("US_FAKE"))
                 .thenReturn(Optional.of(unsupported));
+        when(managedEtfRepository.save(any(ManagedEtf.class))).thenAnswer(invocation -> {
+            ManagedEtf saved = invocation.getArgument(0);
+            saved.setCreatedAt(java.time.LocalDateTime.parse("2026-05-10T09:00:00"));
+            saved.setUpdatedAt(java.time.LocalDateTime.parse("2026-05-10T09:00:00"));
+            return saved;
+        });
 
-        ApiException ex = assertThrows(ApiException.class, () -> etfDataService.createCustomEtf(user, request));
+        CustomEtfMutationResponseDTO response = etfDataService.createCustomEtf(user, request);
 
-        assertEquals("ETF asset is not backtest-enabled: US_FAKE (No recent KIS price)", ex.getMessage());
+        assertEquals("검증 ETF", response.getTitle());
+        assertEquals(100, response.getTotalWeight());
     }
 
     @Test
@@ -419,7 +425,7 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void analyze_rejectsUnsupportedStoredHoldingBeforeBacktest() {
+    void analyze_acceptsPriceUnavailableStockWithFallbackProvider() {
         User user = User.builder().id(1L).build();
         ManagedEtf etf = ManagedEtf.builder()
                 .etfCode("ETF_CUSTOM")
@@ -434,11 +440,31 @@ class EtfDataServiceTest {
         unsupported.setLastPriceError("No recent KIS price");
         when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
         when(assetMasterRepository.findByAssetIdAndActiveTrue("US_FAKE")).thenReturn(Optional.of(unsupported));
+        when(historicalPriceProvider.getSecurityPriceSeries(eq("US_FAKE"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point("2025-01-02", "100"), point("2025-01-03", "101")));
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point("2025-01-02", "100"), point("2025-01-03", "101")));
+        BacktestResult result = backtestResult();
+        when(etfBacktestEngine.run(any())).thenReturn(result);
+        InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result))).thenReturn(facts);
+        when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "백테스트 기준 요약입니다.",
+                List.of(),
+                "BALANCED",
+                "과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.",
+                true
+        ));
 
-        ApiException ex = assertThrows(ApiException.class, () -> etfDataService.analyze(user, "ETF_CUSTOM",
-                EtfAnalysisRequestDTO.builder().period("1Y").benchmark("SP500").build()));
+        EtfAnalysisStartResponseDTO response = etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("1Y").benchmark("SP500").build());
 
-        assertEquals("ETF asset is not backtest-enabled: US_FAKE (No recent KIS price)", ex.getMessage());
+        assertEquals("COMPLETED", response.getStatus());
+        assertEquals(true, unsupported.getBacktestEnabled());
+        assertEquals("VERIFIED", unsupported.getPriceSourceStatus());
+        assertEquals(null, unsupported.getLastPriceError());
+        org.mockito.Mockito.verify(assetMasterRepository).save(unsupported);
     }
 
     @Test

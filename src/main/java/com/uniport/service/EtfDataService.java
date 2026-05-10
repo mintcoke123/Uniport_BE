@@ -703,7 +703,7 @@ public class EtfDataService {
     }
 
     private boolean isCustomEtfSelectableAsset(EtfAssetCatalogItem item) {
-        return ASSET_TYPE_STOCK.equals(item.assetType()) && !isKnownPriceUnavailable(item);
+        return ASSET_TYPE_STOCK.equals(item.assetType());
     }
 
     private boolean isBacktestEligible(EtfAssetCatalogItem item) {
@@ -1216,9 +1216,6 @@ public class EtfDataService {
             if (!ASSET_TYPE_STOCK.equals(catalogItem.get().assetType())) {
                 throw unsupportedCustomEtfAssetTypeException(catalogItem.get());
             }
-            if (isKnownPriceUnavailable(catalogItem.get())) {
-                throw unsupportedAssetException(catalogItem.get());
-            }
             return;
         }
         String normalized = stockId == null ? "" : stockId.trim();
@@ -1247,10 +1244,7 @@ public class EtfDataService {
             if (!ASSET_TYPE_STOCK.equals(item.assetType())) {
                 throw unsupportedCustomEtfAssetTypeException(item);
             }
-            if (isBacktestEligible(item) || isPendingBacktestVerification(item)) {
-                return;
-            }
-            throw unsupportedAssetException(item);
+            return;
         }
 
         String normalized = stockId == null ? "" : stockId.trim();
