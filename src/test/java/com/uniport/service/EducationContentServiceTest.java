@@ -136,6 +136,66 @@ class EducationContentServiceTest {
     }
 
     @Test
+    void rasterAssetsCanUseConfiguredPublicAssetBaseUrl() {
+        String previousBaseUrl = System.getProperty("UNIPORT_EDU_ASSET_BASE_URL");
+        System.setProperty("UNIPORT_EDU_ASSET_BASE_URL", "https://pub-r2.example.com/education-assets");
+        try {
+            EducationContentService service = new EducationContentService(
+                    learningUserStateRepository,
+                    educationOverviewRepository,
+                    educationCardRepository,
+                    educationQuizRepository,
+                    false);
+            when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_core"), isNull(), eq(3)))
+                    .thenReturn(Optional.of(EducationOverviewEntity.builder()
+                            .track("intro_core")
+                            .dayNumber(3)
+                            .levelLabel("입문")
+                            .dayLabel("Day 3")
+                            .title("주식시장의 구조")
+                            .summary1("summary")
+                            .summary2("summary")
+                            .keyPointsJson("[]")
+                            .ctaLabel("시작")
+                            .build()));
+            when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(3)))
+                    .thenReturn(List.of(EducationCardEntity.builder()
+                            .sourceIdx(20)
+                            .assetId("intro-core-d3-card-20")
+                            .sheet("입문_카드_FINAL")
+                            .track("intro_core")
+                            .dayNumber(3)
+                            .section("① 코스피와 코스닥의 정의")
+                            .cardNumber("1/2")
+                            .title("코스피와 코스닥의 정의")
+                            .text("본문")
+                            .imageType("diagram")
+                            .templateType("content_visual")
+                            .visualType("component")
+                            .visualKey("template_diagram")
+                            .visualJson("{\"alt\":\"코스피와 코스닥의 정의\"}")
+                            .visualPayloadJson("{\"template_visual_type\":\"diagram\",\"items\":[{\"text\":\"잘못된 다이어그램\"}]}")
+                            .renderPolicyJson("{\"fit\":\"contain\",\"allow_crop\":false}")
+                            .build()));
+            when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(3)))
+                    .thenReturn(List.of());
+
+            EducationDayContentResponseDTO response = service.getDayContent("intro_core", 3, null);
+
+            EducationCardDTO card = response.getCards().getFirst();
+            assertEquals("raster_asset", card.getRendererType());
+            assertTrue(card.getImageUrl().startsWith("https://pub-r2.example.com/education-assets/"));
+            assertTrue(card.getImageUrl().endsWith("/real_images/generated_examples/intro_day3_kospi_kosdaq_real_boards_20260509.png"));
+        } finally {
+            if (previousBaseUrl == null) {
+                System.clearProperty("UNIPORT_EDU_ASSET_BASE_URL");
+            } else {
+                System.setProperty("UNIPORT_EDU_ASSET_BASE_URL", previousBaseUrl);
+            }
+        }
+    }
+
+    @Test
     void dayContentReturnsManifestComponentPayloadNotOnlyMetadata() {
         EducationContentService service = new EducationContentService(
                 learningUserStateRepository,

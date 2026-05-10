@@ -408,9 +408,7 @@ final class EducationVisualContractNormalizer {
     }
 
     private static String resolveManifestImageUrl(String imageUrl, String publicPath) {
-        String configuredBase = Optional.ofNullable(System.getProperty("UNIPORT_EDU_ASSET_BASE_URL"))
-                .filter(value -> !value.isBlank())
-                .orElseGet(() -> System.getenv("UNIPORT_EDU_ASSET_BASE_URL"));
+        String configuredBase = resolveConfiguredAssetBaseUrl();
         if (configuredBase == null || configuredBase.isBlank() || publicPath == null || publicPath.isBlank()) {
             return blankToNull(imageUrl);
         }
@@ -420,6 +418,20 @@ final class EducationVisualContractNormalizer {
             path = path.substring("/education-assets".length());
         }
         return base + path;
+    }
+
+    private static String resolveConfiguredAssetBaseUrl() {
+        for (String name : List.of("UNIPORT_EDU_ASSET_BASE_URL", "EDUCATION_ASSET_PUBLIC_BASE_URL")) {
+            String systemPropertyValue = System.getProperty(name);
+            if (systemPropertyValue != null && !systemPropertyValue.isBlank()) {
+                return systemPropertyValue;
+            }
+            String environmentValue = System.getenv(name);
+            if (environmentValue != null && !environmentValue.isBlank()) {
+                return environmentValue;
+            }
+        }
+        return null;
     }
 
     private static String blankToNull(String value) {
