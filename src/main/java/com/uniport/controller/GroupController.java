@@ -12,7 +12,9 @@ import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import com.uniport.service.KisApiService;
 import com.uniport.service.MatchingRoomService;
+import com.uniport.service.StockVisualAssetResolver;
 import com.uniport.service.VoteService;
+import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
 import com.uniport.service.kisws.KisWsSubscriptionManager;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -53,6 +55,8 @@ public class GroupController {
     private final VoteService voteService;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final MatchingRoomService matchingRoomService;
+    private final GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
     public GroupController(ChatService chatService, AuthService authService,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
@@ -62,7 +66,9 @@ public class GroupController {
                            KisApiService kisApiService,
                            VoteService voteService,
                            KisWsSubscriptionManager kisWsSubscriptionManager,
-                           MatchingRoomService matchingRoomService) {
+                           MatchingRoomService matchingRoomService,
+                           GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase,
+                           StockVisualAssetResolver stockVisualAssetResolver) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
@@ -73,6 +79,8 @@ public class GroupController {
         this.voteService = voteService;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.matchingRoomService = matchingRoomService;
+        this.feedbackReportUseCase = feedbackReportUseCase;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     @GetMapping("/{groupId}")
@@ -115,6 +123,9 @@ public class GroupController {
             item.put("id", h.getId());
             item.put("stockCode", h.getStockCode());
             item.put("stockName", stockName);
+            String logoUrl = null;
+            item.put("logoUrl", logoUrl);
+            item.put("visual", stockVisualAssetResolver.resolve("KRX", h.getStockCode(), stockName, logoUrl));
             item.put("quantity", h.getQuantity());
             item.put("averagePrice", h.getAveragePurchasePrice());
             item.put("currentPrice", currentPrice);
@@ -172,6 +183,8 @@ public class GroupController {
             result.add(Map.<String, Object>of(
                     "stockCode", h.getStockCode(),
                     "stockName", stockName,
+                    "logoUrl", null,
+                    "visual", stockVisualAssetResolver.resolve("KRX", h.getStockCode(), stockName, null),
                     "quantity", h.getQuantity(),
                     "averagePurchasePrice", h.getAveragePurchasePrice(),
                     "currentPrice", currentPrice,
@@ -210,6 +223,23 @@ public class GroupController {
             return ResponseEntity.status(403).body(Map.of("success", false, "message", "해당 채팅방에 대한 접근 권한이 없습니다."));
         }
         return ResponseEntity.ok(Map.<String, Object>of("roomId", groupId, "messages", chatService.getMessages(groupId)));
+    }
+
+    @GetMapping("/{groupId}/feedback-report")
+    public ResponseEntity<?> getFeedbackReport(
+            @PathVariable Long groupId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        matchingRoomService.assertTeamRoom(groupId);
+        User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
+        if (user == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
+        }
+        if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(groupId, user.getId())) {
+            return ResponseEntity.status(403).body(Map.of("success", false, "message", "해당 채팅방에 대한 접근 권한이 없습니다."));
+        }
+        return feedbackReportUseCase.findByRoom(groupId)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404).body(Map.of("success", false, "message", "피드백 리포트가 없습니다.")));
     }
 
     /** §7: 채팅 메시지 전송. body: message (일반 채팅) 또는 type=trade + tradeData (투자계획 공유) */

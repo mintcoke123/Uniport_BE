@@ -1,6 +1,7 @@
 package com.uniport.controller;
 
 import com.uniport.config.FirebaseAuthenticatedUser;
+import com.uniport.dto.CustomEtfAssetSearchResponseDTO;
 import com.uniport.dto.CustomEtfCreateRequestDTO;
 import com.uniport.dto.CustomEtfDetailResponseDTO;
 import com.uniport.dto.CustomEtfListResponseDTO;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -78,6 +80,29 @@ public class CustomEtfController {
             @RequestBody CustomEtfCreateRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(etfDataService.createCustomEtf(user, request));
+    }
+
+    @GetMapping("/assets/search")
+    @Operation(summary = "나만의 ETF 구성 주식 검색", description = "직접 구성 플로우는 검증된 주식형 자산만 지원합니다.",
+            security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "검색 성공",
+                    content = @Content(schema = @Schema(implementation = CustomEtfAssetSearchResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<CustomEtfAssetSearchResponseDTO> searchAssets(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "assetType", required = false) String assetType,
+            @RequestParam(value = "market", required = false) String market,
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size) {
+        currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(etfDataService.searchAssets(keyword, assetType, market, page, size));
     }
 
     @GetMapping("/{etfId}")
@@ -135,7 +160,7 @@ public class CustomEtfController {
             @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String etfId,
-            @RequestBody EtfAnalysisRequestDTO request) {
+            @RequestBody(required = false) EtfAnalysisRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(etfDataService.analyze(user, etfId, request));
     }

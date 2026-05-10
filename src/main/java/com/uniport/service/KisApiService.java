@@ -32,6 +32,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -63,6 +64,8 @@ public class KisApiService {
     private static final String INDEX_CHART_PRICE_PATH = "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice";
     /** 국내주식 기간별시세(일/주/월/년) */
     private static final String STOCK_DAILY_CHART_PATH = "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice";
+    /** 해외주식 기간별시세 */
+    private static final String OVERSEAS_DAILY_PRICE_PATH = "/uapi/overseas-price/v1/quotations/dailyprice";
     private static final String TR_ID_STOCK_PRICE = "FHKST01010100";
     /** 거래량 순위 조회 전용 tr_id (현재가 조회 FHKST01010100과 구분) */
     private static final String TR_ID_VOLUME_RANK = "FHPST01710000";
@@ -73,6 +76,8 @@ public class KisApiService {
     private static final String TR_ID_INDEX_CHART = "FHKUP03500100";
     /** 국내주식 기간별시세 tr_id */
     private static final String TR_ID_STOCK_DAILY_CHART = "FHKST03010100";
+    /** 해외주식 기간별시세 tr_id */
+    private static final String TR_ID_OVERSEAS_DAILY_PRICE = "HHDFS76240000";
     private static final int TOKEN_REFRESH_BUFFER_SECONDS = 60;
     /** approval_key TTL 23시간 */
     private static final long APPROVAL_KEY_TTL_MILLIS = 23L * 60 * 60 * 1000;
@@ -89,6 +94,7 @@ public class KisApiService {
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final PriceCache priceCache;
     private final KeyPool keyPool;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
     /** HTTP 현재가 조회 결과 캐시(종목코드 -> (DTO, 만료시각)). 시장가 고정 구간에서 동일 가격 재사용. */
     private final ConcurrentHashMap<String, CachedHttpPriceEntry> httpPriceCache = new ConcurrentHashMap<>();
 
@@ -116,11 +122,13 @@ public class KisApiService {
     public KisApiService(RestTemplate restTemplate,
                          @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
                          PriceCache priceCache,
-                         @Lazy KeyPool keyPool) {
+                         @Lazy KeyPool keyPool,
+                         StockVisualAssetResolver stockVisualAssetResolver) {
         this.restTemplate = restTemplate;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.priceCache = priceCache;
         this.keyPool = keyPool;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     private String getBaseUrl() {
@@ -548,10 +556,16 @@ public class KisApiService {
         return "종목_" + stockCode;
     }
 
-    private static StockPriceDTO mapPriceSnapshotToStockPriceDTO(String stockCode, PriceSnapshot sn) {
+    private StockPriceDTO mapPriceSnapshotToStockPriceDTO(String stockCode, PriceSnapshot sn) {
+        String stockName = "종목_" + stockCode;
+        String market = "KRX";
+        String logoUrl = null;
         return StockPriceDTO.builder()
                 .stockCode(stockCode)
-                .stockName("종목_" + stockCode)
+                .stockName(stockName)
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisualAssetResolver.resolve(market, stockCode, stockName, logoUrl))
                 .currentPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
                 .changeAmount(sn.getChange() != null ? sn.getChange() : BigDecimal.ZERO)
                 .changeRate(sn.getChangeRate() != null ? sn.getChangeRate() : BigDecimal.ZERO)
@@ -577,9 +591,14 @@ public class KisApiService {
         if (volume == null) {
             volume = 0L;
         }
+        String market = "KRX";
+        String logoUrl = null;
         return StockPriceDTO.builder()
                 .stockCode(stockCode)
                 .stockName(stockName)
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisualAssetResolver.resolve(market, stockCode, stockName, logoUrl))
                 .currentPrice(currentPrice)
                 .changeAmount(changeAmount)
                 .changeRate(changeRate)
@@ -869,9 +888,14 @@ public class KisApiService {
     }
 
     private OrderResponseDTO placeOrderStub(String stockCode, int quantity, BigDecimal price, OrderType type) {
+        String market = "KRX";
+        String logoUrl = null;
         return OrderResponseDTO.builder()
                 .orderId(null)
                 .stockCode(stockCode)
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisualAssetResolver.resolve(market, stockCode, null, logoUrl))
                 .quantity(quantity)
                 .price(price)
                 .orderType(type)
@@ -1184,6 +1208,97 @@ public class KisApiService {
         }
     }
 
+    /**
+     * 해외주식 기간별시세. KIS overseas dailyprice API.
+     * GUBN: 0=일, 1=주, 2/3=월. BYMD는 조회 기준일(yyyyMMdd), MODP는 수정주가 반영 여부.
+     */
+    public List<IndexChartPriceItemDTO> getOverseasStockDailyChartPrice(String exchangeCode,
+                                                                        String symbol,
+                                                                        String endDate,
+                                                                        String periodDivCode,
+                                                                        String modifiedPrice) {
+        if (exchangeCode == null || exchangeCode.isBlank()) {
+            throw new ApiException("Overseas exchange code is required", HttpStatus.BAD_REQUEST);
+        }
+        if (symbol == null || symbol.isBlank()) {
+            throw new ApiException("Overseas symbol is required", HttpStatus.BAD_REQUEST);
+        }
+        if (endDate == null || endDate.isBlank()) {
+            throw new ApiException("End date is required (yyyyMMdd)", HttpStatus.BAD_REQUEST);
+        }
+        if (!isKisConfigured()) {
+            throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
+        }
+        String period = periodDivCode != null ? periodDivCode.trim() : "0";
+        if (!List.of("0", "1", "2", "3").contains(period)) {
+            throw new ApiException("period must be 0(day), 1(week), or 2/3(month)", HttpStatus.BAD_REQUEST);
+        }
+        String url = UriComponentsBuilder.fromUriString(getBaseUrl() + OVERSEAS_DAILY_PRICE_PATH)
+                .queryParam("AUTH", "")
+                .queryParam("EXCD", exchangeCode.trim().toUpperCase(Locale.ROOT))
+                .queryParam("SYMB", symbol.trim().toUpperCase(Locale.ROOT))
+                .queryParam("GUBN", period)
+                .queryParam("BYMD", endDate.trim())
+                .queryParam("MODP", modifiedPrice == null || modifiedPrice.isBlank() ? "1" : modifiedPrice.trim())
+                .build()
+                .toUriString();
+        HttpHeaders baseHeaders = new HttpHeaders();
+        baseHeaders.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Void> requestEntity = new HttpEntity<>(baseHeaders);
+        ApiException lastEx = null;
+        if (keyPool != null) {
+            if (keyPool.getRestKeyIdsToTry().isEmpty()) {
+                throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
+            }
+            for (String keyId : keyPool.getRestKeyIdsToTry()) {
+                KisRestClient client = keyPool.getRestClient(keyId);
+                if (client == null || !client.isAvailable()) continue;
+                try {
+                    ResponseEntity<Map<String, Object>> response = client.exchangeWithAuth(
+                            url, HttpMethod.GET, requestEntity, TR_ID_OVERSEAS_DAILY_PRICE,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
+                    return parseOverseasDailyPriceResponse(response.getBody());
+                } catch (ApiException e) {
+                    if (e.getStatus() != null && e.getStatus().value() == 400) throw e;
+                    lastEx = e;
+                }
+            }
+            if (lastEx != null) throw lastEx;
+        }
+        try {
+            HttpEntity<Void> request = new HttpEntity<>(buildAuthHeaders(TR_ID_OVERSEAS_DAILY_PRICE));
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    url, HttpMethod.GET, request, new ParameterizedTypeReference<Map<String, Object>>() {});
+            return parseOverseasDailyPriceResponse(response.getBody());
+        } catch (ApiException e) {
+            throw e;
+        } catch (RestClientException e) {
+            throw new ApiException("KIS overseas daily price request failed: " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    private List<IndexChartPriceItemDTO> parseOverseasDailyPriceResponse(Map<String, Object> resBody) {
+        if (resBody == null) {
+            throw new ApiException("KIS overseas daily price response body is null", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        String rtCd = (String) resBody.get("rt_cd");
+        if (rtCd != null && !"0".equals(rtCd)) {
+            throw new ApiException(kisErrorMessage(resBody, "overseas daily price"), HttpStatus.BAD_REQUEST);
+        }
+        Object output = resBody.get("output2");
+        List<IndexChartPriceItemDTO> list = new ArrayList<>();
+        if (output instanceof List) {
+            for (Object item : (List<?>) output) {
+                if (item instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> row = (Map<String, Object>) item;
+                    list.add(mapToOverseasChartPriceItemDTO(row));
+                }
+            }
+        }
+        return list;
+    }
+
     private static IndexChartPriceItemDTO mapToIndexChartPriceItemDTO(Map<String, Object> m) {
         String date = getString(m, "stck_bsop_date", getString(m, "stck_std", getString(m, "date", "")));
         BigDecimal open = getBigDecimal(m, "stck_oprc");
@@ -1201,6 +1316,20 @@ public class KisApiService {
                 .low(low != null ? low : BigDecimal.ZERO)
                 .close(close != null ? close : BigDecimal.ZERO)
                 .build();
+    }
+
+    private static IndexChartPriceItemDTO mapToOverseasChartPriceItemDTO(Map<String, Object> m) {
+        return IndexChartPriceItemDTO.builder()
+                .date(getString(m, "xymd", getString(m, "date", "")))
+                .open(defaultZero(getBigDecimal(m, "open")))
+                .high(defaultZero(getBigDecimal(m, "high")))
+                .low(defaultZero(getBigDecimal(m, "low")))
+                .close(defaultZero(getBigDecimal(m, "clos")))
+                .build();
+    }
+
+    private static BigDecimal defaultZero(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 
     @SuppressWarnings("unchecked")

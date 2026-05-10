@@ -24,4 +24,13 @@ public class EtfAnalysisHighlightsDTO {
 
     @Schema(example = "-8.5", requiredMode = Schema.RequiredMode.REQUIRED)
     private Double maxDrawdown;
+
+    @Schema(example = "11.8", description = "연환산 수익률")
+    private Double annualizedReturn;
+
+    @Schema(example = "9.2", description = "동일 기간 벤치마크 수익률. 벤치마크 가격 데이터가 없으면 null입니다.")
+    private Double benchmarkReturn;
+
+    @Schema(example = "0.74", description = "무위험 수익률 0% 기준 샤프 비율")
+    private Double sharpeRatio;
 }

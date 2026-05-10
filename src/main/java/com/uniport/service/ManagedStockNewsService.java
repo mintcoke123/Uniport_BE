@@ -34,9 +34,12 @@ public class ManagedStockNewsService {
     private static final TypeReference<List<Map<String, Object>>> LIST_OF_MAP_TYPE = new TypeReference<>() {};
 
     private final ManagedNewsArticleRepository managedNewsArticleRepository;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
-    public ManagedStockNewsService(ManagedNewsArticleRepository managedNewsArticleRepository) {
+    public ManagedStockNewsService(ManagedNewsArticleRepository managedNewsArticleRepository,
+                                   StockVisualAssetResolver stockVisualAssetResolver) {
         this.managedNewsArticleRepository = managedNewsArticleRepository;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     public StockNewsListResponseDTO getNewsList(String keyword, String sort, Integer page, Integer size) {
@@ -173,7 +176,7 @@ public class ManagedStockNewsService {
                 .title(article.getTitle())
                 .sourceLabel(article.getSourceLabel())
                 .imageUrl(article.getImageUrl())
-                .tags(parseJson(article.getTagsJson(), TAG_LIST_TYPE, List.of()))
+                .tags(enrichTags(parseJson(article.getTagsJson(), TAG_LIST_TYPE, List.of())))
                 .publishedAt(toIso(article.getPublishedAt()))
                 .popularityScore(popularityScore(article))
                 .build();
@@ -184,11 +187,14 @@ public class ManagedStockNewsService {
         StockNewsCompanyInfoDTO company = StockNewsCompanyInfoDTO.builder()
                 .stockName(defaultIfBlank(stringValue(companyInfoMap.get("stockName")), article.getStockName()))
                 .stockCode(defaultIfBlank(stringValue(companyInfoMap.get("stockCode")), article.getStockCode()))
+                .market("KRX")
+                .logoUrl(null)
                 .description(stringValue(companyInfoMap.get("description")))
                 .source(defaultIfBlank(stringValue(companyInfoMap.get("source")), article.getSourceLabel()))
                 .stockPricePath(defaultIfBlank(stringValue(companyInfoMap.get("stockPricePath")),
                         article.getStockCode() != null ? "/api/stocks/search?keyword=" + article.getStockCode() : null))
                 .build();
+        company.setVisual(stockVisualAssetResolver.resolve(company.getMarket(), company.getStockCode(), company.getStockName(), null));
 
         List<String> bodyParagraphs = splitBody(article.getContent());
         List<String> keyPoints = splitKeyPoints(companyInfoMap.get("keyPoints"));
@@ -203,7 +209,7 @@ public class ManagedStockNewsService {
                 .source(article.getSourceLabel())
                 .sourceLabel(article.getSourceLabel())
                 .publishedAt(toIso(article.getPublishedAt()))
-                .tags(parseJson(article.getTagsJson(), TAG_LIST_TYPE, List.of()))
+                .tags(enrichTags(parseJson(article.getTagsJson(), TAG_LIST_TYPE, List.of())))
                 .aiSummary(article.getSummary())
                 .aiOpinion(opinion)
                 .bodyParagraphs(bodyParagraphs)
@@ -212,6 +218,22 @@ public class ManagedStockNewsService {
                 .company(company)
                 .disclaimer(defaultIfBlank(stringValue(companyInfoMap.get("disclaimer")), "투자 판단은 이용자 본인에게 있습니다."))
                 .build();
+    }
+
+    private List<StockNewsTagDTO> enrichTags(List<StockNewsTagDTO> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+        return tags.stream()
+                .map(tag -> StockNewsTagDTO.builder()
+                        .label(tag.getLabel())
+                        .market("KRX")
+                        .logoUrl(null)
+                        .visual(stockVisualAssetResolver.resolve("KRX", null, tag.getLabel(), null))
+                        .direction(tag.getDirection())
+                        .changeRate(tag.getChangeRate())
+                        .build())
+                .toList();
     }
 
     private List<String> splitBody(String content) {

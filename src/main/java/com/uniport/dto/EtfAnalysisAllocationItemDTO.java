@@ -13,9 +13,27 @@ import lombok.NoArgsConstructor;
 @Schema(description = "자산 비중 아이템")
 public class EtfAnalysisAllocationItemDTO {
 
+    @Schema(example = "KRX_005930", description = "원본 종목 ID")
+    private String securityId;
+
     @Schema(example = "Apple Inc.", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
 
+    @Schema(example = "AAPL", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String symbol;
+
+    @Schema(example = "NASDAQ", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String market;
+
+    @Schema(example = "STOCK", allowableValues = {"STOCK", "BOND", "CASH"})
+    private String assetType;
+
+    @Schema(example = "USD", allowableValues = {"KRW", "USD"})
+    private String currency;
+
     @Schema(example = "40", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer weight;
+
+    @Schema(implementation = StockVisualDTO.class)
+    private StockVisualDTO visual;
 }

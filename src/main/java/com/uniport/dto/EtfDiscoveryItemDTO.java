@@ -31,6 +31,10 @@ public class EtfDiscoveryItemDTO {
     @Schema(example = "24.8", requiredMode = Schema.RequiredMode.REQUIRED)
     private Double returnRate3M;
 
+    @Schema(example = "24.8", requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "인기 ETF 목록 카드의 일일 예상 수익률 표시값. 기존 returnRate3M과 같은 값을 내려 호환성을 유지합니다.")
+    private Double dailyExpectedReturnRate;
+
     @Schema(example = "12500", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer followerCount;
 

@@ -62,6 +62,9 @@ public class MatchingRoom {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "ended_at")
+    private Instant endedAt;
+
     public static MatchingRoom create(String name) {
         return create(name, 3);
     }

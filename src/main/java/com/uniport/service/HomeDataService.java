@@ -39,19 +39,22 @@ public class HomeDataService {
     private final CompetitionService competitionService;
     private final CompetitionParticipationService competitionParticipationService;
     private final ManagedGroupInsightRepository managedGroupInsightRepository;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
     public HomeDataService(MatchingRoomService matchingRoomService,
                            MeService meService,
                            RankingService rankingService,
                            CompetitionService competitionService,
                            CompetitionParticipationService competitionParticipationService,
-                           ManagedGroupInsightRepository managedGroupInsightRepository) {
+                           ManagedGroupInsightRepository managedGroupInsightRepository,
+                           StockVisualAssetResolver stockVisualAssetResolver) {
         this.matchingRoomService = matchingRoomService;
         this.meService = meService;
         this.rankingService = rankingService;
         this.competitionService = competitionService;
         this.competitionParticipationService = competitionParticipationService;
         this.managedGroupInsightRepository = managedGroupInsightRepository;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     public MockInvestingSummaryResponseDTO getSummary(User user) {
@@ -205,13 +208,22 @@ public class HomeDataService {
         try {
             List<Map<String, Object>> rows = OBJECT_MAPPER.readValue(json, new TypeReference<>() {});
             return rows.stream()
-                    .map(row -> GroupInsightConsensusDTO.builder()
-                            .stockCode(stringValue(row.get("stockCode")))
-                            .stockName(stringValue(row.get("stockName")))
-                            .confidenceRate(row.get("confidenceRate") instanceof Number n ? n.intValue() : 0)
-                            .dailyReturnRate(row.get("dailyReturnRate") instanceof Number n ? BigDecimal.valueOf(n.doubleValue()) : BigDecimal.ZERO)
-                            .signal(stringValue(row.get("signal")))
-                            .build())
+                    .map(row -> {
+                        String stockCode = stringValue(row.get("stockCode"));
+                        String stockName = stringValue(row.get("stockName"));
+                        String market = marketFor(stockCode);
+                        String logoUrl = null;
+                        return GroupInsightConsensusDTO.builder()
+                                .stockCode(stockCode)
+                                .stockName(stockName)
+                                .market(market)
+                                .logoUrl(logoUrl)
+                                .visual(stockVisualAssetResolver.resolve(market, stockCode, stockName, logoUrl))
+                                .confidenceRate(row.get("confidenceRate") instanceof Number n ? n.intValue() : 0)
+                                .dailyReturnRate(row.get("dailyReturnRate") instanceof Number n ? BigDecimal.valueOf(n.doubleValue()) : BigDecimal.ZERO)
+                                .signal(stringValue(row.get("signal")))
+                                .build();
+                    })
                     .toList();
         } catch (Exception ignored) {
             return List.of();
@@ -228,6 +240,10 @@ public class HomeDataService {
 
     private static String stringValue(Object value) {
         return value != null ? String.valueOf(value) : null;
+    }
+
+    private String marketFor(String stockCode) {
+        return stockCode != null && stockCode.matches("\\d{6}") ? "KRX" : "US";
     }
 
     private static String normalizeRoomStatus(String status) {

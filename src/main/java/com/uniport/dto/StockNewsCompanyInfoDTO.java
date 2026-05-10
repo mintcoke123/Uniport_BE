@@ -19,6 +19,15 @@ public class StockNewsCompanyInfoDTO {
     @Schema(example = "005930")
     private String stockCode;
 
+    @Schema(example = "KRX")
+    private String market;
+
+    @Schema(example = "https://cdn.example.com/samsung.png")
+    private String logoUrl;
+
+    @Schema(implementation = StockVisualDTO.class)
+    private StockVisualDTO visual;
+
     @Schema(example = "대한민국 삼성 그룹의 전자·반도체 제조 기업...")
     private String description;
 

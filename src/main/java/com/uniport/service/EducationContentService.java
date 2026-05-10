@@ -28,6 +28,7 @@ import com.uniport.repository.EducationOverviewRepository;
 import com.uniport.repository.EducationQuizRepository;
 import com.uniport.repository.LearningUserStateRepository;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -55,7 +56,7 @@ import java.util.regex.Pattern;
 public class EducationContentService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String CONTENT_VERSION = "2026-04-29";
+    private static final String CONTENT_VERSION = "2026-05-09.1";
     private static final Set<String> SUPPORTED_TRACKS = Set.of("intro_core", "advanced_core", "intro_sector", "advanced_sector");
     private static final Pattern SVG_MAP_PATTERN = Pattern.compile("(\\d+)\\s*:\\s*'([^']+)'");
     private static final TypeReference<Map<String, Integer>> CURRENT_DAY_TYPE = new TypeReference<>() {};
@@ -67,23 +68,27 @@ public class EducationContentService {
     private final EducationOverviewRepository educationOverviewRepository;
     private final EducationCardRepository educationCardRepository;
     private final EducationQuizRepository educationQuizRepository;
+    private final boolean forceRefreshOnStartup;
 
     public EducationContentService(LearningUserStateRepository learningUserStateRepository,
                                    EducationOverviewRepository educationOverviewRepository,
                                    EducationCardRepository educationCardRepository,
-                                   EducationQuizRepository educationQuizRepository) {
+                                   EducationQuizRepository educationQuizRepository,
+                                   @Value("${uniport.education.seed.force-refresh:false}") boolean forceRefreshOnStartup) {
         this.learningUserStateRepository = learningUserStateRepository;
         this.educationOverviewRepository = educationOverviewRepository;
         this.educationCardRepository = educationCardRepository;
         this.educationQuizRepository = educationQuizRepository;
+        this.forceRefreshOnStartup = forceRefreshOnStartup;
     }
 
     @PostConstruct
     @Transactional
     public void seedDatabaseIfNeeded() {
-        if (educationOverviewRepository.count() > 0
+        boolean hasExistingContent = educationOverviewRepository.count() > 0
                 && educationCardRepository.count() > 0
-                && educationQuizRepository.count() > 0) {
+                && educationQuizRepository.count() > 0;
+        if (hasExistingContent && !forceRefreshOnStartup) {
             return;
         }
 
@@ -91,6 +96,12 @@ public class EducationContentService {
         List<JsonNode> cardNodes = readArray("education/cards.json");
         List<JsonNode> quizNodes = readArray("education/education_quizzes.json");
         Map<Integer, String> svgPresetByIdx = parseSvgPresetMap("education/chart_svgs.js");
+
+        if (forceRefreshOnStartup) {
+            educationQuizRepository.deleteAllInBatch();
+            educationCardRepository.deleteAllInBatch();
+            educationOverviewRepository.deleteAllInBatch();
+        }
 
         if (educationOverviewRepository.count() == 0) {
             List<EducationOverviewEntity> overviewEntities = overviewNodes.stream()
@@ -385,7 +396,13 @@ public class EducationContentService {
                 .text(entity.getText())
                 .imageType(entity.getImageType())
                 .svgPreset(entity.getSvgPreset())
+                .templateType(resolveTemplateType(entity.getTemplateType(), entity.getImageType()))
+                .visualType(resolveVisualType(entity.getVisualType(), entity.getImageType()))
+                .visualKey(resolveVisualKey(entity.getVisualKey(), entity.getAssetId(), entity.getSourceIdx()))
+                .assetKey(resolveAssetKey(entity.getAssetKey(), entity.getAssetId(), entity.getImageType()))
                 .visual(readJsonNode(entity.getVisualJson()))
+                .visualPayload(readJsonNode(entity.getVisualPayloadJson()))
+                .renderPolicy(readJsonNode(entity.getRenderPolicyJson()))
                 .build();
     }
 
@@ -478,6 +495,8 @@ public class EducationContentService {
                 .educationCurrentDayJson(writeValue(state.currentDayByTrack))
                 .educationCompletedDaysJson(writeValue(state.completedDaysByTrack))
                 .educationQuizAnswersJson(writeValue(state.quizAnswersByDay))
+                .educationCardProgressJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCardProgressJson()))
+                .educationSectorSelectionsJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationSectorSelectionsJson()))
                 .build());
     }
 
@@ -575,7 +594,13 @@ public class EducationContentService {
                 .text(text(node, "text"))
                 .imageType(text(node, "image_type"))
                 .svgPreset(svgPresetByIdx.get(idx))
+                .templateType(resolveTemplateType(null, text(node, "image_type")))
+                .visualType(resolveVisualType(null, text(node, "image_type")))
+                .visualKey(resolveVisualKey(null, nullableText(node, "asset_id"), idx))
+                .assetKey(resolveAssetKey(null, nullableText(node, "asset_id"), text(node, "image_type")))
                 .visualJson(writeValue(node.get("card_visual")))
+                .visualPayloadJson(writeValue(node.get("card_visual")))
+                .renderPolicyJson(defaultRenderPolicyJson())
                 .build();
     }
 
@@ -594,6 +619,55 @@ public class EducationContentService {
                 .area(text(node, "area"))
                 .intent(text(node, "intent"))
                 .build();
+    }
+
+    private String resolveTemplateType(String storedValue, String imageType) {
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        return isTextOnlyImageType(imageType) ? "content_text" : "content_visual";
+    }
+
+    private String resolveVisualType(String storedValue, String imageType) {
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        String normalized = imageType == null ? "" : imageType.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "", "placeholder" -> "none";
+            case "image" -> "raster_asset";
+            case "table", "stat" -> "statement_component";
+            case "diagram", "flow", "formula", "comparison", "checklist" -> "component";
+            default -> "component";
+        };
+    }
+
+    private String resolveVisualKey(String storedValue, String assetId, Integer sourceIdx) {
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        if (assetId != null && !assetId.isBlank()) {
+            return assetId;
+        }
+        return sourceIdx == null ? null : "education_card_" + sourceIdx;
+    }
+
+    private String resolveAssetKey(String storedValue, String assetId, String imageType) {
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        String visualType = resolveVisualType(null, imageType);
+        return "raster_asset".equals(visualType) || "chart_asset".equals(visualType) || "character_raster".equals(visualType)
+                ? assetId
+                : null;
+    }
+
+    private boolean isTextOnlyImageType(String imageType) {
+        return imageType == null || imageType.isBlank() || "placeholder".equalsIgnoreCase(imageType.trim());
+    }
+
+    private String defaultRenderPolicyJson() {
+        return "{\"fit\":\"contain\",\"allow_crop\":false}";
     }
 
     private String cardSector(JsonNode node) {

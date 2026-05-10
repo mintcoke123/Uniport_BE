@@ -1,0 +1,137 @@
+package com.uniport.service.feedback;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@Service
+public class OpenAiGroupFeedbackClient implements GroupFeedbackLlmClient {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private final RestTemplate restTemplate;
+    private final String apiKey;
+    private final String baseUrl;
+    private final String model;
+    private final boolean enabled;
+
+    public OpenAiGroupFeedbackClient(RestTemplate restTemplate,
+                                     @Value("${openai.api-key:}") String apiKey,
+                                     @Value("${openai.base-url:https://api.openai.com}") String baseUrl,
+                                     @Value("${openai.model:gpt-4.1-mini}") String model,
+                                     @Value("${openai.feedback.enabled:false}") boolean enabled) {
+        this.restTemplate = restTemplate;
+        this.apiKey = apiKey != null ? apiKey.trim() : "";
+        this.baseUrl = baseUrl != null && !baseUrl.isBlank() ? baseUrl.trim() : "https://api.openai.com";
+        this.model = model != null && !model.isBlank() ? model.trim() : "gpt-4.1-mini";
+        this.enabled = enabled;
+    }
+
+    @Override
+    public Optional<String> generate(GroupFeedbackFacts facts) {
+        if (!enabled || apiKey.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(apiKey);
+            Map<String, Object> body = Map.of(
+                    "model", model,
+                    "input", List.of(
+                            Map.of("role", "system", "content", systemPrompt()),
+                            Map.of("role", "user", "content", OBJECT_MAPPER.writeValueAsString(facts))
+                    ),
+                    "text", Map.of("format", responseFormat())
+            );
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    baseUrl + "/v1/responses",
+                    HttpMethod.POST,
+                    new HttpEntity<>(body, headers),
+                    new ParameterizedTypeReference<>() {
+                    }
+            );
+            String outputText = extractOutputText(response.getBody());
+            if (outputText == null || outputText.isBlank()) {
+                return Optional.empty();
+            }
+            Map<String, Object> parsed = OBJECT_MAPPER.readValue(outputText, new TypeReference<>() {
+            });
+            Object comment = parsed.get("comment");
+            return comment != null ? Optional.of(String.valueOf(comment)) : Optional.empty();
+        } catch (Exception ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private String systemPrompt() {
+        return """
+                너는 Z세대 투자 입문자를 위한 투자 학습 서비스 UniPort의 피드백 작성자다.
+                아래 JSON fact만 사용해 그룹 모의투자 결과에 대한 한 줄 피드백을 작성한다.
+                규칙:
+                - 1문장으로 작성한다.
+                - 90자 이내로 작성한다.
+                - 종목명은 fact에 있는 이름 그대로 사용한다.
+                - fact에 없는 숫자, 사건, 뉴스, 전망을 만들지 않는다.
+                - 향후 매수/매도 추천처럼 보이는 표현을 쓰지 않는다.
+                - 특정 팀원을 비난하지 않는다.
+                - 금지어: 무조건, 반드시, 추천, 확실히 오른다, 실패했다, 잘못했다, 책임
+                출력은 JSON만 반환한다.
+                """;
+    }
+
+    private Map<String, Object> responseFormat() {
+        return Map.of(
+                "type", "json_schema",
+                "name", "group_investment_feedback",
+                "strict", true,
+                "schema", Map.of(
+                        "type", "object",
+                        "additionalProperties", false,
+                        "required", List.of("comment"),
+                        "properties", Map.of("comment", Map.of("type", "string"))
+                )
+        );
+    }
+
+    private String extractOutputText(Map<String, Object> body) {
+        if (body == null) {
+            return null;
+        }
+        Object direct = body.get("output_text");
+        if (direct instanceof String value) {
+            return value;
+        }
+        Object output = body.get("output");
+        if (output instanceof List<?> outputItems) {
+            for (Object outputItem : outputItems) {
+                if (outputItem instanceof Map<?, ?> outputMap) {
+                    Object content = outputMap.get("content");
+                    if (content instanceof List<?> contentItems) {
+                        for (Object contentItem : contentItems) {
+                            if (contentItem instanceof Map<?, ?> contentMap) {
+                                Object text = contentMap.get("text");
+                                if (text instanceof String value) {
+                                    return value;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+}

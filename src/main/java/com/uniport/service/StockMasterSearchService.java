@@ -20,9 +20,12 @@ public class StockMasterSearchService {
     private static final int MAX_SIZE = 20;
 
     private final StockMasterRepository stockMasterRepository;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
-    public StockMasterSearchService(StockMasterRepository stockMasterRepository) {
+    public StockMasterSearchService(StockMasterRepository stockMasterRepository,
+                                    StockVisualAssetResolver stockVisualAssetResolver) {
         this.stockMasterRepository = stockMasterRepository;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     public StockSearchResponseDTO search(String keywordParam,
@@ -103,12 +106,15 @@ public class StockMasterSearchService {
         }
 
         String market = stockMaster.getMarket() != null ? stockMaster.getMarket() : "";
+        String name = stockMaster.getNameKr() != null ? stockMaster.getNameKr() : "";
+        String logoUrl = null;
         return StockSearchItemDTO.builder()
                 .stockId(buildStockId(market, code))
-                .name(stockMaster.getNameKr() != null ? stockMaster.getNameKr() : "")
+                .name(name)
                 .symbol(code)
                 .market(market)
-                .logoUrl(null)
+                .logoUrl(logoUrl)
+                .visual(stockVisualAssetResolver.resolve(market, code, name, logoUrl))
                 .build();
     }
 

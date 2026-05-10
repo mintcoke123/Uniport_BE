@@ -26,17 +26,20 @@ public class MockInvestingHomeService {
     private final RankingService rankingService;
     private final CompetitionService competitionService;
     private final CompetitionParticipationService competitionParticipationService;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
     public MockInvestingHomeService(MatchingRoomService matchingRoomService,
                                     MeService meService,
                                     RankingService rankingService,
                                     CompetitionService competitionService,
-                                    CompetitionParticipationService competitionParticipationService) {
+                                    CompetitionParticipationService competitionParticipationService,
+                                    StockVisualAssetResolver stockVisualAssetResolver) {
         this.matchingRoomService = matchingRoomService;
         this.meService = meService;
         this.rankingService = rankingService;
         this.competitionService = competitionService;
         this.competitionParticipationService = competitionParticipationService;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     public MockInvestingSummaryResponseDTO getSummary(User user) {
@@ -83,6 +86,9 @@ public class MockInvestingHomeService {
                         GroupInsightConsensusDTO.builder()
                                 .stockCode("NVDA")
                                 .stockName("엔비디아")
+                                .market("US")
+                                .logoUrl(null)
+                                .visual(stockVisualAssetResolver.resolve("US", "NVDA", "엔비디아", null))
                                 .confidenceRate(92)
                                 .dailyReturnRate(new BigDecimal("12.5"))
                                 .signal("BUY")
@@ -90,6 +96,9 @@ public class MockInvestingHomeService {
                         GroupInsightConsensusDTO.builder()
                                 .stockCode("TSLA")
                                 .stockName("테슬라")
+                                .market("US")
+                                .logoUrl(null)
+                                .visual(stockVisualAssetResolver.resolve("US", "TSLA", "테슬라", null))
                                 .confidenceRate(74)
                                 .dailyReturnRate(new BigDecimal("4.1"))
                                 .signal("SELL")

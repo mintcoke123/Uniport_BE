@@ -1,5 +1,8 @@
 package com.uniport.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.dto.OnboardingCompleteResponseDTO;
 import com.uniport.dto.OnboardingNicknameUpdateRequestDTO;
 import com.uniport.dto.OnboardingNicknameUpdateResponseDTO;
@@ -8,13 +11,16 @@ import com.uniport.dto.OnboardingSurveyFlowResponseDTO;
 import com.uniport.dto.OnboardingSurveyQuestionDTO;
 import com.uniport.dto.OnboardingSurveyResultDTO;
 import com.uniport.dto.OnboardingSurveySubmitRequestDTO;
+import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.repository.LearningUserStateRepository;
 import com.uniport.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,16 +31,23 @@ import java.util.stream.Collectors;
 @Service
 public class OnboardingService {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Integer>> MAP_STRING_INTEGER_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, List<String>>> MAP_STRING_LIST_STRING_TYPE = new TypeReference<>() {};
+
     private final OnboardingQuestionProvider onboardingQuestionProvider;
     private final OnboardingResultProvider onboardingResultProvider;
     private final UserRepository userRepository;
+    private final LearningUserStateRepository learningUserStateRepository;
 
     public OnboardingService(OnboardingQuestionProvider onboardingQuestionProvider,
                              OnboardingResultProvider onboardingResultProvider,
-                             UserRepository userRepository) {
+                             UserRepository userRepository,
+                             LearningUserStateRepository learningUserStateRepository) {
         this.onboardingQuestionProvider = onboardingQuestionProvider;
         this.onboardingResultProvider = onboardingResultProvider;
         this.userRepository = userRepository;
+        this.learningUserStateRepository = learningUserStateRepository;
     }
 
     public OnboardingSurveyFlowResponseDTO getSurveyFlow(User user) {
@@ -108,8 +121,14 @@ public class OnboardingService {
         int style = getSingleValue(answersByQuestion, OnboardingQuestionProvider.QUESTION_STYLE, onboardingQuestionProvider::getStyleValue);
         String investmentLevel = onboardingQuestionProvider.getLevelLabel(
                 getSingleSelectedOptionId(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_LEVEL)));
-        String interestSector = onboardingQuestionProvider.getSectorLabel(
-                getSingleSelectedOptionId(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_SECTOR)));
+        List<Long> sectorOptionIds = getSelectedOptionIds(answersByQuestion.get(OnboardingQuestionProvider.QUESTION_SECTOR), 2);
+        List<String> interestSectors = sectorOptionIds.stream()
+                .map(onboardingQuestionProvider::getSectorLabel)
+                .toList();
+        List<String> educationSectorIds = sectorOptionIds.stream()
+                .map(onboardingQuestionProvider::getSectorId)
+                .toList();
+        String interestSector = String.join(", ", interestSectors);
 
         OnboardingSurveyResultDTO result = onboardingResultProvider.classify(
                 risk,
@@ -123,6 +142,7 @@ public class OnboardingService {
         user.setInvestmentLevel(investmentLevel);
         user.setInterestSector(interestSector);
         userRepository.save(user);
+        persistEducationRoadmapSeed(user, investmentLevel, educationSectorIds);
 
         return result;
     }
@@ -213,6 +233,54 @@ public class OnboardingService {
         return answer.getOptionIds().get(0);
     }
 
+    private List<Long> getSelectedOptionIds(OnboardingSurveyAnswerDTO answer, int expectedCount) {
+        if (answer == null || answer.getOptionIds() == null || answer.getOptionIds().size() != expectedCount) {
+            throw new ApiException("Onboarding sector question must have exactly " + expectedCount + " selected options", HttpStatus.BAD_REQUEST);
+        }
+        return answer.getOptionIds();
+    }
+
+    private void persistEducationRoadmapSeed(User user, String investmentLevel, List<String> sectorIds) {
+        String courseId = resolveEducationCourseId(investmentLevel);
+        LearningUserStateEntity existing = learningUserStateRepository.findById(user.getId()).orElse(null);
+        Map<String, Integer> currentDays = readObject(
+                existing == null ? null : existing.getEducationCurrentDayJson(),
+                MAP_STRING_INTEGER_TYPE,
+                new HashMap<>());
+        Map<String, List<String>> sectorSelections = readObject(
+                existing == null ? null : existing.getEducationSectorSelectionsJson(),
+                MAP_STRING_LIST_STRING_TYPE,
+                new HashMap<>());
+
+        currentDays.put(courseId, 1);
+        sectorSelections.put(courseId, new ArrayList<>(sectorIds));
+
+        learningUserStateRepository.save(LearningUserStateEntity.builder()
+                .userId(user.getId())
+                .level(existing == null || existing.getLevel() == null ? 0 : existing.getLevel())
+                .point(existing == null || existing.getPoint() == null ? 0 : existing.getPoint())
+                .activeCourseId(existing == null ? null : existing.getActiveCourseId())
+                .streakDays(existing == null || existing.getStreakDays() == null ? 0 : existing.getStreakDays())
+                .lastCompletedDate(existing == null ? null : existing.getLastCompletedDate())
+                .roadmapLastCompletedDate(existing == null ? null : existing.getRoadmapLastCompletedDate())
+                .currentDayByCourseJson(existing == null ? "{}" : defaultObjectJson(existing.getCurrentDayByCourseJson()))
+                .completedDaysByCourseJson(existing == null ? "{}" : defaultObjectJson(existing.getCompletedDaysByCourseJson()))
+                .submittedStepIdsJson(existing == null ? "[]" : defaultArrayJson(existing.getSubmittedStepIdsJson()))
+                .educationCurrentDayJson(writeValue(currentDays))
+                .educationCompletedDaysJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCompletedDaysJson()))
+                .educationQuizAnswersJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationQuizAnswersJson()))
+                .educationCardProgressJson(existing == null ? "{}" : defaultObjectJson(existing.getEducationCardProgressJson()))
+                .educationSectorSelectionsJson(writeValue(sectorSelections))
+                .build());
+    }
+
+    private String resolveEducationCourseId(String investmentLevel) {
+        if ("입문".equals(investmentLevel)) {
+            return "intro";
+        }
+        return "advanced";
+    }
+
     private boolean hasResult(User user) {
         return user.getInvestmentProfileResult() != null
                 && !user.getInvestmentProfileResult().isBlank()
@@ -220,6 +288,33 @@ public class OnboardingService {
                 && !user.getInvestmentLevel().isBlank()
                 && user.getInterestSector() != null
                 && !user.getInterestSector().isBlank();
+    }
+
+    private <T> T readObject(String json, TypeReference<T> typeReference, T defaultValue) {
+        if (json == null || json.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return OBJECT_MAPPER.readValue(json, typeReference);
+        } catch (JsonProcessingException exception) {
+            return defaultValue;
+        }
+    }
+
+    private String writeValue(Object value) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize onboarding education state", exception);
+        }
+    }
+
+    private String defaultObjectJson(String value) {
+        return value == null || value.isBlank() ? "{}" : value;
+    }
+
+    private String defaultArrayJson(String value) {
+        return value == null || value.isBlank() ? "[]" : value;
     }
 
     @FunctionalInterface

@@ -265,7 +265,7 @@ public class ChatRoomService {
                     preview.put("preview", stockName + " " + action + " 체결 완료");
                     preview.put("title", "거래 체결");
                     preview.put("description", "제안된 주문이 실제로 체결되었어요.");
-                } else if ("feedback".equals(type)) {
+                } else if ("feedback".equals(type) || ChatService.TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT.equals(type)) {
                     preview.put("preview", "투자 끝! 피드백 리포트가 도착했어요!");
                     preview.put("title", "피드백 리포트");
                     preview.put("description", "이번 투자 결과를 요약한 리포트가 도착했어요.");

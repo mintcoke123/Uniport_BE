@@ -864,17 +864,15 @@ public class PointSocialDataService {
     }
 
     private LearningProgressSnapshot toLearningProgressSnapshot(LearningUserStateEntity state) {
-        int totalXp = safeInt(state.getPoint());
-        int maxExp = 300;
-        int level = Math.max(1, totalXp / maxExp + 1);
-        int currentExp = Math.max(0, totalXp % maxExp);
+        int totalXp = state.getExp() != null ? safeInt(state.getExp()) : safeInt(state.getPoint());
+        LearningProgressPolicy.Progress progress = LearningProgressPolicy.fromExp(totalXp);
         int completedDays = countCompletedLearningDays(state);
         int learningTimeMinutes = completedDays * 15;
         return new LearningProgressSnapshot(
-                level,
-                currentExp,
-                maxExp,
-                totalXp,
+                progress.level(),
+                progress.currentExp(),
+                progress.maxExp(),
+                progress.totalExp(),
                 safeInt(state.getStreakDays()),
                 learningTimeMinutes
         );

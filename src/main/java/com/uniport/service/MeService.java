@@ -25,15 +25,18 @@ public class MeService {
     private final StockService stockService;
     private final MatchingRoomService matchingRoomService;
     private final CompetitionService competitionService;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
     public MeService(HoldingRepository holdingRepository,
                      StockService stockService,
                      MatchingRoomService matchingRoomService,
-                     CompetitionService competitionService) {
+                     CompetitionService competitionService,
+                     StockVisualAssetResolver stockVisualAssetResolver) {
         this.holdingRepository = holdingRepository;
         this.stockService = stockService;
         this.matchingRoomService = matchingRoomService;
         this.competitionService = competitionService;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     public AuthUserDTO getProfile(User user) {
@@ -115,11 +118,16 @@ public class MeService {
     private StockHoldingItemDTO toStockHoldingItem(Holding holding) {
         BigDecimal currentPrice = BigDecimal.ZERO;
         String stockName = "Stock_" + holding.getStockCode();
+        String market = "KRX";
+        String logoUrl = null;
         try {
             StockPriceDTO price = stockService.getStockPrice(holding.getStockCode());
             currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
             if (price.getStockName() != null && !price.getStockName().isBlank()) {
                 stockName = price.getStockName();
+            }
+            if (price.getMarket() != null && !price.getMarket().isBlank()) {
+                market = price.getMarket();
             }
         } catch (Exception ignored) {
         }
@@ -137,7 +145,11 @@ public class MeService {
 
         return StockHoldingItemDTO.builder()
                 .id(holding.getId())
+                .stockCode(holding.getStockCode())
                 .name(stockName)
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisualAssetResolver.resolve(market, holding.getStockCode(), stockName, logoUrl))
                 .quantity(holding.getQuantity())
                 .currentValue(currentValue)
                 .profitLoss(profitLoss)

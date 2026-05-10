@@ -63,6 +63,17 @@ kis:
       appkey: ${KIS_APPKEY_2:}
       appsecret: ${KIS_APPSECRET_2:}
 
+backtest:
+  fx:
+    usd-krw-rate: ${BACKTEST_USD_KRW_RATE:0}
+
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+  model: ${OPENAI_MODEL:gpt-4.1-mini}
+  feedback:
+    enabled: ${OPENAI_FEEDBACK_ENABLED:false}
+
 # 종목 마스터 매일 자동 갱신 (Postgres advisory lock 사용, 다중 인스턴스 중 1개만 실행)
 stock:
   master:
@@ -70,6 +81,16 @@ stock:
       enabled: ${STOCK_MASTER_IMPORT_ENABLED:true}
       cron: ${STOCK_MASTER_IMPORT_CRON:0 30 7 * * *}
       zone: ${STOCK_MASTER_IMPORT_ZONE:Asia/Seoul}
+
+asset:
+  master:
+    us:
+      import:
+        enabled: ${US_ASSET_MASTER_IMPORT_ENABLED:true}
+        cron: ${US_ASSET_MASTER_IMPORT_CRON:0 45 7 * * *}
+        zone: ${US_ASSET_MASTER_IMPORT_ZONE:Asia/Seoul}
+        nasdaq-listed-url: ${US_ASSET_MASTER_NASDAQ_LISTED_URL:https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt}
+        other-listed-url: ${US_ASSET_MASTER_OTHER_LISTED_URL:https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt}
 
 # 시드/어드민 (env: UNIPORT_ADMIN_*, UNIPORT_SISU_ADMIN_*, UNIPORT_SEED_TEST_USER_ENABLED)
 uniport:
@@ -81,3 +102,6 @@ uniport:
     password: ${UNIPORT_SISU_ADMIN_PASSWORD:SISUadmin123!!}
   seed:
     test-user-enabled: ${UNIPORT_SEED_TEST_USER_ENABLED:true}
+  education:
+    seed:
+      force-refresh: ${UNIPORT_EDUCATION_SEED_FORCE_REFRESH:false}

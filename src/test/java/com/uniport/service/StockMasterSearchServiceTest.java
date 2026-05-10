@@ -1,12 +1,13 @@
 package com.uniport.service;
 
 import com.uniport.dto.StockSearchResponseDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.StockMaster;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.StockMasterRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
@@ -29,8 +30,15 @@ class StockMasterSearchServiceTest {
     @Mock
     private StockMasterRepository stockMasterRepository;
 
-    @InjectMocks
+    @Mock
+    private StockVisualAssetResolver stockVisualAssetResolver;
+
     private StockMasterSearchService stockMasterSearchService;
+
+    @BeforeEach
+    void setUp() {
+        stockMasterSearchService = new StockMasterSearchService(stockMasterRepository, stockVisualAssetResolver);
+    }
 
     @Test
     void search_blankKeyword_returnsEmptyPagedResponse() {
@@ -75,12 +83,17 @@ class StockMasterSearchServiceTest {
                 .thenReturn(List.of(samsung));
         when(stockMasterRepository.findByNameKrIlikeOrderByNameKrAsc(eq("apple"), any(Pageable.class)))
                 .thenReturn(List.of(apple));
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null))
+                .thenReturn(visual("삼성"));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "AAPL", "Apple Inc.", null))
+                .thenReturn(visual("AAPL"));
 
         StockSearchResponseDTO koreanResult =
                 stockMasterSearchService.search("삼성", 0, 10, null, null);
         assertEquals(1, koreanResult.getItems().size());
         assertEquals("KRX_005930", koreanResult.getItems().get(0).getStockId());
         assertEquals("005930", koreanResult.getItems().get(0).getSymbol());
+        assertEquals("삼성", koreanResult.getItems().get(0).getVisual().getText());
 
         StockSearchResponseDTO usResult =
                 stockMasterSearchService.search("apple", 1, 5, null, null);
@@ -88,6 +101,7 @@ class StockMasterSearchServiceTest {
         assertEquals(5, usResult.getSize());
         assertEquals("US_AAPL", usResult.getItems().get(0).getStockId());
         assertEquals("NASDAQ", usResult.getItems().get(0).getMarket());
+        assertEquals("AAPL", usResult.getItems().get(0).getVisual().getText());
 
         verify(stockMasterRepository).findByNameKrIlikeOrderByNameKrAsc(eq("삼성"), any(Pageable.class));
         verify(stockMasterRepository).findByNameKrIlikeOrderByNameKrAsc(eq("apple"), any(Pageable.class));
@@ -103,6 +117,8 @@ class StockMasterSearchServiceTest {
 
         when(stockMasterRepository.findByNameKrIlikeOrderByNameKrAsc(eq("삼성"), any(Pageable.class)))
                 .thenReturn(List.of(samsung));
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null))
+                .thenReturn(visual("삼성"));
 
         StockSearchResponseDTO result =
                 stockMasterSearchService.search(null, null, null, "삼성", "100");
@@ -110,5 +126,14 @@ class StockMasterSearchServiceTest {
         assertEquals(20, result.getSize());
         assertTrue(result.getItems().size() <= 20);
         verify(stockMasterRepository).findByNameKrIlikeOrderByNameKrAsc(eq("삼성"), any(Pageable.class));
+    }
+
+    private StockVisualDTO visual(String text) {
+        return StockVisualDTO.builder()
+                .type("FALLBACK_SYMBOL")
+                .text(text)
+                .bgColor("#EEF2FF")
+                .textColor("#4F46E5")
+                .build();
     }
 }

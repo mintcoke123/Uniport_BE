@@ -28,6 +28,9 @@ public class StockMasterImporterService {
     private static final String KOSDAQ_URL = "https://new.real.download.dws.co.kr/common/master/kosdaq_code.mst.zip";
     private static final String MARKET_KOSPI = "KOSPI";
     private static final String MARKET_KOSDAQ = "KOSDAQ";
+    private static final String ASSET_TYPE_STOCK = "STOCK";
+    private static final String CURRENCY_KRW = "KRW";
+    private static final String DATA_STATUS_PENDING = "PENDING_VERIFICATION";
     private static final Charset MST_CHARSET = mstCharset();
 
     private static Charset mstCharset() {
@@ -42,6 +45,13 @@ public class StockMasterImporterService {
             "VALUES (?, ?, ?, ?, now()) " +
             "ON CONFLICT (code) DO UPDATE SET " +
             "std_code = EXCLUDED.std_code, name_kr = EXCLUDED.name_kr, market = EXCLUDED.market, updated_at = now()";
+    private static final String ASSET_UPSERT_SQL =
+            "INSERT INTO asset_master(asset_id, asset_type, name, symbol, market, currency, active, " +
+                    "backtest_enabled, price_source_status, created_at, updated_at) " +
+            "VALUES (?, ?, ?, ?, ?, ?, true, false, ?, now(), now()) " +
+            "ON CONFLICT (asset_id) DO UPDATE SET " +
+                    "name = EXCLUDED.name, symbol = EXCLUDED.symbol, market = EXCLUDED.market, " +
+                    "currency = EXCLUDED.currency, active = true, updated_at = now()";
 
     private final JdbcTemplate jdbcTemplate;
     private final DownloadClient downloadClient;
@@ -149,6 +159,21 @@ public class StockMasterImporterService {
                     ps.setString(2, r.getStdCode());
                     ps.setString(3, r.getNameKr());
                     ps.setString(4, market);
+                }
+                @Override
+                public int getBatchSize() { return batch.size(); }
+            });
+            jdbcTemplate.batchUpdate(ASSET_UPSERT_SQL, new org.springframework.jdbc.core.BatchPreparedStatementSetter() {
+                @Override
+                public void setValues(java.sql.PreparedStatement ps, int idx) throws java.sql.SQLException {
+                    ParsedRow r = batch.get(idx);
+                    ps.setString(1, "KRX_" + r.getCode());
+                    ps.setString(2, ASSET_TYPE_STOCK);
+                    ps.setString(3, r.getNameKr());
+                    ps.setString(4, r.getCode());
+                    ps.setString(5, market);
+                    ps.setString(6, CURRENCY_KRW);
+                    ps.setString(7, DATA_STATUS_PENDING);
                 }
                 @Override
                 public int getBatchSize() { return batch.size(); }

@@ -36,6 +36,9 @@ class MeServiceTest {
     @Mock
     private CompetitionService competitionService;
 
+    @Mock
+    private StockVisualAssetResolver stockVisualAssetResolver;
+
     @InjectMocks
     private MeService meService;
 

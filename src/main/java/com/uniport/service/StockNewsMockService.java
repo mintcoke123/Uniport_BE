@@ -22,8 +22,10 @@ import java.util.stream.Collectors;
 public class StockNewsMockService {
 
     private final List<StockNewsDetailResponseDTO> articles;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
-    public StockNewsMockService() {
+    public StockNewsMockService(StockVisualAssetResolver stockVisualAssetResolver) {
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.articles = createArticles();
     }
 
@@ -130,9 +132,9 @@ public class StockNewsMockService {
                 .sourceLabel("출처 · 일주일 전")
                 .publishedAt("2026-03-28T09:00:00Z")
                 .tags(List.of(
-                        StockNewsTagDTO.builder().label("삼성전자").direction("UP").changeRate(39.0).build(),
-                        StockNewsTagDTO.builder().label("SK하이닉스").direction("DOWN").changeRate(39.0).build(),
-                        StockNewsTagDTO.builder().label("KOSPI").direction("UP").changeRate(39.0).build()
+                        tag("삼성전자", "UP", 39.0),
+                        tag("SK하이닉스", "DOWN", 39.0),
+                        tag("KOSPI", "UP", 39.0)
                 ))
                 .aiSummary("반도체 업황 회복에 힘입어 삼성전자가 3분기 흑자 전환에 성공했으며, 향후 HBM 공급 확대로 추가 실적 개선이 기대된다는 분석입니다.")
                 .aiOpinion(StockNewsOpinionDTO.builder().label("강력 호재").englishLabel("Bullish").build())
@@ -149,13 +151,15 @@ public class StockNewsMockService {
                         "HBM3 등 고부가가치 제품 비중 확대",
                         "모바일 부문 견조한 실적 유지"
                 ))
-                .company(StockNewsCompanyInfoDTO.builder()
+                .company(withCompanyVisual(StockNewsCompanyInfoDTO.builder()
                         .stockName("삼성전자")
                         .stockCode("005930")
+                        .market("KRX")
+                        .logoUrl(null)
                         .description("대한민국 삼성 그룹의 전자·반도체 제조 기업. 삼성의 계열사들 중 최대 규모의 기업이며 글로벌 시장에서 한국을 대표하는 기업 브랜드로 손꼽힙니다.")
                         .source("어쩌구저쩌구")
                         .stockPricePath("/api/stocks/search?keyword=삼성전자&page=0&size=10")
-                        .build())
+                        .build()))
                 .disclaimer("본 뉴스는 인공지능 알고리즘에 의해 요약 및 분석되었습니다. 투자의 책임은 투자자 본인에게 있습니다.")
                 .build());
 
@@ -238,13 +242,15 @@ public class StockNewsMockService {
                         "관련 업종 기대감 확대",
                         "단기 변동성은 여전히 존재"
                 ))
-                .company(StockNewsCompanyInfoDTO.builder()
+                .company(withCompanyVisual(StockNewsCompanyInfoDTO.builder()
                         .stockName(stockName)
                         .stockCode(stockCode)
+                        .market("KRX")
+                        .logoUrl(null)
                         .description(companyDescription)
                         .source("어쩌구저쩌구")
                         .stockPricePath("/api/stocks/search?keyword=" + stockName + "&page=0&size=10")
-                        .build())
+                        .build()))
                 .disclaimer("본 뉴스는 인공지능 알고리즘에 의해 요약 및 분석되었습니다. 투자의 책임은 투자자 본인에게 있습니다.")
                 .build();
     }
@@ -252,8 +258,16 @@ public class StockNewsMockService {
     private StockNewsTagDTO tag(String label, String direction, double changeRate) {
         return StockNewsTagDTO.builder()
                 .label(label)
+                .market("KRX")
+                .logoUrl(null)
+                .visual(stockVisualAssetResolver.resolve("KRX", null, label, null))
                 .direction(direction)
                 .changeRate(changeRate)
                 .build();
+    }
+
+    private StockNewsCompanyInfoDTO withCompanyVisual(StockNewsCompanyInfoDTO company) {
+        company.setVisual(stockVisualAssetResolver.resolve(company.getMarket(), company.getStockCode(), company.getStockName(), null));
+        return company;
     }
 }

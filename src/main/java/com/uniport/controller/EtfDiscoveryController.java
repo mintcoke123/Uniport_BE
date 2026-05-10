@@ -1,6 +1,7 @@
 package com.uniport.controller;
 
 import com.uniport.config.FirebaseAuthenticatedUser;
+import com.uniport.dto.CustomEtfMutationResponseDTO;
 import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.dto.EtfDiscoveryDetailResponseDTO;
 import com.uniport.dto.EtfDiscoveryResponseDTO;
@@ -47,15 +48,23 @@ public class EtfDiscoveryController {
                     content = @Content(schema = @Schema(implementation = EtfDiscoveryResponseDTO.class)))
     })
     public ResponseEntity<EtfDiscoveryResponseDTO> getPopularEtfs(
-            @Parameter(example = "RETURN", description = "정렬 기준: RETURN, POPULAR")
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Parameter(example = "LATEST", description = "정렬 기준: LATEST, RETURN, POPULAR")
             @RequestParam(value = "sort", required = false) String sort,
             @Parameter(example = "기술", description = "테마 필터")
             @RequestParam(value = "theme", required = false) String theme,
+            @Parameter(example = "반도체", description = "테마, ETF명, 설명, 구성 종목명/심볼 검색어")
+            @RequestParam(value = "query", required = false) String query,
+            @Parameter(example = "반도체", description = "query와 같은 의미의 호환 파라미터")
+            @RequestParam(value = "keyword", required = false) String keyword,
             @Parameter(example = "0")
             @RequestParam(value = "page", required = false) Integer page,
             @Parameter(example = "10")
             @RequestParam(value = "size", required = false) Integer size) {
-        return ResponseEntity.ok(etfDataService.getPopularEtfs(sort, theme, page, size));
+        User user = currentUserResolver.resolveNullable(principal, authorization);
+        String searchQuery = query != null && !query.isBlank() ? query : keyword;
+        return ResponseEntity.ok(etfDataService.getPopularEtfs(sort, theme, searchQuery, page, size, user));
     }
 
     @GetMapping("/{etfId}")
@@ -73,6 +82,24 @@ public class EtfDiscoveryController {
             @RequestParam(value = "period", required = false) String period) {
         User user = currentUserResolver.resolveNullable(principal, authorization);
         return ResponseEntity.ok(etfDataService.getDiscoveryDetail(etfId, period, user));
+    }
+
+    @PostMapping("/{etfId}/apply")
+    @Operation(summary = "인기 ETF를 내 포트폴리오에 적용", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "적용 성공",
+                    content = @Content(schema = @Schema(implementation = CustomEtfMutationResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 ETF",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<CustomEtfMutationResponseDTO> applyDiscoveryEtf(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String etfId) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(etfDataService.applyDiscoveryEtf(user, etfId));
     }
 
     @PostMapping("/{etfId}/favorite")
