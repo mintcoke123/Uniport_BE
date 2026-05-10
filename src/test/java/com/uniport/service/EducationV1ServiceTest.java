@@ -268,7 +268,7 @@ class EducationV1ServiceTest {
     }
 
     @Test
-    void contentVisualImageWithEmptyUrlFallsBackToComponentPayload() {
+    void contentVisualImageWithEmptyUrlDoesNotBecomeDiagramFallback() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
         when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_core"), isNull(), eq(1)))
                 .thenReturn(Optional.of(overview("intro_core", null, 1, "캔들스틱 차트의 이해")));
@@ -295,16 +295,17 @@ class EducationV1ServiceTest {
         List<Map<String, Object>> flow = (List<Map<String, Object>>) response.get("flow");
         Map<String, Object> cardStep = flow.get(1);
         assertEquals("content_visual", cardStep.get("template_type"));
-        assertEquals("component", cardStep.get("visual_type"));
-        assertEquals("template_diagram", cardStep.get("visual_key"));
+        assertEquals("none", cardStep.get("visual_type"));
+        assertEquals(null, cardStep.get("visual_key"));
         assertEquals(null, cardStep.get("asset_key"));
-        assertNotEquals("image", cardStep.get("image_type"));
         @SuppressWarnings("unchecked")
         Map<String, Object> visual = (Map<String, Object>) cardStep.get("visual");
+        assertEquals("none", visual.get("visual_type"));
+        assertEquals(null, visual.get("visual_key"));
         @SuppressWarnings("unchecked")
         Map<String, Object> payload = (Map<String, Object>) visual.get("payload");
-        assertEquals("diagram", payload.get("template_visual_type"));
-        assertTrue(payload.containsKey("items"));
+        assertFalse(payload.containsKey("template_visual_type"));
+        assertFalse(payload.containsKey("items"));
         assertFalse(containsEmptyImageUrl(cardStep));
     }
 

@@ -14,6 +14,7 @@ final class EducationVisualContractNormalizer {
 
     private static final Set<String> TEMPLATE_TYPES = Set.of("checklist", "comparison", "flow", "formula", "table", "diagram", "stat");
     private static final Set<String> ASSET_TYPES = Set.of("raster_asset", "chart_asset", "character_raster");
+    private static final Map<Integer, VisualOverride> VISUAL_OVERRIDES = visualOverrides();
 
     private EducationVisualContractNormalizer() {
     }
@@ -29,6 +30,10 @@ final class EducationVisualContractNormalizer {
                                       JsonNode visualPayload,
                                       String title,
                                       String text) {
+        VisualOverride override = sourceIdx == null ? null : VISUAL_OVERRIDES.get(sourceIdx);
+        if (override != null) {
+            return override.apply(cardVisual);
+        }
         String normalizedImageType = normalizeImageType(imageType, imageTypeOld, cardVisual);
         String templateVisualType = resolveTemplateVisualType(normalizedImageType, cardVisual, visualPayload);
         String visualType = resolveVisualType(storedVisualType, normalizedImageType, templateVisualType, cardVisual);
@@ -43,10 +48,8 @@ final class EducationVisualContractNormalizer {
     private static String normalizeImageType(String imageType, String imageTypeOld, JsonNode visualNode) {
         String normalized = imageType == null ? "" : imageType.trim().toLowerCase(Locale.ROOT);
         if ("image".equals(normalized) && hasBlankImageUrl(visualNode) && isTemplateType(imageTypeOld)) {
-            return imageTypeOld.trim().toLowerCase(Locale.ROOT);
-        }
-        if ("image".equals(normalized) && hasBlankImageUrl(visualNode)) {
-            return "diagram";
+            String legacyType = imageTypeOld.trim().toLowerCase(Locale.ROOT);
+            return "diagram".equals(legacyType) ? normalized : legacyType;
         }
         return normalized.isBlank() ? imageType : normalized;
     }
@@ -76,13 +79,16 @@ final class EducationVisualContractNormalizer {
         String normalized = imageType == null ? "" : imageType.trim().toLowerCase(Locale.ROOT);
         return switch (normalized) {
             case "", "placeholder" -> "none";
-            case "image" -> "raster_asset";
+            case "image" -> hasUsableImageUrl(visualNode) ? "raster_asset" : "none";
             case "diagram", "flow", "formula", "comparison", "checklist" -> "component";
             default -> "component";
         };
     }
 
     private static String resolveVisualKey(String storedValue, String assetId, Integer sourceIdx, String visualType, String templateVisualType) {
+        if ("none".equals(visualType)) {
+            return null;
+        }
         if ("component".equals(visualType) && templateVisualType != null) {
             return "template_" + templateVisualType;
         }
@@ -142,6 +148,13 @@ final class EducationVisualContractNormalizer {
                 && visualNode.isObject()
                 && visualNode.has("image_url")
                 && visualNode.path("image_url").asText("").isBlank();
+    }
+
+    private static boolean hasUsableImageUrl(JsonNode visualNode) {
+        return visualNode != null
+                && visualNode.isObject()
+                && visualNode.has("image_url")
+                && !visualNode.path("image_url").asText("").isBlank();
     }
 
     private static Object normalizePayload(String templateVisualType, JsonNode payloadNode, String title, String text) {
@@ -289,6 +302,103 @@ final class EducationVisualContractNormalizer {
         return node.get(fieldName).asText();
     }
 
+    private static Map<Integer, VisualOverride> visualOverrides() {
+        Map<Integer, VisualOverride> overrides = new LinkedHashMap<>();
+        overrides.put(15, component("checklist", checklist("수수료만 보지 않기", "자주 쓸 기능 확인", "국내·해외 투자 습관 맞추기")));
+        overrides.put(16, raster("education_day2_account_opening_app"));
+        overrides.put(17, raster("education_day2_account_turtle"));
+        overrides.put(18, raster("education_day2_hts_mts_workspace"));
+        overrides.put(19, component("flow", flow(
+                step("MTS로 시작", "접근성과 반복 사용"),
+                step("HTS 보조", "깊은 분석이 필요할 때"),
+                step("실수 방지", "주문·조회 환경 정리"))));
+        overrides.put(20, component("comparison", comparison(
+                comparisonSide("코스피", List.of("대형 우량 기업", "상대적 안정성", "제1시장")),
+                comparisonSide("코스닥", List.of("성장 기업", "변동성 큼", "IT·바이오·콘텐츠")))));
+        overrides.put(23, component("checklist", checklist("자금 조달 통로", "시장의 검증", "정보 접근성", "거래 편의성")));
+        overrides.put(24, component("flow", flow(
+                step("정규장", "기본 거래 시간"),
+                step("동시호가", "가격 결정 구간"),
+                step("시간외", "장 종료 뒤 거래"))));
+        overrides.put(25, component("flow", flow(
+                step("정규장", "기본 거래 시간"),
+                step("동시호가", "가격 결정 구간"),
+                step("시간외", "장 종료 뒤 거래"))));
+        overrides.put(26, component("diagram", diagram(
+                node("주식", "기업 지분"),
+                node("외환", "통화 교환"),
+                node("상품", "원유·금·곡물"),
+                node("파생", "미래 가격"))));
+        overrides.put(27, component("diagram", diagram(
+                node("코스피", "대형주"),
+                node("코스닥", "성장주"),
+                node("코넥스", "초기 기업"),
+                node("ETF", "묶음 투자"))));
+        overrides.put(28, component("flow", flow(
+                step("통화 교환", "각국 돈의 가격"),
+                step("환율 변화", "수출입과 물가 영향"),
+                step("자금 흐름", "외국인 수급 연결"))));
+        overrides.put(29, component("comparison", comparison(
+                comparisonSide("상품시장", List.of("원유·금·곡물", "실물자산")),
+                comparisonSide("파생상품", List.of("미래 가격", "위험 헤지")))));
+        overrides.put(30, component("flow", flow(
+                step("금리", "돈의 가격"),
+                step("채권·환율", "자금 이동"),
+                step("주식", "시장 반응"))));
+        return Map.copyOf(overrides);
+    }
+
+    private static VisualOverride component(String templateVisualType, Map<String, Object> payload) {
+        Map<String, Object> copy = new LinkedHashMap<>(payload);
+        copy.put("template_visual_type", templateVisualType);
+        return new VisualOverride(templateVisualType, templateVisualType, "component", "template_" + templateVisualType, null, copy);
+    }
+
+    private static VisualOverride raster(String assetKey) {
+        return new VisualOverride("image", null, "raster_asset", assetKey, assetKey, null);
+    }
+
+    private static Map<String, Object> checklist(String... items) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("items", List.of(items).stream().map(item -> Map.<String, Object>of("text", item)).toList());
+        return payload;
+    }
+
+    private static Map<String, Object> comparison(Map<String, Object> left, Map<String, Object> right) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("left", left);
+        payload.put("right", right);
+        return payload;
+    }
+
+    @SafeVarargs
+    private static Map<String, Object> flow(Map<String, Object>... steps) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("steps", List.of(steps));
+        return payload;
+    }
+
+    @SafeVarargs
+    private static Map<String, Object> diagram(Map<String, Object>... nodes) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("nodes", List.of(nodes));
+        return payload;
+    }
+
+    private static Map<String, Object> step(String title, String description) {
+        Map<String, Object> step = new LinkedHashMap<>();
+        step.put("title", title);
+        step.put("description", description);
+        return step;
+    }
+
+    private static Map<String, Object> node(String title, String description) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("title", title);
+        node.put("description", description);
+        return node;
+    }
+
     record NormalizedVisual(String imageType,
                             String templateVisualType,
                             String visualType,
@@ -296,5 +406,18 @@ final class EducationVisualContractNormalizer {
                             String assetKey,
                             Object cardVisual,
                             Object payload) {
+    }
+
+    private record VisualOverride(String imageType,
+                                  String templateVisualType,
+                                  String visualType,
+                                  String visualKey,
+                                  String assetKey,
+                                  Map<String, Object> payload) {
+        NormalizedVisual apply(JsonNode cardVisual) {
+            Object sanitizedCardVisual = sanitizeJsonValue(cardVisual);
+            Object normalizedPayload = payload == null ? sanitizedCardVisual : payload;
+            return new NormalizedVisual(imageType, templateVisualType, visualType, visualKey, assetKey, sanitizedCardVisual, normalizedPayload);
+        }
     }
 }

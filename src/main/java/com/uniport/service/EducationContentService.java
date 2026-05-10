@@ -408,14 +408,14 @@ public class EducationContentService {
                 .assetId(entity.getAssetId())
                 .title(entity.getTitle())
                 .text(entity.getText())
-                .imageType(entity.getImageType())
+                .imageType(normalizedVisual.imageType())
                 .svgPreset(entity.getSvgPreset())
-                .templateType(resolveTemplateType(entity.getTemplateType(), entity.getImageType()))
+                .templateType(resolveTemplateType(entity.getTemplateType(), normalizedVisual.imageType()))
                 .visualType(normalizedVisual.visualType())
                 .visualKey(normalizedVisual.visualKey())
                 .assetKey(normalizedVisual.assetKey())
-                .visual(visual)
-                .visualPayload(visualPayload)
+                .visual(toJsonNode(normalizedVisual.cardVisual()))
+                .visualPayload(toJsonNode(normalizedVisual.payload()))
                 .renderPolicy(readJsonNode(entity.getRenderPolicyJson()))
                 .build();
     }
@@ -736,6 +736,10 @@ public class EducationContentService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to parse education card visual json", exception);
         }
+    }
+
+    private JsonNode toJsonNode(Object value) {
+        return value == null ? null : OBJECT_MAPPER.valueToTree(value);
     }
 
     private <T> T readObject(String json, TypeReference<T> typeReference) {
