@@ -192,8 +192,8 @@ class EducationV1ServiceTest {
                 .thenReturn(Optional.of(overview("intro_core", null, 1, "캔들스틱 차트의 이해")));
         when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(1)))
                 .thenReturn(List.of(
-                        card(0, "placeholder", "인플레이션과 내 돈", "{}"),
-                        card(1, "image", "캔들스틱 차트", "{\"alt\":\"시가 종가 고가 저가\"}")
+                        card(9000, "placeholder", "인플레이션과 내 돈", "{}"),
+                        card(9001, "image", "캔들스틱 차트", "{\"alt\":\"시가 종가 고가 저가\"}")
                 ));
         when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
                 .thenReturn(List.of(quiz(1)));
@@ -238,7 +238,7 @@ class EducationV1ServiceTest {
                 .thenReturn(Optional.of(overview("intro_core", null, 1, "캔들스틱 차트의 이해")));
         when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(1)))
                 .thenReturn(List.of(card(
-                        1,
+                        9002,
                         "table",
                         "보통주와 우선주",
                         "{\"headers\":[\"구분\",\"보통주\",\"우선주\"],\"rows\":[[\"권리\",\"의결권\",\"배당 우선\"]]}"
@@ -268,14 +268,95 @@ class EducationV1ServiceTest {
     }
 
     @Test
+    void courseDayUsesManifestRenderFieldsForDayThreeCards() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateAtIntroDay(3)));
+        when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_core"), isNull(), eq(3)))
+                .thenReturn(Optional.of(overview("intro_core", null, 3, "주식시장의 구조")));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(3)))
+                .thenReturn(List.of(
+                        EducationCardEntity.builder()
+                                .sourceIdx(20)
+                                .assetId("intro-core-d3-card-20")
+                                .sheet("입문_카드_FINAL")
+                                .track("intro_core")
+                                .dayNumber(3)
+                                .section("① 코스피와 코스닥의 정의")
+                                .cardNumber("1/2")
+                                .title("코스피와 코스닥의 정의")
+                                .text("본문")
+                                .imageType("diagram")
+                                .visualType("component")
+                                .visualKey("template_diagram")
+                                .visualJson("{\"alt\":\"코스피와 코스닥의 정의\",\"category\":\"illustration\"}")
+                                .visualPayloadJson("{\"type\":\"diagram\",\"items\":[{\"text\":\"잘못된 다이어그램\"}]}")
+                                .build(),
+                        EducationCardEntity.builder()
+                                .sourceIdx(22)
+                                .assetId("intro-core-d3-card-22")
+                                .sheet("입문_카드_FINAL")
+                                .track("intro_core")
+                                .dayNumber(3)
+                                .section("② 상장 기업과 비상장 기업")
+                                .cardNumber("1/2")
+                                .title("상장 기업과 비상장 기업")
+                                .text("본문")
+                                .imageType("image")
+                                .visualType("component")
+                                .visualKey("template_diagram")
+                                .visualJson("{\"alt\":\"상장 기업과 비상장 기업\"}")
+                                .visualPayloadJson("{\"type\":\"diagram\",\"items\":[{\"text\":\"잘못된 다이어그램\"}]}")
+                                .build()
+                ));
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(3)))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseDay(user, "intro", 3);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> flow = (List<Map<String, Object>>) response.get("flow");
+        Map<String, Object> imageCard = flow.get(1);
+        assertEquals(20, imageCard.get("idx"));
+        assertEquals("raster_asset", imageCard.get("image_type"));
+        assertEquals("raster_asset", imageCard.get("renderer_type"));
+        assertEquals("raster_asset", imageCard.get("visual_type"));
+        assertEquals("real_images_generated_examples_intro_day3_kospi_kosdaq_real_boards_20260509", imageCard.get("visual_key"));
+        assertEquals(null, imageCard.get("component_key"));
+        assertEquals("real_images_generated_examples_intro_day3_kospi_kosdaq_real_boards_20260509", imageCard.get("asset_key"));
+        assertEquals("remote_url", imageCard.get("image_delivery"));
+        assertTrue(imageCard.get("image_url").toString().contains("intro_day3_kospi_kosdaq_real_boards_20260509.png"));
+        assertEquals(null, imageCard.get("visual_payload"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> imageVisual = (Map<String, Object>) imageCard.get("visual");
+        assertEquals("raster_asset", imageVisual.get("renderer_type"));
+        assertTrue(imageVisual.get("image_url").toString().contains("intro_day3_kospi_kosdaq_real_boards_20260509.png"));
+        assertEquals(null, imageVisual.get("payload"));
+
+        Map<String, Object> componentCard = flow.get(2);
+        assertEquals(22, componentCard.get("idx"));
+        assertEquals("comparison", componentCard.get("image_type"));
+        assertEquals("component", componentCard.get("renderer_type"));
+        assertEquals("component", componentCard.get("visual_type"));
+        assertEquals("template_comparison", componentCard.get("visual_key"));
+        assertEquals("template_comparison", componentCard.get("component_key"));
+        assertEquals(null, componentCard.get("asset_key"));
+        assertEquals("none", componentCard.get("image_delivery"));
+        assertEquals(null, componentCard.get("image_url"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = (Map<String, Object>) componentCard.get("visual_payload");
+        assertEquals("comparison", payload.get("type"));
+        assertTrue(payload.toString().contains("상장 기업"));
+        assertFalse(payload.toString().contains("잘못된 다이어그램"));
+    }
+
+    @Test
     void contentVisualImageWithEmptyUrlDoesNotBecomeDiagramFallback() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
         when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_core"), isNull(), eq(1)))
                 .thenReturn(Optional.of(overview("intro_core", null, 1, "캔들스틱 차트의 이해")));
         when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(1)))
                 .thenReturn(List.of(EducationCardEntity.builder()
-                        .sourceIdx(2)
-                        .assetId("asset-2")
+                        .sourceIdx(9003)
+                        .assetId("asset-9003")
                         .sheet("입문_카드_FINAL")
                         .track("intro_core")
                         .dayNumber(1)
@@ -302,10 +383,7 @@ class EducationV1ServiceTest {
         Map<String, Object> visual = (Map<String, Object>) cardStep.get("visual");
         assertEquals("none", visual.get("visual_type"));
         assertEquals(null, visual.get("visual_key"));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> payload = (Map<String, Object>) visual.get("payload");
-        assertFalse(payload.containsKey("template_visual_type"));
-        assertFalse(payload.containsKey("items"));
+        assertEquals(null, visual.get("payload"));
         assertFalse(containsEmptyImageUrl(cardStep));
     }
 
@@ -481,7 +559,7 @@ class EducationV1ServiceTest {
     void dayCompletionRejectsIncompleteCardsAndQuizzes() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
         when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(1)))
-                .thenReturn(List.of(card(1, "placeholder", "인플레이션과 내 돈", "{}")));
+                .thenReturn(List.of(card(9004, "placeholder", "인플레이션과 내 돈", "{}")));
         when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
                 .thenReturn(List.of(quiz(1)));
 
@@ -508,6 +586,23 @@ class EducationV1ServiceTest {
                 .educationQuizAnswersJson("{}")
                 .educationCardProgressJson("{}")
                 .educationSectorSelectionsJson("{\"intro\":[\"ai_semiconductor\",\"quantum_computer\"]}")
+                .build();
+    }
+
+    private LearningUserStateEntity stateAtIntroDay(int day) {
+        return LearningUserStateEntity.builder()
+                .userId(1L)
+                .level(0)
+                .point(0)
+                .streakDays(0)
+                .currentDayByCourseJson("{}")
+                .completedDaysByCourseJson("{}")
+                .submittedStepIdsJson("[]")
+                .educationCurrentDayJson("{\"intro\":" + day + "}")
+                .educationCompletedDaysJson("{}")
+                .educationQuizAnswersJson("{}")
+                .educationCardProgressJson("{}")
+                .educationSectorSelectionsJson("{}")
                 .build();
     }
 

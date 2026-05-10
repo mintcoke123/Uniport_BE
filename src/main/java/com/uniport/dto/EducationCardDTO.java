@@ -24,9 +24,13 @@ public class EducationCardDTO {
     private String imageType;
     private String svgPreset;
     private String templateType;
+    private String rendererType;
     private String visualType;
     private String visualKey;
+    private String componentKey;
     private String assetKey;
+    private String imageDelivery;
+    private String imageUrl;
     private JsonNode visual;
     private JsonNode visualPayload;
     private JsonNode renderPolicy;

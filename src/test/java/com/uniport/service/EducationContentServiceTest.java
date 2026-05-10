@@ -44,39 +44,7 @@ class EducationContentServiceTest {
     private EducationQuizRepository educationQuizRepository;
 
     @Test
-    void seedNormalizesLegacyImageCardsUsingImageTypeOld() {
-        EducationContentService service = new EducationContentService(
-                learningUserStateRepository,
-                educationOverviewRepository,
-                educationCardRepository,
-                educationQuizRepository,
-                false);
-
-        service.seedDatabaseIfNeeded();
-
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        ArgumentCaptor<Iterable<EducationCardEntity>> captor = ArgumentCaptor.forClass(Iterable.class);
-        verify(educationCardRepository).saveAll(captor.capture());
-        List<EducationCardEntity> savedCards = new ArrayList<>();
-        captor.getValue().forEach(savedCards::add);
-        EducationCardEntity card = savedCards.stream()
-                .filter(item -> Integer.valueOf(21).equals(item.getSourceIdx()))
-                .findFirst()
-                .orElse(null);
-
-        assertNotNull(card);
-        assertEquals("checklist", card.getImageType());
-        assertEquals("content_visual", card.getTemplateType());
-        assertEquals("component", card.getVisualType());
-        assertEquals("template_checklist", card.getVisualKey());
-        assertEquals(null, card.getAssetKey());
-        assertTrue(card.getVisualPayloadJson().contains("\"template_visual_type\":\"checklist\""));
-        assertTrue(card.getVisualPayloadJson().contains("\"items\""));
-        assertFalse(card.getVisualPayloadJson().contains("\"image_url\":\"\""));
-    }
-
-    @Test
-    void seedUsesDayThreeStructuredVisualMappingsInsteadOfDiagramFallbacks() {
+    void seedUsesKmpRenderManifestForDayThreeRenderTypes() {
         EducationContentService service = new EducationContentService(
                 learningUserStateRepository,
                 educationOverviewRepository,
@@ -92,11 +60,23 @@ class EducationContentServiceTest {
         List<EducationCardEntity> savedCards = new ArrayList<>();
         captor.getValue().forEach(savedCards::add);
 
-        assertVisual(savedCards, 20, "comparison", "template_comparison", "\"코스피\"");
-        assertVisual(savedCards, 23, "checklist", "template_checklist", "\"자금 조달 통로\"");
-        assertVisual(savedCards, 25, "flow", "template_flow", "\"정규장\"");
-        assertVisual(savedCards, 29, "comparison", "template_comparison", "\"상품시장\"");
-        assertVisual(savedCards, 30, "flow", "template_flow", "\"금리\"");
+        assertVisual(savedCards, 20, "raster_asset", "raster_asset", "raster_asset",
+                "real_images_generated_examples_intro_day3_kospi_kosdaq_real_boards_20260509", null, true);
+        assertVisual(savedCards, 21, "raster_asset", "raster_asset", "character_raster",
+                "real_images_intro_character_day3_market_map_fox_generated_20260509", null, true);
+        assertVisual(savedCards, 22, "component", "comparison", "component",
+                "template_comparison", "\"상장 기업\"", false);
+        assertVisual(savedCards, 23, "component", "checklist", "component",
+                "template_checklist", "\"자금 조달 통로\"", false);
+        assertVisual(savedCards, 24, "raster_asset", "raster_asset", "raster_asset",
+                "real_images_generated_examples_intro_day3_trading_hours_phone_20260509", null, true);
+        assertVisual(savedCards, 25, "component", "flow", "component", "template_flow", "\"정규장\"", false);
+        assertVisual(savedCards, 26, "raster_asset", "raster_asset", "raster_asset",
+                "real_images_generated_examples_intro_day3_financial_markets_real_desk_20260509", null, true);
+        assertVisual(savedCards, 27, "component", "diagram", "component", "template_diagram", "\"코스피\"", false);
+        assertVisual(savedCards, 28, "component", "flow", "component", "template_flow", "\"통화 교환\"", false);
+        assertVisual(savedCards, 29, "component", "comparison", "component", "template_comparison", "\"상품시장\"", false);
+        assertVisual(savedCards, 30, "component", "flow", "component", "template_flow", "\"금리\"", false);
     }
 
     @Test
@@ -144,22 +124,85 @@ class EducationContentServiceTest {
         EducationDayContentResponseDTO response = service.getDayContent("intro_core", 3, null);
 
         EducationCardDTO card = response.getCards().getFirst();
-        assertEquals("comparison", card.getImageType());
+        assertEquals("raster_asset", card.getImageType());
+        assertEquals("raster_asset", card.getRendererType());
+        assertEquals("raster_asset", card.getVisualType());
+        assertEquals("real_images_generated_examples_intro_day3_kospi_kosdaq_real_boards_20260509", card.getVisualKey());
+        assertEquals(null, card.getComponentKey());
+        assertEquals("real_images_generated_examples_intro_day3_kospi_kosdaq_real_boards_20260509", card.getAssetKey());
+        assertEquals("remote_url", card.getImageDelivery());
+        assertTrue(card.getImageUrl().contains("intro_day3_kospi_kosdaq_real_boards_20260509.png"));
+        assertEquals(null, card.getVisualPayload());
+    }
+
+    @Test
+    void dayContentReturnsManifestComponentPayloadNotOnlyMetadata() {
+        EducationContentService service = new EducationContentService(
+                learningUserStateRepository,
+                educationOverviewRepository,
+                educationCardRepository,
+                educationQuizRepository,
+                false);
+        when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_core"), isNull(), eq(3)))
+                .thenReturn(Optional.of(EducationOverviewEntity.builder()
+                        .track("intro_core")
+                        .dayNumber(3)
+                        .levelLabel("입문")
+                        .dayLabel("Day 3")
+                        .title("주식시장의 구조")
+                        .summary1("summary")
+                        .summary2("summary")
+                        .keyPointsJson("[]")
+                        .ctaLabel("시작")
+                        .build()));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(3)))
+                .thenReturn(List.of(EducationCardEntity.builder()
+                        .sourceIdx(22)
+                        .assetId("intro-core-d3-card-22")
+                        .sheet("입문_카드_FINAL")
+                        .track("intro_core")
+                        .dayNumber(3)
+                        .section("② 상장 기업과 비상장 기업")
+                        .cardNumber("1/2")
+                        .title("상장 기업과 비상장 기업")
+                        .text("본문")
+                        .imageType("image")
+                        .templateType("content_visual")
+                        .visualType("component")
+                        .visualKey("template_diagram")
+                        .visualJson("{\"alt\":\"상장 기업과 비상장 기업\"}")
+                        .visualPayloadJson("{\"template_visual_type\":\"diagram\",\"items\":[{\"text\":\"잘못된 다이어그램\"}]}")
+                        .renderPolicyJson("{\"fit\":\"contain\",\"allow_crop\":false}")
+                        .build()));
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(3)))
+                .thenReturn(List.of());
+
+        EducationDayContentResponseDTO response = service.getDayContent("intro_core", 3, null);
+
+        EducationCardDTO card = response.getCards().getFirst();
+        assertEquals("component", card.getRendererType());
         assertEquals("component", card.getVisualType());
         assertEquals("template_comparison", card.getVisualKey());
+        assertEquals("template_comparison", card.getComponentKey());
+        assertEquals(null, card.getAssetKey());
+        assertEquals("none", card.getImageDelivery());
+        assertEquals(null, card.getImageUrl());
         JsonNode payload = card.getVisualPayload();
-        assertEquals("comparison", payload.path("template_visual_type").asText());
+        assertEquals("comparison", payload.path("type").asText());
         assertTrue(payload.has("left"));
         assertTrue(payload.has("right"));
-        assertTrue(payload.toString().contains("코스피"));
+        assertTrue(payload.toString().contains("상장 기업"));
         assertFalse(payload.toString().contains("잘못된 다이어그램"));
     }
 
     private void assertVisual(List<EducationCardEntity> savedCards,
                               int idx,
+                              String rendererType,
                               String imageType,
+                              String visualType,
                               String visualKey,
-                              String expectedPayload) {
+                              String expectedPayload,
+                              boolean requiresImageUrl) {
         EducationCardEntity card = savedCards.stream()
                 .filter(item -> Integer.valueOf(idx).equals(item.getSourceIdx()))
                 .findFirst()
@@ -168,10 +211,26 @@ class EducationContentServiceTest {
         assertNotNull(card);
         assertEquals(imageType, card.getImageType());
         assertEquals("content_visual", card.getTemplateType());
-        assertEquals("component", card.getVisualType());
+        assertEquals(rendererType, card.getRendererType());
+        assertEquals(visualType, card.getVisualType());
         assertEquals(visualKey, card.getVisualKey());
-        assertEquals(null, card.getAssetKey());
-        assertTrue(card.getVisualPayloadJson().contains(expectedPayload));
-        assertFalse(card.getVisualPayloadJson().contains("\"image_url\":\"\""));
+        if ("component".equals(visualType)) {
+            assertEquals(visualKey, card.getComponentKey());
+            assertEquals(null, card.getAssetKey());
+            assertEquals("none", card.getImageDelivery());
+            assertEquals(null, card.getImageUrl());
+            assertTrue(card.getVisualPayloadJson().contains(expectedPayload));
+        } else {
+            assertEquals(null, card.getComponentKey());
+            assertEquals(visualKey, card.getAssetKey());
+            assertEquals("remote_url", card.getImageDelivery());
+            assertEquals(null, card.getVisualPayloadJson());
+        }
+        if (requiresImageUrl) {
+            assertNotNull(card.getImageUrl());
+            assertTrue(card.getImageUrl().startsWith("https://static.uniport.app/education-assets/"));
+        }
+        assertFalse(String.valueOf(card.getVisualJson()).contains("\"image_url\":\"\""));
     }
+
 }

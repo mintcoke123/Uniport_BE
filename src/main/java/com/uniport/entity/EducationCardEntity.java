@@ -72,13 +72,25 @@ public class EducationCardEntity extends AuditableEntity {
     private String templateType;
 
     @Column(length = 60)
+    private String rendererType;
+
+    @Column(length = 60)
     private String visualType;
 
     @Column(length = 160)
     private String visualKey;
 
     @Column(length = 160)
+    private String componentKey;
+
+    @Column(length = 160)
     private String assetKey;
+
+    @Column(length = 40)
+    private String imageDelivery;
+
+    @Column(columnDefinition = "TEXT")
+    private String imageUrl;
 
     @Column(columnDefinition = "TEXT")
     private String visualJson;

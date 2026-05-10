@@ -388,13 +388,18 @@ public class EducationContentService {
         EducationVisualContractNormalizer.NormalizedVisual normalizedVisual = EducationVisualContractNormalizer.normalize(
                 entity.getImageType(),
                 null,
+                entity.getRendererType(),
                 entity.getVisualType(),
                 entity.getVisualKey(),
+                entity.getComponentKey(),
                 entity.getAssetKey(),
+                entity.getImageDelivery(),
+                entity.getImageUrl(),
                 entity.getAssetId(),
                 entity.getSourceIdx(),
                 visual,
                 visualPayload,
+                readJsonNode(entity.getRenderPolicyJson()),
                 entity.getTitle(),
                 entity.getText());
         return EducationCardDTO.builder()
@@ -411,12 +416,16 @@ public class EducationContentService {
                 .imageType(normalizedVisual.imageType())
                 .svgPreset(entity.getSvgPreset())
                 .templateType(resolveTemplateType(entity.getTemplateType(), normalizedVisual.imageType()))
+                .rendererType(normalizedVisual.rendererType())
                 .visualType(normalizedVisual.visualType())
                 .visualKey(normalizedVisual.visualKey())
+                .componentKey(normalizedVisual.componentKey())
                 .assetKey(normalizedVisual.assetKey())
+                .imageDelivery(normalizedVisual.imageDelivery())
+                .imageUrl(normalizedVisual.imageUrl())
                 .visual(toJsonNode(normalizedVisual.cardVisual()))
                 .visualPayload(toJsonNode(normalizedVisual.payload()))
-                .renderPolicy(readJsonNode(entity.getRenderPolicyJson()))
+                .renderPolicy(toJsonNode(normalizedVisual.renderPolicy()))
                 .build();
     }
 
@@ -602,10 +611,15 @@ public class EducationContentService {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
                 assetId,
                 idx,
                 node.get("card_visual"),
                 node.get("card_visual"),
+                null,
                 text(node, "title"),
                 text(node, "text"));
         return EducationCardEntity.builder()
@@ -622,12 +636,16 @@ public class EducationContentService {
                 .imageType(normalizedVisual.imageType())
                 .svgPreset(svgPresetByIdx.get(idx))
                 .templateType(resolveTemplateType(null, normalizedVisual.imageType()))
+                .rendererType(normalizedVisual.rendererType())
                 .visualType(normalizedVisual.visualType())
                 .visualKey(normalizedVisual.visualKey())
+                .componentKey(normalizedVisual.componentKey())
                 .assetKey(normalizedVisual.assetKey())
-                .visualJson(writeValue(normalizedVisual.cardVisual()))
-                .visualPayloadJson(writeValue(normalizedVisual.payload()))
-                .renderPolicyJson(defaultRenderPolicyJson())
+                .imageDelivery(normalizedVisual.imageDelivery())
+                .imageUrl(normalizedVisual.imageUrl())
+                .visualJson(writeNullableValue(normalizedVisual.cardVisual()))
+                .visualPayloadJson(writeNullableValue(normalizedVisual.payload()))
+                .renderPolicyJson(writeValue(normalizedVisual.renderPolicy()))
                 .build();
     }
 
@@ -773,6 +791,10 @@ public class EducationContentService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to serialize education content payload", exception);
         }
+    }
+
+    private String writeNullableValue(Object value) {
+        return value == null ? null : writeValue(value);
     }
 
     private String defaultObjectJson(String value) {

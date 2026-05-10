@@ -1,7 +1,11 @@
 package com.uniport.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.core.io.ClassPathResource;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,37 +16,88 @@ import java.util.Set;
 
 final class EducationVisualContractNormalizer {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Set<String> TEMPLATE_TYPES = Set.of("checklist", "comparison", "flow", "formula", "table", "diagram", "stat");
-    private static final Set<String> ASSET_TYPES = Set.of("raster_asset", "chart_asset", "character_raster");
-    private static final Map<Integer, VisualOverride> VISUAL_OVERRIDES = visualOverrides();
+    private static final Set<String> ASSET_RENDERERS = Set.of("raster_asset", "chart_asset", "character_raster");
+    private static final Map<Integer, ManifestVisual> MANIFEST_BY_IDX = loadManifest();
 
     private EducationVisualContractNormalizer() {
     }
 
     static NormalizedVisual normalize(String imageType,
                                       String imageTypeOld,
+                                      String storedRendererType,
                                       String storedVisualType,
                                       String storedVisualKey,
+                                      String storedComponentKey,
                                       String storedAssetKey,
+                                      String storedImageDelivery,
+                                      String storedImageUrl,
                                       String assetId,
                                       Integer sourceIdx,
                                       JsonNode cardVisual,
                                       JsonNode visualPayload,
+                                      JsonNode renderPolicy,
                                       String title,
                                       String text) {
-        VisualOverride override = sourceIdx == null ? null : VISUAL_OVERRIDES.get(sourceIdx);
-        if (override != null) {
-            return override.apply(cardVisual);
+        ManifestVisual manifestVisual = sourceIdx == null ? null : MANIFEST_BY_IDX.get(sourceIdx);
+        if (manifestVisual != null) {
+            return manifestVisual.toNormalized(cardVisual);
         }
+
         String normalizedImageType = normalizeImageType(imageType, imageTypeOld, cardVisual);
         String templateVisualType = resolveTemplateVisualType(normalizedImageType, cardVisual, visualPayload);
-        String visualType = resolveVisualType(storedVisualType, normalizedImageType, templateVisualType, cardVisual);
-        String visualKey = resolveVisualKey(storedVisualKey, assetId, sourceIdx, visualType, templateVisualType);
-        String assetKey = resolveAssetKey(storedAssetKey, assetId, visualType);
+        String rendererType = resolveRendererType(storedRendererType, storedVisualType, normalizedImageType, templateVisualType, cardVisual);
+        String visualType = resolveVisualType(storedVisualType, rendererType, templateVisualType);
+        String visualKey = resolveVisualKey(storedVisualKey, assetId, sourceIdx, rendererType, templateVisualType);
+        String componentKey = resolveComponentKey(storedComponentKey, rendererType, visualKey);
+        String assetKey = resolveAssetKey(storedAssetKey, assetId, rendererType);
+        String imageDelivery = resolveImageDelivery(storedImageDelivery, rendererType);
+        String imageUrl = isAssetRenderer(rendererType) ? blankToNull(storedImageUrl) : null;
         Object cardVisualValue = sanitizeJsonValue(cardVisual);
-        Object payload = normalizePayload(templateVisualType, visualPayload == null ? cardVisual : visualPayload, title, text);
-        String responseImageType = "component".equals(visualType) && templateVisualType != null ? templateVisualType : normalizedImageType;
-        return new NormalizedVisual(responseImageType, templateVisualType, visualType, visualKey, assetKey, cardVisualValue, payload);
+        Object payload = isAssetRenderer(rendererType) || "none".equals(rendererType)
+                ? null
+                : normalizePayload(templateVisualType, visualPayload == null ? cardVisual : visualPayload, title, text);
+        Object renderPolicyValue = sanitizeJsonValue(renderPolicy);
+        if (renderPolicyValue == null) {
+            renderPolicyValue = defaultRenderPolicy(rendererType);
+        }
+        String responseImageType = "component".equals(rendererType) && templateVisualType != null
+                ? templateVisualType
+                : normalizedImageType;
+
+        return new NormalizedVisual(
+                responseImageType,
+                templateVisualType,
+                rendererType,
+                visualType,
+                visualKey,
+                componentKey,
+                assetKey,
+                imageDelivery,
+                imageUrl,
+                cardVisualValue,
+                payload,
+                renderPolicyValue);
+    }
+
+    private static Map<Integer, ManifestVisual> loadManifest() {
+        try (InputStream inputStream = new ClassPathResource("education/kmp_render_manifest.json").getInputStream()) {
+            JsonNode root = OBJECT_MAPPER.readTree(inputStream);
+            JsonNode cards = root.path("cards");
+            if (!cards.isArray()) {
+                return Map.of();
+            }
+            Map<Integer, ManifestVisual> byIdx = new LinkedHashMap<>();
+            for (JsonNode card : cards) {
+                if (card.hasNonNull("idx")) {
+                    byIdx.put(card.path("idx").asInt(), ManifestVisual.from(card));
+                }
+            }
+            return Map.copyOf(byIdx);
+        } catch (IOException exception) {
+            return Map.of();
+        }
     }
 
     private static String normalizeImageType(String imageType, String imageTypeOld, JsonNode visualNode) {
@@ -55,7 +110,8 @@ final class EducationVisualContractNormalizer {
     }
 
     private static String resolveTemplateVisualType(String imageType, JsonNode cardVisual, JsonNode visualPayload) {
-        String payloadType = textField(visualPayload, "template_visual_type");
+        String payloadType = Optional.ofNullable(textField(visualPayload, "type"))
+                .orElse(textField(visualPayload, "template_visual_type"));
         if (isTemplateType(payloadType)) {
             return payloadType;
         }
@@ -69,27 +125,44 @@ final class EducationVisualContractNormalizer {
         return inferTemplateVisualType(cardVisual).orElse(null);
     }
 
-    private static String resolveVisualType(String storedValue, String imageType, String templateVisualType, JsonNode visualNode) {
+    private static String resolveRendererType(String storedRendererType,
+                                              String storedVisualType,
+                                              String imageType,
+                                              String templateVisualType,
+                                              JsonNode visualNode) {
+        if (storedRendererType != null && !storedRendererType.isBlank()) {
+            return storedRendererType;
+        }
         if (templateVisualType != null) {
             return "component";
         }
-        if (storedValue != null && !storedValue.isBlank() && !hasBlankImageUrl(visualNode)) {
-            return storedValue;
+        if (storedVisualType != null && !storedVisualType.isBlank() && !hasBlankImageUrl(visualNode)) {
+            return storedVisualType;
         }
         String normalized = imageType == null ? "" : imageType.trim().toLowerCase(Locale.ROOT);
         return switch (normalized) {
             case "", "placeholder" -> "none";
             case "image" -> hasUsableImageUrl(visualNode) ? "raster_asset" : "none";
-            case "diagram", "flow", "formula", "comparison", "checklist" -> "component";
+            case "diagram", "flow", "formula", "comparison", "checklist", "table", "stat" -> "component";
             default -> "component";
         };
     }
 
-    private static String resolveVisualKey(String storedValue, String assetId, Integer sourceIdx, String visualType, String templateVisualType) {
-        if ("none".equals(visualType)) {
+    private static String resolveVisualType(String storedValue, String rendererType, String templateVisualType) {
+        if ("component".equals(rendererType)) {
+            return "component";
+        }
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        return rendererType;
+    }
+
+    private static String resolveVisualKey(String storedValue, String assetId, Integer sourceIdx, String rendererType, String templateVisualType) {
+        if ("none".equals(rendererType)) {
             return null;
         }
-        if ("component".equals(visualType) && templateVisualType != null) {
+        if ("component".equals(rendererType) && templateVisualType != null) {
             return "template_" + templateVisualType;
         }
         if (storedValue != null && !storedValue.isBlank()) {
@@ -101,14 +174,31 @@ final class EducationVisualContractNormalizer {
         return sourceIdx == null ? null : "education_card_" + sourceIdx;
     }
 
-    private static String resolveAssetKey(String storedValue, String assetId, String visualType) {
-        if (!ASSET_TYPES.contains(visualType)) {
+    private static String resolveComponentKey(String storedValue, String rendererType, String visualKey) {
+        if (!"component".equals(rendererType)) {
+            return null;
+        }
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        return visualKey;
+    }
+
+    private static String resolveAssetKey(String storedValue, String assetId, String rendererType) {
+        if (!isAssetRenderer(rendererType)) {
             return null;
         }
         if (storedValue != null && !storedValue.isBlank()) {
             return storedValue;
         }
         return assetId;
+    }
+
+    private static String resolveImageDelivery(String storedValue, String rendererType) {
+        if (storedValue != null && !storedValue.isBlank()) {
+            return storedValue;
+        }
+        return isAssetRenderer(rendererType) ? "remote_url" : "none";
     }
 
     private static Optional<String> inferTemplateVisualType(JsonNode visualNode) {
@@ -143,6 +233,10 @@ final class EducationVisualContractNormalizer {
         return value != null && TEMPLATE_TYPES.contains(value.trim().toLowerCase(Locale.ROOT));
     }
 
+    private static boolean isAssetRenderer(String value) {
+        return value != null && ASSET_RENDERERS.contains(value.trim().toLowerCase(Locale.ROOT));
+    }
+
     private static boolean hasBlankImageUrl(JsonNode visualNode) {
         return visualNode != null
                 && visualNode.isObject()
@@ -160,13 +254,14 @@ final class EducationVisualContractNormalizer {
     private static Object normalizePayload(String templateVisualType, JsonNode payloadNode, String title, String text) {
         Object sanitized = sanitizeJsonValue(payloadNode);
         if (templateVisualType == null) {
-            return sanitized == null ? new LinkedHashMap<String, Object>() : sanitized;
+            return sanitized == null ? null : sanitized;
         }
 
         Map<String, Object> payload = sanitized instanceof Map<?, ?> map
                 ? copyStringObjectMap(map)
                 : new LinkedHashMap<>();
-        payload.put("template_visual_type", templateVisualType);
+        payload.putIfAbsent("type", templateVisualType);
+        payload.putIfAbsent("template_visual_type", templateVisualType);
         if (!hasRenderablePayload(templateVisualType, payload)) {
             addFallbackPayload(templateVisualType, payload, title, text);
         }
@@ -200,7 +295,7 @@ final class EducationVisualContractNormalizer {
             case "flow" -> payload.put("steps", lines.stream().map(line -> Map.<String, Object>of("title", line)).toList());
             case "formula" -> {
                 payload.put("name", title);
-                payload.put("equation", lines.get(0));
+                payload.put("equation", lines.getFirst());
                 payload.put("variables", List.of());
             }
             case "table" -> {
@@ -210,7 +305,7 @@ final class EducationVisualContractNormalizer {
             case "diagram" -> payload.put("items", textItemMaps(lines));
             case "stat" -> {
                 payload.put("label", title);
-                payload.put("value", lines.get(0));
+                payload.put("value", lines.getFirst());
                 payload.put("unit", "");
             }
             default -> {
@@ -295,6 +390,16 @@ final class EducationVisualContractNormalizer {
         return node.asText();
     }
 
+    private static Object defaultRenderPolicy(String rendererType) {
+        Map<String, Object> policy = new LinkedHashMap<>();
+        policy.put("fit", "contain");
+        policy.put("allow_crop", false);
+        if (isAssetRenderer(rendererType)) {
+            policy.put("max_height_dp", 280);
+        }
+        return policy;
+    }
+
     private static String textField(JsonNode node, String fieldName) {
         if (node == null || !node.hasNonNull(fieldName)) {
             return null;
@@ -302,122 +407,102 @@ final class EducationVisualContractNormalizer {
         return node.get(fieldName).asText();
     }
 
-    private static Map<Integer, VisualOverride> visualOverrides() {
-        Map<Integer, VisualOverride> overrides = new LinkedHashMap<>();
-        overrides.put(15, component("checklist", checklist("수수료만 보지 않기", "자주 쓸 기능 확인", "국내·해외 투자 습관 맞추기")));
-        overrides.put(16, raster("education_day2_account_opening_app"));
-        overrides.put(17, raster("education_day2_account_turtle"));
-        overrides.put(18, raster("education_day2_hts_mts_workspace"));
-        overrides.put(19, component("flow", flow(
-                step("MTS로 시작", "접근성과 반복 사용"),
-                step("HTS 보조", "깊은 분석이 필요할 때"),
-                step("실수 방지", "주문·조회 환경 정리"))));
-        overrides.put(20, component("comparison", comparison(
-                comparisonSide("코스피", List.of("대형 우량 기업", "상대적 안정성", "제1시장")),
-                comparisonSide("코스닥", List.of("성장 기업", "변동성 큼", "IT·바이오·콘텐츠")))));
-        overrides.put(23, component("checklist", checklist("자금 조달 통로", "시장의 검증", "정보 접근성", "거래 편의성")));
-        overrides.put(24, component("flow", flow(
-                step("정규장", "기본 거래 시간"),
-                step("동시호가", "가격 결정 구간"),
-                step("시간외", "장 종료 뒤 거래"))));
-        overrides.put(25, component("flow", flow(
-                step("정규장", "기본 거래 시간"),
-                step("동시호가", "가격 결정 구간"),
-                step("시간외", "장 종료 뒤 거래"))));
-        overrides.put(26, component("diagram", diagram(
-                node("주식", "기업 지분"),
-                node("외환", "통화 교환"),
-                node("상품", "원유·금·곡물"),
-                node("파생", "미래 가격"))));
-        overrides.put(27, component("diagram", diagram(
-                node("코스피", "대형주"),
-                node("코스닥", "성장주"),
-                node("코넥스", "초기 기업"),
-                node("ETF", "묶음 투자"))));
-        overrides.put(28, component("flow", flow(
-                step("통화 교환", "각국 돈의 가격"),
-                step("환율 변화", "수출입과 물가 영향"),
-                step("자금 흐름", "외국인 수급 연결"))));
-        overrides.put(29, component("comparison", comparison(
-                comparisonSide("상품시장", List.of("원유·금·곡물", "실물자산")),
-                comparisonSide("파생상품", List.of("미래 가격", "위험 헤지")))));
-        overrides.put(30, component("flow", flow(
-                step("금리", "돈의 가격"),
-                step("채권·환율", "자금 이동"),
-                step("주식", "시장 반응"))));
-        return Map.copyOf(overrides);
+    private static String resolveManifestImageUrl(String imageUrl, String publicPath) {
+        String configuredBase = Optional.ofNullable(System.getProperty("UNIPORT_EDU_ASSET_BASE_URL"))
+                .filter(value -> !value.isBlank())
+                .orElseGet(() -> System.getenv("UNIPORT_EDU_ASSET_BASE_URL"));
+        if (configuredBase == null || configuredBase.isBlank() || publicPath == null || publicPath.isBlank()) {
+            return blankToNull(imageUrl);
+        }
+        String base = configuredBase.replaceFirst("/+$", "");
+        String path = publicPath.startsWith("/") ? publicPath : "/" + publicPath;
+        if (base.endsWith("/education-assets") && path.startsWith("/education-assets/")) {
+            path = path.substring("/education-assets".length());
+        }
+        return base + path;
     }
 
-    private static VisualOverride component(String templateVisualType, Map<String, Object> payload) {
-        Map<String, Object> copy = new LinkedHashMap<>(payload);
-        copy.put("template_visual_type", templateVisualType);
-        return new VisualOverride(templateVisualType, templateVisualType, "component", "template_" + templateVisualType, null, copy);
-    }
-
-    private static VisualOverride raster(String assetKey) {
-        return new VisualOverride("image", null, "raster_asset", assetKey, assetKey, null);
-    }
-
-    private static Map<String, Object> checklist(String... items) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("items", List.of(items).stream().map(item -> Map.<String, Object>of("text", item)).toList());
-        return payload;
-    }
-
-    private static Map<String, Object> comparison(Map<String, Object> left, Map<String, Object> right) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("left", left);
-        payload.put("right", right);
-        return payload;
-    }
-
-    @SafeVarargs
-    private static Map<String, Object> flow(Map<String, Object>... steps) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("steps", List.of(steps));
-        return payload;
-    }
-
-    @SafeVarargs
-    private static Map<String, Object> diagram(Map<String, Object>... nodes) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("nodes", List.of(nodes));
-        return payload;
-    }
-
-    private static Map<String, Object> step(String title, String description) {
-        Map<String, Object> step = new LinkedHashMap<>();
-        step.put("title", title);
-        step.put("description", description);
-        return step;
-    }
-
-    private static Map<String, Object> node(String title, String description) {
-        Map<String, Object> node = new LinkedHashMap<>();
-        node.put("title", title);
-        node.put("description", description);
-        return node;
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     record NormalizedVisual(String imageType,
                             String templateVisualType,
+                            String rendererType,
                             String visualType,
                             String visualKey,
+                            String componentKey,
                             String assetKey,
+                            String imageDelivery,
+                            String imageUrl,
                             Object cardVisual,
-                            Object payload) {
+                            Object payload,
+                            Object renderPolicy) {
     }
 
-    private record VisualOverride(String imageType,
-                                  String templateVisualType,
+    private record ManifestVisual(String rendererType,
                                   String visualType,
                                   String visualKey,
+                                  String componentKey,
                                   String assetKey,
-                                  Map<String, Object> payload) {
-        NormalizedVisual apply(JsonNode cardVisual) {
-            Object sanitizedCardVisual = sanitizeJsonValue(cardVisual);
-            Object normalizedPayload = payload == null ? sanitizedCardVisual : payload;
-            return new NormalizedVisual(imageType, templateVisualType, visualType, visualKey, assetKey, sanitizedCardVisual, normalizedPayload);
+                                  String imageDelivery,
+                                  String imageUrl,
+                                  String publicPath,
+                                  Map<String, Object> payload,
+                                  Map<String, Object> renderPolicy) {
+
+        static ManifestVisual from(JsonNode node) {
+            return new ManifestVisual(
+                    textField(node, "renderer_type"),
+                    textField(node, "visual_type"),
+                    textField(node, "visual_key"),
+                    textField(node, "component_key"),
+                    textField(node, "asset_key"),
+                    textField(node, "image_delivery"),
+                    textField(node, "image_url"),
+                    textField(node, "public_path"),
+                    objectMap(node.get("visual_payload")),
+                    objectMap(node.get("render_policy")));
+        }
+
+        NormalizedVisual toNormalized(JsonNode cardVisual) {
+            String templateVisualType = templateVisualType(payload, componentKey);
+            String responseImageType = isAssetRenderer(rendererType) ? rendererType : templateVisualType;
+            return new NormalizedVisual(
+                    responseImageType,
+                    templateVisualType,
+                    rendererType,
+                    visualType,
+                    visualKey,
+                    componentKey,
+                    assetKey,
+                    imageDelivery,
+                    resolveManifestImageUrl(imageUrl, publicPath),
+                    sanitizeJsonValue(cardVisual),
+                    payload,
+                    renderPolicy == null ? defaultRenderPolicy(rendererType) : renderPolicy);
+        }
+
+        private static Map<String, Object> objectMap(JsonNode node) {
+            Object value = sanitizeJsonValue(node);
+            if (value instanceof Map<?, ?> map) {
+                return copyStringObjectMap(map);
+            }
+            return null;
+        }
+
+        private static String templateVisualType(Map<String, Object> payload, String componentKey) {
+            Object type = payload == null ? null : payload.get("type");
+            if (type == null && payload != null) {
+                type = payload.get("template_visual_type");
+            }
+            if (type != null && !type.toString().isBlank()) {
+                return type.toString();
+            }
+            if (componentKey != null && componentKey.startsWith("template_")) {
+                return componentKey.substring("template_".length());
+            }
+            return null;
         }
     }
 }

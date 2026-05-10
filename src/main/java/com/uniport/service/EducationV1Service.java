@@ -493,21 +493,26 @@ public class EducationV1Service {
     }
 
     private Map<String, Object> toCardStep(CourseDefinition course, int day, EducationCardEntity card) {
-        String templateType = resolveTemplateType(card.getTemplateType(), card.getImageType());
         JsonNode cardVisual = readJsonNode(card.getVisualJson());
         JsonNode visualPayload = readJsonNode(card.getVisualPayloadJson());
         EducationVisualContractNormalizer.NormalizedVisual normalizedVisual = EducationVisualContractNormalizer.normalize(
                 card.getImageType(),
                 null,
+                card.getRendererType(),
                 card.getVisualType(),
                 card.getVisualKey(),
+                card.getComponentKey(),
                 card.getAssetKey(),
+                card.getImageDelivery(),
+                card.getImageUrl(),
                 card.getAssetId(),
                 card.getSourceIdx(),
                 cardVisual,
                 visualPayload,
+                readJsonNode(card.getRenderPolicyJson()),
                 card.getTitle(),
                 card.getText());
+        String templateType = resolveTemplateType(card.getTemplateType(), normalizedVisual.imageType());
         Map<String, Object> step = linkedMap();
         step.put("step_id", course.id() + "_d" + day + "_card_" + card.getSourceIdx());
         step.put("step_type", "card");
@@ -523,10 +528,16 @@ public class EducationV1Service {
         step.put("title", card.getTitle());
         step.put("text", card.getText());
         step.put("image_type", normalizedVisual.imageType());
+        step.put("renderer_type", normalizedVisual.rendererType());
         step.put("visual_type", normalizedVisual.visualType());
         step.put("visual_key", normalizedVisual.visualKey());
+        step.put("component_key", normalizedVisual.componentKey());
         step.put("asset_key", normalizedVisual.assetKey());
+        step.put("image_delivery", normalizedVisual.imageDelivery());
+        step.put("image_url", normalizedVisual.imageUrl());
         step.put("card_visual", normalizedVisual.cardVisual());
+        step.put("visual_payload", normalizedVisual.payload());
+        step.put("render_policy", normalizedVisual.renderPolicy());
         if (!"content_text".equals(templateType)) {
             step.put("visual", visualMap(card, normalizedVisual));
         }
@@ -553,12 +564,16 @@ public class EducationV1Service {
 
     private Map<String, Object> visualMap(EducationCardEntity card, EducationVisualContractNormalizer.NormalizedVisual normalizedVisual) {
         Map<String, Object> visual = linkedMap();
+        visual.put("renderer_type", normalizedVisual.rendererType());
         visual.put("visual_type", normalizedVisual.visualType());
         visual.put("visual_key", normalizedVisual.visualKey());
+        visual.put("component_key", normalizedVisual.componentKey());
         visual.put("asset_key", normalizedVisual.assetKey());
+        visual.put("image_delivery", normalizedVisual.imageDelivery());
+        visual.put("image_url", normalizedVisual.imageUrl());
         visual.put("alt", altText(card));
         visual.put("payload", normalizedVisual.payload());
-        visual.put("render_policy", readJsonNode(card.getRenderPolicyJson()));
+        visual.put("render_policy", normalizedVisual.renderPolicy());
         return visual;
     }
 

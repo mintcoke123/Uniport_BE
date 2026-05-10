@@ -1,0 +1,2295 @@
+{
+  "generated_at": "2026-05-10T16:14:52.625Z",
+  "asset_base_url": "https://static.uniport.app/education-assets",
+  "rule": "Backend uploads these local preview assets to object storage/CDN and returns image_url. KMP does not store them in drawable.",
+  "total_assets": 127,
+  "missing_assets": 0,
+  "assets": [
+    {
+      "asset_key": "real_images_day1_preview_idx0_inflation_basket",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day1_preview/idx0_inflation_basket.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day1_preview/idx0_inflation_basket.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day1_preview/idx0_inflation_basket.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 0,
+          "asset_id": "intro-core-d1-인플레이션과-내-돈의-가치-하락-1-2-인플레이션과-내-돈의-가치-하락",
+          "track": "intro_core",
+          "day": 1,
+          "title": "인플레이션과 내 돈의 가치 하락"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day1_preview_idx2_labor_vs_capital",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day1_preview/idx2_labor_vs_capital.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day1_preview/idx2_labor_vs_capital.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day1_preview/idx2_labor_vs_capital.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 2,
+          "asset_id": "intro-core-d1-노동-소득-vs-자본-소득-1-2-노동-소득-vs-자본-소득",
+          "track": "intro_core",
+          "day": 1,
+          "title": "노동 소득 vs 자본 소득"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day1_preview_idx6_compound_snowball",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day1_preview/idx6_compound_snowball.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day1_preview/idx6_compound_snowball.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day1_preview/idx6_compound_snowball.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 6,
+          "asset_id": "intro-core-d1-복리의-마법과-72의-법칙-1-2-복리의-마법과-72의-법칙",
+          "track": "intro_core",
+          "day": 1,
+          "title": "복리의 마법과 72의 법칙"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day1_preview_idx8_invest_shield",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day1_preview/idx8_invest_shield.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day1_preview/idx8_invest_shield.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day1_preview/idx8_invest_shield.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 8,
+          "asset_id": "intro-core-d1-투자해야-하는-이유-1-2-투자해야-하는-이유",
+          "track": "intro_core",
+          "day": 1,
+          "title": "투자해야 하는 이유"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day1_preview_idx4_partnership",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day1_preview/idx4_partnership.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day1_preview/idx4_partnership.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day1_preview/idx4_partnership.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 12,
+          "asset_id": "intro-core-d1-주식의-개념-1-2-주식의-개념",
+          "track": "intro_core",
+          "day": 1,
+          "title": "주식의 개념"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day2_account_opening_app_real_20260509",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/generated_examples/intro_day2_account_opening_app_real_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day2_account_opening_app_real_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day2_account_opening_app_real_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 16,
+          "asset_id": "intro-core-d2-비대면-계좌-개설-절차-1-2-비대면-계좌-개설-절차",
+          "track": "intro_core",
+          "day": 2,
+          "title": "비대면 계좌 개설 절차"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_intro_character_day2_account_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/intro_character/day2_account_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/intro_character/day2_account_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/intro_character/day2_account_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 17,
+          "asset_id": "intro-core-d2-비대면-계좌-개설-절차-2-2-실전-포인트",
+          "track": "intro_core",
+          "day": 2,
+          "title": "실전 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day2_hts_mts_real_workspace_20260509",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/generated_examples/intro_day2_hts_mts_real_workspace_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day2_hts_mts_real_workspace_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day2_hts_mts_real_workspace_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 18,
+          "asset_id": "intro-core-d2-hts-vs-mts-차이점-1-2-hts-vs-mts-차이점",
+          "track": "intro_core",
+          "day": 2,
+          "title": "HTS vs MTS 차이점"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day3_kospi_kosdaq_real_boards_20260509",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/generated_examples/intro_day3_kospi_kosdaq_real_boards_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day3_kospi_kosdaq_real_boards_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day3_kospi_kosdaq_real_boards_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 20,
+          "asset_id": "intro-core-d3-코스피와-코스닥의-정의-1-2-코스피와-코스닥의-정의",
+          "track": "intro_core",
+          "day": 3,
+          "title": "코스피와 코스닥의 정의"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_intro_character_day3_market_map_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/intro_character/day3_market_map_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/intro_character/day3_market_map_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/intro_character/day3_market_map_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 21,
+          "asset_id": "intro-core-d3-코스피와-코스닥의-정의-2-2-핵심-포인트",
+          "track": "intro_core",
+          "day": 3,
+          "title": "핵심 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day3_trading_hours_phone_20260509",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/generated_examples/intro_day3_trading_hours_phone_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day3_trading_hours_phone_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day3_trading_hours_phone_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 24,
+          "asset_id": "intro-core-d3-거래-시간표-1-2-거래-시간표",
+          "track": "intro_core",
+          "day": 3,
+          "title": "거래 시간표"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day3_financial_markets_real_desk_20260509",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/generated_examples/intro_day3_financial_markets_real_desk_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day3_financial_markets_real_desk_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day3_financial_markets_real_desk_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 26,
+          "asset_id": "intro-core-d3-다양한-시장의-종류-1-5-다양한-시장의-종류",
+          "track": "intro_core",
+          "day": 3,
+          "title": "다양한 시장의 종류"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day4_investment_styles_panda_20260509",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/generated_examples/intro_day4_investment_styles_panda_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day4_investment_styles_panda_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day4_investment_styles_panda_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 37,
+          "asset_id": "intro-core-d4-액티브투자-1-2-액티브투자",
+          "track": "intro_core",
+          "day": 4,
+          "title": "액티브투자"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day4_technical_chart_terminal_20260509",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/generated_examples/intro_day4_technical_chart_terminal_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day4_technical_chart_terminal_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day4_technical_chart_terminal_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 39,
+          "asset_id": "intro-core-d4-기술적투자-1-2-기술적투자",
+          "track": "intro_core",
+          "day": 4,
+          "title": "기술적투자"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_intro_character_day5_candle_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/intro_character/day5_candle_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/intro_character/day5_candle_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/intro_character/day5_candle_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 46,
+          "asset_id": "intro-core-d5-캔들의-몸통과-꼬리-의미-2-2-핵심-포인트",
+          "track": "intro_core",
+          "day": 5,
+          "title": "핵심 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day7_market_cap_ranking_real_20260509",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/generated_examples/intro_day7_market_cap_ranking_real_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day7_market_cap_ranking_real_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day7_market_cap_ranking_real_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 71,
+          "asset_id": "intro-core-d7-시가총액-순위와-주가-비중-1-2-시가총액-순위와-주가-비중",
+          "track": "intro_core",
+          "day": 7,
+          "title": "시가총액 순위와 주가 비중"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day8_order_book_real_20260509",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/generated_examples/intro_day8_order_book_real_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day8_order_book_real_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day8_order_book_real_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 73,
+          "asset_id": "intro-core-d8-호가창의-구성매수-매도-잔량-1-2-호가창의-구성매수-매도-잔량",
+          "track": "intro_core",
+          "day": 8,
+          "title": "호가창의 구성(매수/매도 잔량)"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day8_order_book_real_20260509",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/generated_examples/intro_day8_order_book_real_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day8_order_book_real_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day8_order_book_real_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 74,
+          "asset_id": "intro-core-d8-호가창의-구성매수-매도-잔량-2-2-실전-포인트",
+          "track": "intro_core",
+          "day": 8,
+          "title": "실전 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_generated_examples_intro_day8_vi_single_price_alert_real_20260509",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/generated_examples/intro_day8_vi_single_price_alert_real_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/generated_examples/intro_day8_vi_single_price_alert_real_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/generated_examples/intro_day8_vi_single_price_alert_real_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 81,
+          "asset_id": "intro-core-d8-vi-발동-및-미국-증시-서킷브레-1-2-vi-발동-및-미국-증시-서킷브레이커",
+          "track": "intro_core",
+          "day": 8,
+          "title": "VI 발동 및 미국 증시 서킷브레이커"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_with_volume_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_with_volume.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_with_volume.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_with_volume.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 83,
+          "asset_id": "intro-core-d9-이동평균선의-정의-1-2-이동평균선의-정의",
+          "track": "intro_core",
+          "day": 9,
+          "title": "이동평균선의 정의"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_basic_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_basic.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_basic.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_basic.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 84,
+          "asset_id": "intro-core-d9-이동평균선의-정의-2-2-핵심-포인트",
+          "track": "intro_core",
+          "day": 9,
+          "title": "핵심 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_5_20_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_5_20.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_5_20.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_5_20.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 85,
+          "asset_id": "intro-core-d9-5일선과-20일선-1-2-5일선과-20일선",
+          "track": "intro_core",
+          "day": 9,
+          "title": "5일선과 20일선"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_with_volume_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_with_volume.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_with_volume.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_with_volume.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 87,
+          "asset_id": "intro-core-d9-이동평균선이-그려지는-원리-1-2-이동평균선이-그려지는-원리",
+          "track": "intro_core",
+          "day": 9,
+          "title": "이동평균선이 그려지는 원리"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_support_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_support.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_support.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_support.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 88,
+          "asset_id": "intro-core-d9-이동평균선이-그려지는-원리-2-2-핵심-포인트",
+          "track": "intro_core",
+          "day": 9,
+          "title": "핵심 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_golden_cross_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_golden_cross.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_golden_cross.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_golden_cross.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 89,
+          "asset_id": "intro-core-d9-이격도와-골든크로스-개념-1-2-이격도와-골든크로스-개념",
+          "track": "intro_core",
+          "day": 9,
+          "title": "이격도와 골든크로스 개념"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_dead_cross_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_dead_cross.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_dead_cross.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_dead_cross.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 90,
+          "asset_id": "intro-core-d9-이격도와-골든크로스-개념-2-2-핵심-포인트",
+          "track": "intro_core",
+          "day": 9,
+          "title": "핵심 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day10_preview_per_value_trap_character",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/day10_preview/per_value_trap_character.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day10_preview/per_value_trap_character.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day10_preview/per_value_trap_character.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 97,
+          "asset_id": "intro-core-d10-per의-한계와-함정-1-2-per의-한계와-함정",
+          "track": "intro_core",
+          "day": 10,
+          "title": "PER의 한계와 함정"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day11_preview_interest_stock_seesaw",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day11_preview/interest_stock_seesaw.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day11_preview/interest_stock_seesaw.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day11_preview/interest_stock_seesaw.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 99,
+          "asset_id": "intro-core-d11-금리와-주가의-시소-관계-1-2-금리와-주가의-시소-관계",
+          "track": "intro_core",
+          "day": 11,
+          "title": "금리와 주가의 시소 관계"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day11_preview_deposit_vs_growth",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day11_preview/deposit_vs_growth.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day11_preview/deposit_vs_growth.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day11_preview/deposit_vs_growth.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 105,
+          "asset_id": "intro-core-d11-예적금-대신-주식을-하는-이유-1-2-예적금-대신-주식을-하는-이유",
+          "track": "intro_core",
+          "day": 11,
+          "title": "예적금 대신 주식을 하는 이유"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day12_preview_blue_chip_turtle_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day12_preview/blue_chip_turtle_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day12_preview/blue_chip_turtle_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day12_preview/blue_chip_turtle_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 107,
+          "asset_id": "intro-core-d12-우량주blue-chip-1-2-우량주blue-chip",
+          "track": "intro_core",
+          "day": 12,
+          "title": "우량주(Blue Chip)"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day13_preview_volume_trace_turtle_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day13_preview/volume_trace_turtle_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day13_preview/volume_trace_turtle_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day13_preview/volume_trace_turtle_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 115,
+          "asset_id": "intro-core-d13-거래량은-돈의-흔적이다-1-2-거래량은-돈의-흔적이다",
+          "track": "intro_core",
+          "day": 13,
+          "title": "거래량은 '돈의 흔적'이다"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_with_volume_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_with_volume.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_with_volume.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_with_volume.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 117,
+          "asset_id": "intro-core-d13-주가-상승-거래량-증가의-의미-1-2-주가-상승-거래량-증가의-의미",
+          "track": "intro_core",
+          "day": 13,
+          "title": "주가 상승 + 거래량 증가의 의미"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_pullback_volume_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/pullback_volume.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/pullback_volume.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/pullback_volume.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 119,
+          "asset_id": "intro-core-d13-거래량-없는-하락의-해석-1-2-거래량-없는-하락의-해석",
+          "track": "intro_core",
+          "day": 13,
+          "title": "거래량 없는 하락의 해석"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_candle_long_bullish_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/candle_long_bullish.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/candle_long_bullish.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/candle_long_bullish.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 121,
+          "asset_id": "intro-core-d13-대량-거래-동반-장대양봉-분석-1-2-대량-거래-동반-장대양봉-분석",
+          "track": "intro_core",
+          "day": 13,
+          "title": "대량 거래 동반 장대양봉 분석"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_pullback_volume_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/pullback_volume.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/pullback_volume.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/pullback_volume.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 122,
+          "asset_id": "intro-core-d13-대량-거래-동반-장대양봉-분석-2-2-실전-포인트",
+          "track": "intro_core",
+          "day": 13,
+          "title": "실전 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day14_preview_fee_tax_turtle_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day14_preview/fee_tax_turtle_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day14_preview/fee_tax_turtle_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day14_preview/fee_tax_turtle_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 123,
+          "asset_id": "intro-core-d14-매수-매도-시-발생하는-수수료-1-2-매수-매도-시-발생하는-수수료",
+          "track": "intro_core",
+          "day": 14,
+          "title": "매수/매도 시 발생하는 수수료"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day15_preview_dividend_cashflow_turtle_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day15_preview/dividend_cashflow_turtle_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day15_preview/dividend_cashflow_turtle_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day15_preview/dividend_cashflow_turtle_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 131,
+          "asset_id": "intro-core-d15-배당의-개념-1-2-배당의-개념",
+          "track": "intro_core",
+          "day": 15,
+          "title": "배당의 개념"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day16_preview_disclosure_news_fox_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day16_preview/disclosure_news_fox_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day16_preview/disclosure_news_fox_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day16_preview/disclosure_news_fox_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 147,
+          "asset_id": "intro-core-d16-뉴스-제목에-속지-않는-법-1-2-뉴스-제목에-속지-않는-법",
+          "track": "intro_core",
+          "day": 16,
+          "title": "뉴스 제목에 속지 않는 법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_support_line_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/support_line.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/support_line.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/support_line.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 149,
+          "asset_id": "intro-core-d17-지지선바닥-형성-원리-1-2-지지선바닥-형성-원리",
+          "track": "intro_core",
+          "day": 17,
+          "title": "지지선(바닥) 형성 원리"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_support_line_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/support_line.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/support_line.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/support_line.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 150,
+          "asset_id": "intro-core-d17-지지선바닥-형성-원리-2-2-핵심-포인트",
+          "track": "intro_core",
+          "day": 17,
+          "title": "핵심 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_resistance_line_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/resistance_line.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/resistance_line.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/resistance_line.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 151,
+          "asset_id": "intro-core-d17-저항선천장-형성-원리-1-2-저항선천장-형성-원리",
+          "track": "intro_core",
+          "day": 17,
+          "title": "저항선(천장) 형성 원리"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_resistance_line_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/resistance_line.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/resistance_line.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/resistance_line.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 152,
+          "asset_id": "intro-core-d17-저항선천장-형성-원리-2-2-핵심-포인트",
+          "track": "intro_core",
+          "day": 17,
+          "title": "핵심 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_breakout_high_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/breakout_high.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/breakout_high.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/breakout_high.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 153,
+          "asset_id": "intro-core-d17-전고점-돌파의-의미-1-2-전고점-돌파의-의미",
+          "track": "intro_core",
+          "day": 17,
+          "title": "전고점 돌파의 의미"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_breakdown_low_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/breakdown_low.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/breakdown_low.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/breakdown_low.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 155,
+          "asset_id": "intro-core-d17-전저점-이탈-시-대응-전략-1-2-전저점-이탈-시-대응-전략",
+          "track": "intro_core",
+          "day": 17,
+          "title": "전저점 이탈 시 대응 전략"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day17_preview_support_break_rule_turtle_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day17_preview/support_break_rule_turtle_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day17_preview/support_break_rule_turtle_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day17_preview/support_break_rule_turtle_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 156,
+          "asset_id": "intro-core-d17-전저점-이탈-시-대응-전략-2-2-주의-포인트",
+          "track": "intro_core",
+          "day": 17,
+          "title": "주의 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day18_preview_exchange_rate_turtle_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day18_preview/exchange_rate_turtle_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day18_preview/exchange_rate_turtle_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day18_preview/exchange_rate_turtle_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 157,
+          "asset_id": "intro-core-d18-환율의-개념-1-2-환율의-개념",
+          "track": "intro_core",
+          "day": 18,
+          "title": "환율의 개념"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day19_preview_market_cap_panda_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day19_preview/market_cap_panda_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day19_preview/market_cap_panda_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day19_preview/market_cap_panda_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 168,
+          "asset_id": "intro-core-d19-시가총액-계산법-2-2-핵심-포인트",
+          "track": "intro_core",
+          "day": 19,
+          "title": "핵심 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day21_preview_theme_cycle_fox_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day21_preview/theme_cycle_fox_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day21_preview/theme_cycle_fox_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day21_preview/theme_cycle_fox_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 185,
+          "asset_id": "intro-core-d21-주도-테마의-형성과-소멸-1-2-주도-테마의-형성과-소멸",
+          "track": "intro_core",
+          "day": 21,
+          "title": "주도 테마의 형성과 소멸"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_uptrend_line_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/uptrend_line.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/uptrend_line.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/uptrend_line.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 191,
+          "asset_id": "intro-core-d22-상승-추세선-긋는-법-1-2-상승-추세선-긋는-법",
+          "track": "intro_core",
+          "day": 22,
+          "title": "상승 추세선 긋는 법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_uptrend_line_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/uptrend_line.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/uptrend_line.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/uptrend_line.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 192,
+          "asset_id": "intro-core-d22-상승-추세선-긋는-법-2-2-실전-포인트",
+          "track": "intro_core",
+          "day": 22,
+          "title": "실전 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_downtrend_line_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/downtrend_line.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/downtrend_line.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/downtrend_line.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 193,
+          "asset_id": "intro-core-d22-하락-추세선-긋는-법-1-2-하락-추세선-긋는-법",
+          "track": "intro_core",
+          "day": 22,
+          "title": "하락 추세선 긋는 법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_downtrend_line_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/downtrend_line.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/downtrend_line.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/downtrend_line.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 194,
+          "asset_id": "intro-core-d22-하락-추세선-긋는-법-2-2-실전-포인트",
+          "track": "intro_core",
+          "day": 22,
+          "title": "실전 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_trend_break_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/trend_break.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/trend_break.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/trend_break.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 195,
+          "asset_id": "intro-core-d22-추세-이탈과-추세-반전-신호-1-2-추세-이탈과-추세-반전-신호",
+          "track": "intro_core",
+          "day": 22,
+          "title": "추세 이탈과 추세 반전 신호"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_box_breakout_top_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/box_breakout_top.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/box_breakout_top.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/box_breakout_top.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 197,
+          "asset_id": "intro-core-d22-평행-채널박스권-그리기-1-2-평행-채널박스권-그리기",
+          "track": "intro_core",
+          "day": 22,
+          "title": "평행 채널(박스권) 그리기"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_box_breakout_top_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/box_breakout_top.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/box_breakout_top.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/box_breakout_top.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 198,
+          "asset_id": "intro-core-d22-평행-채널박스권-그리기-2-2-실전-포인트",
+          "track": "intro_core",
+          "day": 22,
+          "title": "실전 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day22_preview_trendline_practice_turtle_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day22_preview/trendline_practice_turtle_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day22_preview/trendline_practice_turtle_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day22_preview/trendline_practice_turtle_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 199,
+          "asset_id": "intro-core-d22-실습-진행-가이드-1-2-실습-진행-가이드",
+          "track": "intro_core",
+          "day": 22,
+          "title": "실습 진행 가이드"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day23_preview_stop_loss_ant_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day23_preview/stop_loss_ant_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day23_preview/stop_loss_ant_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day23_preview/stop_loss_ant_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 201,
+          "asset_id": "intro-core-d23-손절매stop-loss가-필요한--1-2-손절매stop-loss가-필요한-이유",
+          "track": "intro_core",
+          "day": 23,
+          "title": "손절매(Stop-loss)가 필요한 이유"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day24_preview_indicator_limits_fox_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day24_preview/indicator_limits_fox_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day24_preview/indicator_limits_fox_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day24_preview/indicator_limits_fox_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 209,
+          "asset_id": "intro-core-d24-지표의-한계-인식-1-2-지표의-한계-인식",
+          "track": "intro_core",
+          "day": 24,
+          "title": "지표의 한계 인식"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_day25_preview_corporate_actions_dolphin_ref",
+      "visual_type": "raster_asset",
+      "local_source_path": "real_images/day25_preview/corporate_actions_dolphin_ref.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/day25_preview/corporate_actions_dolphin_ref.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/day25_preview/corporate_actions_dolphin_ref.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 219,
+          "asset_id": "intro-core-d25-유상증자주주배정-제3자배정-1-2-유상증자주주배정-제3자배정",
+          "track": "intro_core",
+          "day": 25,
+          "title": "유상증자(주주배정/제3자배정)"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day1_risk_reward_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day1_risk_reward_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day1_risk_reward_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day1_risk_reward_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 244,
+          "asset_id": "advanced-core-d1-투자-철학-세우기-1-3-투자-철학이란",
+          "track": "advanced_core",
+          "day": 1,
+          "title": "투자 철학이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day2_financial_statement_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day2_financial_statement_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day2_financial_statement_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day2_financial_statement_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 256,
+          "asset_id": "advanced-core-d2-실제-상장폐지-사례-분석-2-2-투자자가-얻어야-할-교훈",
+          "track": "advanced_core",
+          "day": 2,
+          "title": "투자자가 얻어야 할 교훈"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day3_health_check_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day3_health_check_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day3_health_check_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day3_health_check_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 260,
+          "asset_id": "advanced-core-d3-1-유동비율-1년-안에-망하지-않-2-2-쉽게-이해하는-예시",
+          "track": "advanced_core",
+          "day": 3,
+          "title": "쉽게 이해하는 예시"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_with_volume_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_with_volume.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_with_volume.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_with_volume.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 267,
+          "asset_id": "advanced-core-d4-0-거래량과-이평선을-함께-보는--1-2-왜-거래량과-이평선을-같이-볼까",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "왜 거래량과 이평선을 같이 볼까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day4_volume_ma_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day4_volume_ma_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day4_volume_ma_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day4_volume_ma_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 268,
+          "asset_id": "advanced-core-d4-0-거래량과-이평선을-함께-보는--2-2-쉽게-이해하는-방법",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "쉽게 이해하는 방법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_aligned_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_aligned.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_aligned.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_aligned.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 269,
+          "asset_id": "advanced-core-d4-정배열과-역배열의-심리-1-2-정배열이란",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "정배열이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_inverse_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_inverse.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_inverse.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_inverse.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 270,
+          "asset_id": "advanced-core-d4-정배열과-역배열의-심리-2-2-역배열이란",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "역배열이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_60_120_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_60_120.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_60_120.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_60_120.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 271,
+          "asset_id": "advanced-core-d4-60일선과-120일선-1-2-60일선이란",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "60일선이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_60_120_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_60_120.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_60_120.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_60_120.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 272,
+          "asset_id": "advanced-core-d4-60일선과-120일선-2-2-120일선이란",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "120일선이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_golden_cross_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_golden_cross.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_golden_cross.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_golden_cross.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 273,
+          "asset_id": "advanced-core-d4-골든크로스와-데드크로스-1-2-골든크로스란",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "골든크로스란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_dead_cross_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_dead_cross.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_dead_cross.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_dead_cross.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 274,
+          "asset_id": "advanced-core-d4-골든크로스와-데드크로스-2-2-데드크로스란",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "데드크로스란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_converge_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_converge.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_converge.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_converge.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 275,
+          "asset_id": "advanced-core-d4-이평선-수렴과-발산-원리-1-2-이평선-수렴이란",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "이평선 수렴이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_diverge_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_diverge.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_diverge.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_diverge.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 276,
+          "asset_id": "advanced-core-d4-이평선-수렴과-발산-원리-2-2-이평선-발산이란",
+          "track": "advanced_core",
+          "day": 4,
+          "title": "이평선 발산이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day5_report_per_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day5_report_per_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day5_report_per_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day5_report_per_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 280,
+          "asset_id": "advanced-core-d5-buy-투자의견의-이면-읽기-2-2-왜-조심해서-봐야-할까",
+          "track": "advanced_core",
+          "day": 5,
+          "title": "왜 조심해서 봐야 할까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day6_investor_flow_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day6_investor_flow_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day6_investor_flow_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day6_investor_flow_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 289,
+          "asset_id": "advanced-core-d6-외국인-기관-연속-매수-종목-2-2-하지만-맹신하면-안-되는-이유",
+          "track": "advanced_core",
+          "day": 6,
+          "title": "하지만 맹신하면 안 되는 이유"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day7_global_market_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day7_global_market_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day7_global_market_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day7_global_market_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 301,
+          "asset_id": "advanced-core-d7-야간-미국-선물-시장-확인법-3-3-왜-확인해야-할까",
+          "track": "advanced_core",
+          "day": 7,
+          "title": "왜 확인해야 할까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day8_pbr_panda_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day8_pbr_panda_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day8_pbr_panda_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day8_pbr_panda_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 313,
+          "asset_id": "advanced-core-d8-청산-가치와-안전-마진-3-4-안전-마진이란",
+          "track": "advanced_core",
+          "day": 8,
+          "title": "안전 마진이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_candle_hammer_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/candle_hammer.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/candle_hammer.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/candle_hammer.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 315,
+          "asset_id": "advanced-core-d9-반전형-패턴망치형-역망치형-1-2-망치형-캔들이란",
+          "track": "advanced_core",
+          "day": 9,
+          "title": "망치형 캔들이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_candle_inverted_hammer_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/candle_inverted_hammer.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/candle_inverted_hammer.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/candle_inverted_hammer.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 316,
+          "asset_id": "advanced-core-d9-반전형-패턴망치형-역망치형-2-2-역망치형은-무엇일까",
+          "track": "advanced_core",
+          "day": 9,
+          "title": "역망치형은 무엇일까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_candle_long_bullish_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/candle_long_bullish.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/candle_long_bullish.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/candle_long_bullish.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 317,
+          "asset_id": "advanced-core-d9-지속형-패턴장대양봉-도지형-1-2-장대양봉이-의미하는-것",
+          "track": "advanced_core",
+          "day": 9,
+          "title": "장대양봉이 의미하는 것"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day9_candles_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day9_candles_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day9_candles_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day9_candles_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 318,
+          "asset_id": "advanced-core-d9-지속형-패턴장대양봉-도지형-2-2-도지형-캔들이란",
+          "track": "advanced_core",
+          "day": 9,
+          "title": "도지형 캔들이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_gap_up_down_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/gap_up_down.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/gap_up_down.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/gap_up_down.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 319,
+          "asset_id": "advanced-core-d9-갭-상승과-갭-하락의-의미-1-2-갭-상승이란",
+          "track": "advanced_core",
+          "day": 9,
+          "title": "갭 상승이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_gap_up_down_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/gap_up_down.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/gap_up_down.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/gap_up_down.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 320,
+          "asset_id": "advanced-core-d9-갭-상승과-갭-하락의-의미-2-2-갭-하락이란",
+          "track": "advanced_core",
+          "day": 9,
+          "title": "갭 하락이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_candle_harami_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/candle_harami.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/candle_harami.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/candle_harami.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 321,
+          "asset_id": "advanced-core-d9-캔들-조합-분석잉태형-장악형-1-2-잉태형-패턴이란",
+          "track": "advanced_core",
+          "day": 9,
+          "title": "잉태형 패턴이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_candle_engulfing_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/candle_engulfing.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/candle_engulfing.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/candle_engulfing.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 322,
+          "asset_id": "advanced-core-d9-캔들-조합-분석잉태형-장악형-2-2-장악형-패턴이란",
+          "track": "advanced_core",
+          "day": 9,
+          "title": "장악형 패턴이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day10_peer_panda_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day10_peer_panda_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day10_peer_panda_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day10_peer_panda_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 327,
+          "asset_id": "advanced-core-d10-1등주와-2등주의-주가-흐름-1-2-1등주가-중요한-이유",
+          "track": "advanced_core",
+          "day": 10,
+          "title": "1등주가 중요한 이유"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day11_split_order_ant_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day11_split_order_ant_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day11_split_order_ant_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day11_split_order_ant_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 333,
+          "asset_id": "advanced-core-d11-익절가-설정-및-분할-매도-1-2-익절가를-미리-정하는-이유",
+          "track": "advanced_core",
+          "day": 11,
+          "title": "익절가를 미리 정하는 이유"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_uptrend_line_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/uptrend_line.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/uptrend_line.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/uptrend_line.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 338,
+          "asset_id": "advanced-core-d11-물타기-vs-불타기-구분법-2-2-불타기란",
+          "track": "advanced_core",
+          "day": 11,
+          "title": "불타기란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_rsi_basic_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/rsi_basic.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/rsi_basic.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/rsi_basic.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 339,
+          "asset_id": "advanced-core-d12-rsi-지수-계산-원리-1-2-rsi란-무엇일까",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "RSI란 무엇일까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_rsi_basic_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/rsi_basic.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/rsi_basic.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/rsi_basic.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 340,
+          "asset_id": "advanced-core-d12-rsi-지수-계산-원리-2-2-rsi를-쉽게-이해하는-방법",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "RSI를 쉽게 이해하는 방법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_rsi_overbought_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/rsi_overbought.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/rsi_overbought.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/rsi_overbought.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 341,
+          "asset_id": "advanced-core-d12-과매수와-과매도-기준-1-2-rsi-과매수란",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "RSI 과매수란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_rsi_oversold_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/rsi_oversold.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/rsi_oversold.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/rsi_oversold.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 342,
+          "asset_id": "advanced-core-d12-과매수와-과매도-기준-2-2-rsi-과매도란",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "RSI 과매도란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_rsi_oversold_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/rsi_oversold.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/rsi_oversold.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/rsi_oversold.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 343,
+          "asset_id": "advanced-core-d12-rsi를-활용한-단기-저점-찾기-1-2-단기-저점-찾는-방법",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "단기 저점 찾는 방법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day12_rsi_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day12_rsi_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day12_rsi_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day12_rsi_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 344,
+          "asset_id": "advanced-core-d12-rsi를-활용한-단기-저점-찾기-2-2-주의할-점",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "주의할 점"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_rsi_divergence_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/rsi_divergence.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/rsi_divergence.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/rsi_divergence.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 345,
+          "asset_id": "advanced-core-d12-rsi-다이버전스-기초-1-2-rsi-다이버전스란",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "RSI 다이버전스란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_rsi_divergence_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/rsi_divergence.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/rsi_divergence.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/rsi_divergence.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 346,
+          "asset_id": "advanced-core-d12-rsi-다이버전스-기초-2-2-왜-중요한가",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "왜 중요한가?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_rsi_ranging_market_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/rsi_ranging_market.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/rsi_ranging_market.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/rsi_ranging_market.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 347,
+          "asset_id": "advanced-core-d12-rsi가-잘-먹히는-시장-vs-아-1-2-rsi가-잘-작동하는-시장",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "RSI가 잘 작동하는 시장"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_rsi_strong_trend_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/rsi_strong_trend.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/rsi_strong_trend.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/rsi_strong_trend.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 348,
+          "asset_id": "advanced-core-d12-rsi가-잘-먹히는-시장-vs-아-2-2-rsi가-잘-안-먹히는-시장",
+          "track": "advanced_core",
+          "day": 12,
+          "title": "RSI가 잘 안 먹히는 시장"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day13_margin_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day13_margin_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day13_margin_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day13_margin_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 355,
+          "asset_id": "advanced-core-d13-영업이익률-개선의-3가지-이유-3-3-투자자가-보는-핵심-포인트",
+          "track": "advanced_core",
+          "day": 13,
+          "title": "투자자가 보는 핵심 포인트"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day14_macro_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day14_macro_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day14_macro_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day14_macro_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 362,
+          "asset_id": "advanced-core-d14-환율과-원자재의-관계-1-2-환율이란-무엇일까",
+          "track": "advanced_core",
+          "day": 14,
+          "title": "환율이란 무엇일까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day15_etf_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day15_etf_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day15_etf_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day15_etf_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 370,
+          "asset_id": "advanced-core-d15-etf란-3-3-왜-초보자에게-많이-추천될까",
+          "track": "advanced_core",
+          "day": 15,
+          "title": "왜 초보자에게 많이 추천될까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day16_etf_cost_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day16_etf_cost_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day16_etf_cost_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day16_etf_cost_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 379,
+          "asset_id": "advanced-core-d16-etf의-단점-3-3-수수료와-추적-오차를-봐야-한다",
+          "track": "advanced_core",
+          "day": 16,
+          "title": "수수료와 추적 오차를 봐야 한다"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day17_leverage_dividend_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day17_leverage_dividend_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day17_leverage_dividend_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day17_leverage_dividend_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 398,
+          "asset_id": "advanced-core-d17-배당-etf-1-2-배당-etf란",
+          "track": "advanced_core",
+          "day": 17,
+          "title": "배당 ETF란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_pullback_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/pullback.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/pullback.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/pullback.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 402,
+          "asset_id": "advanced-core-d18-눌림목이-발생하는-이유-1-2-눌림목이란-무엇일까",
+          "track": "advanced_core",
+          "day": 18,
+          "title": "눌림목이란 무엇일까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_support_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_support.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_support.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_support.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 404,
+          "asset_id": "advanced-core-d18-이동평균선-지지-눌림목-1-2-이평선-지지란",
+          "track": "advanced_core",
+          "day": 18,
+          "title": "이평선 지지란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_ma_support_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/ma_support.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/ma_support.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/ma_support.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 405,
+          "asset_id": "advanced-core-d18-이동평균선-지지-눌림목-2-2-왜-중요할까",
+          "track": "advanced_core",
+          "day": 18,
+          "title": "왜 중요할까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_pullback_volume_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/pullback_volume.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/pullback_volume.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/pullback_volume.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 406,
+          "asset_id": "advanced-core-d18-거래량-급감-구간-포착-1-2-거래량이-줄어드는-이유",
+          "track": "advanced_core",
+          "day": 18,
+          "title": "거래량이 줄어드는 이유"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day18_pullback_stop_ant_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day18_pullback_stop_ant_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day18_pullback_stop_ant_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day18_pullback_stop_ant_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 408,
+          "asset_id": "advanced-core-d18-손절선-기계적-설정-1-2-손절선이란-무엇일까",
+          "track": "advanced_core",
+          "day": 18,
+          "title": "손절선이란 무엇일까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_macd_basic_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/macd_basic.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/macd_basic.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/macd_basic.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 410,
+          "asset_id": "advanced-core-d19-macd와-시그널선의-교차-1-2-macd란-무엇일까",
+          "track": "advanced_core",
+          "day": 19,
+          "title": "MACD란 무엇일까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_macd_cross_buy_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/macd_cross_buy.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/macd_cross_buy.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/macd_cross_buy.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 411,
+          "asset_id": "advanced-core-d19-macd와-시그널선의-교차-2-2-macd-교차-신호",
+          "track": "advanced_core",
+          "day": 19,
+          "title": "MACD 교차 신호"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_macd_basic_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/macd_basic.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/macd_basic.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/macd_basic.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 412,
+          "asset_id": "advanced-core-d19-macd-오실레이터-읽는-법-1-2-macd-오실레이터란",
+          "track": "advanced_core",
+          "day": 19,
+          "title": "MACD 오실레이터란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_macd_trend_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/macd_trend.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/macd_trend.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/macd_trend.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 413,
+          "asset_id": "advanced-core-d19-macd-오실레이터-읽는-법-2-2-쉽게-이해하는-방법",
+          "track": "advanced_core",
+          "day": 19,
+          "title": "쉽게 이해하는 방법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_macd_zero_break_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/macd_zero_break.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/macd_zero_break.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/macd_zero_break.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 414,
+          "asset_id": "advanced-core-d19-0선-돌파의-의미-1-2-macd의-0선이란",
+          "track": "advanced_core",
+          "day": 19,
+          "title": "MACD의 0선이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_macd_zero_break_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/macd_zero_break.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/macd_zero_break.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/macd_zero_break.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 415,
+          "asset_id": "advanced-core-d19-0선-돌파의-의미-2-2-왜-중요할까",
+          "track": "advanced_core",
+          "day": 19,
+          "title": "왜 중요할까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_macd_trend_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/macd_trend.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/macd_trend.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/macd_trend.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 416,
+          "asset_id": "advanced-core-d19-macd를-이용한-중기-추세-판단-1-2-macd로-추세를-보는-방법",
+          "track": "advanced_core",
+          "day": 19,
+          "title": "MACD로 추세를 보는 방법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day19_macd_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day19_macd_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day19_macd_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day19_macd_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 417,
+          "asset_id": "advanced-core-d19-macd를-이용한-중기-추세-판단-2-2-주의할-점",
+          "track": "advanced_core",
+          "day": 19,
+          "title": "주의할 점"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_box_range_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/box_range.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/box_range.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/box_range.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 430,
+          "asset_id": "advanced-core-d21-박스권-상단-돌파-매매-1-2-박스권이란-무엇일까",
+          "track": "advanced_core",
+          "day": 21,
+          "title": "박스권이란 무엇일까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_box_breakout_top_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/box_breakout_top.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/box_breakout_top.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/box_breakout_top.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 431,
+          "asset_id": "advanced-core-d21-박스권-상단-돌파-매매-2-2-상단-돌파-매매-원리",
+          "track": "advanced_core",
+          "day": 21,
+          "title": "상단 돌파 매매 원리"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_box_buy_low_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/box_buy_low.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/box_buy_low.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/box_buy_low.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 432,
+          "asset_id": "advanced-core-d21-박스권-하단-매수-전략-1-2-하단-매수-전략이란",
+          "track": "advanced_core",
+          "day": 21,
+          "title": "하단 매수 전략이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day21_box_turtle_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day21_box_turtle_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day21_box_turtle_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day21_box_turtle_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 433,
+          "asset_id": "advanced-core-d21-박스권-하단-매수-전략-2-2-주의할-점",
+          "track": "advanced_core",
+          "day": 21,
+          "title": "주의할 점"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_fake_breakout_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/fake_breakout.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/fake_breakout.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/fake_breakout.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 434,
+          "asset_id": "advanced-core-d21-페이크-돌파-구분법-1-2-페이크-돌파란",
+          "track": "advanced_core",
+          "day": 21,
+          "title": "페이크 돌파란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_fake_breakout_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/fake_breakout.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/fake_breakout.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/fake_breakout.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 435,
+          "asset_id": "advanced-core-d21-페이크-돌파-구분법-2-2-구분하는-방법",
+          "track": "advanced_core",
+          "day": 21,
+          "title": "구분하는 방법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_box_target_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/box_target.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/box_target.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/box_target.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 436,
+          "asset_id": "advanced-core-d21-박스-높이-목표가-설정-1-2-목표가-계산-방법",
+          "track": "advanced_core",
+          "day": 21,
+          "title": "목표가 계산 방법"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_chart_reuse_box_target_svg",
+      "visual_type": "chart_asset",
+      "local_source_path": "real_images/chart_reuse/box_target.svg.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/chart_reuse/box_target.svg.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/chart_reuse/box_target.svg.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 437,
+          "asset_id": "advanced-core-d21-박스-높이-목표가-설정-2-2-실전-예시",
+          "track": "advanced_core",
+          "day": 21,
+          "title": "실전 예시"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day22_routine_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day22_routine_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day22_routine_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day22_routine_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 446,
+          "asset_id": "advanced-core-d22-장-전-후-루틴-예시-3-3-왜-루틴이-중요할까",
+          "track": "advanced_core",
+          "day": 22,
+          "title": "왜 루틴이 중요할까?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day23_loss_plan_ant_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day23_loss_plan_ant_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day23_loss_plan_ant_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day23_loss_plan_ant_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 451,
+          "asset_id": "advanced-core-d23-손실-회피-편향-극복법-1-2-손실-회피-편향이란",
+          "track": "advanced_core",
+          "day": 23,
+          "title": "손실 회피 편향이란?"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day24_sentiment_fox_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day24_sentiment_fox_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day24_sentiment_fox_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day24_sentiment_fox_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 459,
+          "asset_id": "advanced-core-d24-vix-지수-설명-2-5-vix-상승의-의미",
+          "track": "advanced_core",
+          "day": 24,
+          "title": "VIX 상승의 의미"
+        }
+      ]
+    },
+    {
+      "asset_key": "real_images_advanced_character_day25_portfolio_dolphin_generated_20260509",
+      "visual_type": "character_raster",
+      "local_source_path": "real_images/advanced_character/day25_portfolio_dolphin_generated_20260509.png",
+      "asset_exists": true,
+      "target_public_path": "/education-assets/real_images/advanced_character/day25_portfolio_dolphin_generated_20260509.png",
+      "target_image_url": "https://static.uniport.app/education-assets/real_images/advanced_character/day25_portfolio_dolphin_generated_20260509.png",
+      "content_type": "image/png",
+      "used_by": [
+        {
+          "idx": 463,
+          "asset_id": "advanced-core-d25-포트폴리오-분산-투자-원리-1-2-분산-투자가-중요한-이유",
+          "track": "advanced_core",
+          "day": 25,
+          "title": "분산 투자가 중요한 이유"
+        }
+      ]
+    }
+  ]
+}
