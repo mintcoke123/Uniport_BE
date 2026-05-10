@@ -16,6 +16,8 @@ import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
+import com.uniport.service.importer.AssetMasterImportService;
+import com.uniport.service.importer.ImportResult;
 import com.uniport.websocket.PriceBroadcaster;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -57,6 +59,7 @@ public class AdminController {
     private final VoteService voteService;
     private final PriceBroadcaster priceBroadcaster;
     private final GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase;
+    private final AssetMasterImportService assetMasterImportService;
 
     public AdminController(AuthService authService, UserRepository userRepository,
                            OrderRepository orderRepository, HoldingRepository holdingRepository,
@@ -64,7 +67,8 @@ public class AdminController {
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
                            MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService, VoteService voteService,
                            PriceBroadcaster priceBroadcaster,
-                           GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase) {
+                           GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase,
+                           AssetMasterImportService assetMasterImportService) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
@@ -78,6 +82,7 @@ public class AdminController {
         this.voteService = voteService;
         this.priceBroadcaster = priceBroadcaster;
         this.feedbackReportUseCase = feedbackReportUseCase;
+        this.assetMasterImportService = assetMasterImportService;
     }
 
     private User requireAdmin(String authorization) {
@@ -110,6 +115,41 @@ public class AdminController {
         Map<String, List<String>> body = new HashMap<>();
         summary.forEach((sessionId, codes) -> body.put(sessionId, new ArrayList<>(codes)));
         return ResponseEntity.ok(body);
+    }
+
+    /** 전체 종목 검색용 국내/미국 종목 마스터를 수동 갱신. 관리자 전용. */
+    @PostMapping("/assets/import/all")
+    public ResponseEntity<Map<String, Object>> importAllAssets(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        requireAdmin(authorization);
+        try {
+            AssetMasterImportService.CombinedImportResult result = assetMasterImportService.importAll();
+            return ResponseEntity.ok(combinedImportResponse("all", result));
+        } catch (Exception e) {
+            throw new ApiException("종목 마스터 import에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /** 국내 KRX 종목 마스터를 수동 갱신. 관리자 전용. */
+    @PostMapping("/assets/import/domestic")
+    public ResponseEntity<Map<String, Object>> importDomesticAssets(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        requireAdmin(authorization);
+        try {
+            ImportResult result = assetMasterImportService.importDomestic();
+            return ResponseEntity.ok(singleImportResponse("domestic", result));
+        } catch (Exception e) {
+            throw new ApiException("국내 종목 마스터 import에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /** 미국 종목 마스터를 수동 갱신. 관리자 전용. */
+    @PostMapping("/assets/import/us")
+    public ResponseEntity<Map<String, Object>> importUsAssets(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        requireAdmin(authorization);
+        ImportResult result = assetMasterImportService.importUs();
+        return ResponseEntity.ok(singleImportResponse("us", result));
     }
 
     /** §10-1: 대회 목록 (관리자용). DB에 저장된 대회 반환. SISU-admin도 팀 순위 드롭다운용으로 조회 가능. */
@@ -352,6 +392,35 @@ public class AdminController {
         matchingRoomMemberRepository.deleteByUser_Id(userId);
         userRepository.deleteById(userId);
         return ResponseEntity.ok(Map.of("success", true, "message", "Deleted"));
+    }
+
+    private static Map<String, Object> combinedImportResponse(
+            String scope,
+            AssetMasterImportService.CombinedImportResult result) {
+        return mapOf(
+                "success", true,
+                "scope", scope,
+                "domestic", importResultMap(result.domestic()),
+                "us", importResultMap(result.us()),
+                "total", importResultMap(result.total())
+        );
+    }
+
+    private static Map<String, Object> singleImportResponse(String scope, ImportResult result) {
+        return mapOf(
+                "success", true,
+                "scope", scope,
+                "result", importResultMap(result),
+                "total", importResultMap(result)
+        );
+    }
+
+    private static Map<String, Object> importResultMap(ImportResult result) {
+        return mapOf(
+                "inserted", result.getInserted(),
+                "updated", result.getUpdated(),
+                "skipped", result.getSkipped()
+        );
     }
 
     @SuppressWarnings("unchecked")
