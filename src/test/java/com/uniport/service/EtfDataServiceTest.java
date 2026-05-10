@@ -559,7 +559,8 @@ class EtfDataServiceTest {
         EtfAnalysisReportResponseDTO report = new ObjectMapper()
                 .readValue(captor.getValue().getReportJson(), EtfAnalysisReportResponseDTO.class);
         assertEquals("QUARTERLY", report.getMetadata().getRebalancePolicy());
-        assertEquals("asset_price_daily", report.getMetadata().getPriceCachePolicy());
+        assertEquals("none", report.getMetadata().getPriceCachePolicy());
+        assertEquals("Yahoo Finance chart API with synthetic fallback", report.getMetadata().getPriceSource());
         assertEquals("fx_rate_daily", report.getMetadata().getFxCachePolicy());
         assertEquals(true, report.getMetadata().getAssumptions().stream()
                 .anyMatch(value -> value.contains("transaction fee") && value.contains("slippage")));

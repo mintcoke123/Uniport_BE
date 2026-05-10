@@ -3,7 +3,6 @@ package com.uniport.service.backtest;
 import com.uniport.entity.AssetPriceDaily;
 import com.uniport.repository.AssetPriceDailyRepository;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -14,7 +13,6 @@ import java.util.List;
 import java.util.Locale;
 
 @Service
-@Primary
 public class CachedFallbackHistoricalPriceProvider implements HistoricalPriceProvider {
 
     private final AssetPriceDailyRepository assetPriceDailyRepository;

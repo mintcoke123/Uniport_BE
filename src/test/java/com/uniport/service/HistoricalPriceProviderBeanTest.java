@@ -6,8 +6,10 @@ import com.uniport.service.backtest.CachedFallbackHistoricalPriceProvider;
 import com.uniport.service.backtest.FxRateProvider;
 import com.uniport.service.backtest.HistoricalPriceProvider;
 import com.uniport.service.backtest.KisHistoricalPriceProvider;
+import com.uniport.service.backtest.YahooHistoricalPriceProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.web.client.RestTemplate;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
@@ -21,16 +23,18 @@ class HistoricalPriceProviderBeanTest {
             .withBean(AssetPriceDailyRepository.class, () -> mock(AssetPriceDailyRepository.class))
             .withBean(AssetMasterRepository.class, () -> mock(AssetMasterRepository.class))
             .withBean(KisApiService.class, () -> mock(KisApiService.class))
+            .withBean(RestTemplate.class, () -> mock(RestTemplate.class))
             .withBean(FxRateProvider.class, () -> (currency, date) -> BigDecimal.ONE)
+            .withBean(YahooHistoricalPriceProvider.class)
             .withBean(CachedFallbackHistoricalPriceProvider.class)
             .withBean(KisHistoricalPriceProvider.class)
             .withBean(AssetBacktestVerificationService.class)
             .withPropertyValues("backtest.price-fallback.enabled=true");
 
     @Test
-    void historicalPriceProviderBeanDefaultsToCachedFallbackImplementation() {
+    void historicalPriceProviderBeanDefaultsToYahooOnDemandImplementation() {
         contextRunner.run(context ->
-                assertInstanceOf(CachedFallbackHistoricalPriceProvider.class, context.getBean(HistoricalPriceProvider.class)));
+                assertInstanceOf(YahooHistoricalPriceProvider.class, context.getBean(HistoricalPriceProvider.class)));
     }
 
     @Test
