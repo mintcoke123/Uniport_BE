@@ -10,6 +10,7 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
   EDUCATION_ASSET_SOURCE_ROOT=/path/to/KMP_DEV_HANDOFF_LIGHT_20260509 \\
   EDUCATION_ASSET_BUCKET=<r2-bucket> \\
   EDUCATION_ASSET_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com \\
+  EDUCATION_ASSET_URL_STYLE=virtual-host \\
   AWS_ACCESS_KEY_ID=<key> AWS_SECRET_ACCESS_KEY=<secret> \\
   node scripts/upload-education-assets-r2.mjs
 
@@ -24,6 +25,7 @@ Optional:
   EDUCATION_ASSET_UPLOAD_MANIFEST=src/main/resources/education/backend_asset_upload_manifest.json
   EDUCATION_ASSET_PUBLIC_BASE_URL or UNIPORT_EDU_ASSET_BASE_URL
   EDUCATION_ASSET_CACHE_CONTROL="public, max-age=31536000, immutable"
+  EDUCATION_ASSET_URL_STYLE=path or virtual-host
   EDUCATION_ASSET_DRY_RUN=1
   EDUCATION_ASSET_VERIFY_REMOTE=1
 `);
@@ -55,6 +57,7 @@ const secretAccessKey = dryRun ? "" : firstEnv(
 const sessionToken = firstOptionalEnv("AWS_SESSION_TOKEN", "EDUCATION_ASSET_SESSION_TOKEN");
 const cacheControl = env.EDUCATION_ASSET_CACHE_CONTROL || "public, max-age=31536000, immutable";
 const verifyRemote = env.EDUCATION_ASSET_VERIFY_REMOTE === "1";
+const urlStyle = (env.EDUCATION_ASSET_URL_STYLE || env.R2_URL_STYLE || "path").trim();
 
 if (!fs.existsSync(manifestPath)) {
   fail(`Manifest not found: ${manifestPath}`);
@@ -102,7 +105,7 @@ for (const asset of uniqueAssets) {
   }
 
   const body = fs.readFileSync(sourcePath);
-  const targetUrl = new URL(`${endpoint}/${encodeS3Path(bucket)}/${encodeS3Path(objectKey)}`);
+  const targetUrl = objectUrlFor(endpoint, bucket, objectKey, urlStyle);
   const headers = signedPutHeaders({
     accessKeyId,
     secretAccessKey,
@@ -205,6 +208,17 @@ function encodeS3Path(value) {
     .filter(Boolean)
     .map((segment) => encodeURIComponent(segment).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`))
     .join("/");
+}
+
+function objectUrlFor(endpoint, bucket, objectKey, style) {
+  const parsedEndpoint = new URL(endpoint);
+  if (style === "virtual-host") {
+    return new URL(`${parsedEndpoint.protocol}//${bucket}.${parsedEndpoint.host}/${encodeS3Path(objectKey)}`);
+  }
+  if (style !== "path") {
+    fail(`Unsupported EDUCATION_ASSET_URL_STYLE: ${style}`);
+  }
+  return new URL(`${endpoint}/${encodeS3Path(bucket)}/${encodeS3Path(objectKey)}`);
 }
 
 function signedPutHeaders({ accessKeyId, secretAccessKey, sessionToken, url, body, contentType, cacheControl }) {

@@ -107,3 +107,13 @@ uniport:
   education:
     seed:
       force-refresh: ${UNIPORT_EDUCATION_SEED_FORCE_REFRESH:false}
+    assets:
+      bucket:
+        endpoint: ${UNIPORT_EDU_BUCKET_ENDPOINT:}
+        name: ${UNIPORT_EDU_BUCKET_NAME:}
+        access-key-id: ${UNIPORT_EDU_BUCKET_ACCESS_KEY_ID:}
+        secret-access-key: ${UNIPORT_EDU_BUCKET_SECRET_ACCESS_KEY:}
+        session-token: ${UNIPORT_EDU_BUCKET_SESSION_TOKEN:}
+        region: ${UNIPORT_EDU_BUCKET_REGION:auto}
+        url-style: ${UNIPORT_EDU_BUCKET_URL_STYLE:virtual-host}
+        presign-ttl-seconds: ${UNIPORT_EDU_BUCKET_PRESIGN_TTL_SECONDS:3600}
