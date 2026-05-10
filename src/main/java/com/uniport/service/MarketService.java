@@ -23,11 +23,14 @@ public class MarketService {
 
     private final KisApiService kisApiService;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
     public MarketService(KisApiService kisApiService,
-                         @Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
+                         @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
+                         StockVisualAssetResolver stockVisualAssetResolver) {
         this.kisApiService = kisApiService;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     public List<StockPriceDTO> getVolumeRank() {
@@ -139,15 +142,23 @@ public class MarketService {
             }
         }
         return list.stream()
-                .map(p -> MarketStockItemDTO.builder()
-                        .id(parseStockId(p.getStockCode()))
-                        .name(p.getStockName() != null ? p.getStockName() : "종목_" + p.getStockCode())
-                        .code(p.getStockCode())
-                        .currentPrice(p.getCurrentPrice() != null ? p.getCurrentPrice() : BigDecimal.ZERO)
-                        .change(p.getChangeAmount() != null ? p.getChangeAmount() : BigDecimal.ZERO)
-                        .changeRate(p.getChangeRate() != null ? p.getChangeRate() : BigDecimal.ZERO)
-                        .logoColor(DEFAULT_LOGO_COLOR)
-                        .build())
+                .map(p -> {
+                    String stockName = p.getStockName() != null ? p.getStockName() : "종목_" + p.getStockCode();
+                    String market = p.getMarket() != null && !p.getMarket().isBlank() ? p.getMarket() : "KRX";
+                    String logoUrl = null;
+                    return MarketStockItemDTO.builder()
+                            .id(parseStockId(p.getStockCode()))
+                            .name(stockName)
+                            .code(p.getStockCode())
+                            .market(market)
+                            .logoUrl(logoUrl)
+                            .visual(stockVisualAssetResolver.resolve(market, p.getStockCode(), stockName, logoUrl))
+                            .currentPrice(p.getCurrentPrice() != null ? p.getCurrentPrice() : BigDecimal.ZERO)
+                            .change(p.getChangeAmount() != null ? p.getChangeAmount() : BigDecimal.ZERO)
+                            .changeRate(p.getChangeRate() != null ? p.getChangeRate() : BigDecimal.ZERO)
+                            .logoColor(DEFAULT_LOGO_COLOR)
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
 

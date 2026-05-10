@@ -21,6 +21,15 @@ public class GroupInsightConsensusDTO {
     @Schema(example = "엔비디아", requiredMode = Schema.RequiredMode.REQUIRED)
     private String stockName;
 
+    @Schema(example = "US")
+    private String market;
+
+    @Schema(example = "https://cdn.example.com/nvda.png")
+    private String logoUrl;
+
+    @Schema(implementation = StockVisualDTO.class)
+    private StockVisualDTO visual;
+
     @Schema(example = "92", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer confidenceRate;
 

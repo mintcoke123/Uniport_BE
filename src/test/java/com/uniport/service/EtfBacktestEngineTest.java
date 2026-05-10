@@ -58,6 +58,41 @@ class EtfBacktestEngineTest {
         assertEquals(0, BigDecimal.valueOf(-25.0).compareTo(result.maxDrawdownPercent()));
     }
 
+    @Test
+    void runBacktest_respectsRebalancePolicyCadence() {
+        Map<String, List<BacktestPricePoint>> prices = Map.of(
+                "KRX_A", List.of(
+                        point("2026-01-02", "100"),
+                        point("2026-02-02", "200"),
+                        point("2026-04-02", "200")
+                ),
+                "KRX_B", List.of(
+                        point("2026-01-02", "100"),
+                        point("2026-02-02", "100"),
+                        point("2026-04-02", "200")
+                )
+        );
+
+        assertEquals(0, new BigDecimal("225.00").compareTo(runWithPolicy("MONTHLY", prices).finalNavKrw()));
+        assertEquals(0, new BigDecimal("200.00").compareTo(runWithPolicy("QUARTERLY", prices).finalNavKrw()));
+        assertEquals(0, new BigDecimal("200.00").compareTo(runWithPolicy("SEMI_ANNUAL", prices).finalNavKrw()));
+        assertEquals(0, new BigDecimal("200.00").compareTo(runWithPolicy("NONE", prices).finalNavKrw()));
+    }
+
+    private BacktestResult runWithPolicy(String policy, Map<String, List<BacktestPricePoint>> prices) {
+        return engine.run(BacktestRequest.builder()
+                .principalAmountKrw(BigDecimal.valueOf(100))
+                .transactionFeeRate(BigDecimal.ZERO)
+                .slippageRate(BigDecimal.ZERO)
+                .rebalancePolicy(policy)
+                .holdings(List.of(
+                        new BacktestHolding("KRX_A", "A", BigDecimal.valueOf(50)),
+                        new BacktestHolding("KRX_B", "B", BigDecimal.valueOf(50))
+                ))
+                .priceSeriesBySecurityId(prices)
+                .build());
+    }
+
     private BacktestPricePoint point(String date, String adjustedCloseKrw) {
         return new BacktestPricePoint(LocalDate.parse(date), new BigDecimal(adjustedCloseKrw));
     }

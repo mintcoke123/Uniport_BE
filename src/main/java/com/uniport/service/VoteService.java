@@ -60,6 +60,7 @@ public class VoteService {
     private final KisApiService kisApiService;
     private final ChatService chatService;
     private final GroupChatBroadcaster groupChatBroadcaster;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public VoteService(VoteRepository voteRepository,
@@ -71,7 +72,8 @@ public class VoteService {
                        PriceCache priceCache,
                        KisApiService kisApiService,
                        ChatService chatService,
-                       GroupChatBroadcaster groupChatBroadcaster) {
+                       GroupChatBroadcaster groupChatBroadcaster,
+                       StockVisualAssetResolver stockVisualAssetResolver) {
         this.voteRepository = voteRepository;
         this.voteParticipantRepository = voteParticipantRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
@@ -82,6 +84,7 @@ public class VoteService {
         this.kisApiService = kisApiService;
         this.chatService = chatService;
         this.groupChatBroadcaster = groupChatBroadcaster;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     @Transactional
@@ -214,6 +217,9 @@ public class VoteService {
         map.put("type", o.getOrderType() == OrderType.BUY ? "매수" : "매도");
         map.put("stockName", null);
         map.put("stockCode", o.getStockCode() != null ? o.getStockCode() : "");
+        map.put("market", "KRX");
+        map.put("logoUrl", null);
+        map.put("visual", stockVisualAssetResolver.resolve("KRX", o.getStockCode(), null, null));
         map.put("quantity", o.getQuantity());
         map.put("proposedPrice", o.getPrice());
         map.put("executionPrice", o.getPrice());
@@ -237,6 +243,9 @@ public class VoteService {
         map.put("type", v.getType());
         map.put("stockName", v.getStockName());
         map.put("stockCode", v.getStockCode() != null ? v.getStockCode() : "");
+        map.put("market", "KRX");
+        map.put("logoUrl", null);
+        map.put("visual", stockVisualAssetResolver.resolve("KRX", v.getStockCode(), v.getStockName(), null));
         map.put("proposerId", v.getProposerId());
         map.put("proposerName", v.getProposerName());
         map.put("quantity", v.getQuantity());

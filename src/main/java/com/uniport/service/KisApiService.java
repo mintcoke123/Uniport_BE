@@ -94,6 +94,7 @@ public class KisApiService {
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final PriceCache priceCache;
     private final KeyPool keyPool;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
     /** HTTP 현재가 조회 결과 캐시(종목코드 -> (DTO, 만료시각)). 시장가 고정 구간에서 동일 가격 재사용. */
     private final ConcurrentHashMap<String, CachedHttpPriceEntry> httpPriceCache = new ConcurrentHashMap<>();
 
@@ -121,11 +122,13 @@ public class KisApiService {
     public KisApiService(RestTemplate restTemplate,
                          @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
                          PriceCache priceCache,
-                         @Lazy KeyPool keyPool) {
+                         @Lazy KeyPool keyPool,
+                         StockVisualAssetResolver stockVisualAssetResolver) {
         this.restTemplate = restTemplate;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.priceCache = priceCache;
         this.keyPool = keyPool;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     private String getBaseUrl() {
@@ -553,10 +556,16 @@ public class KisApiService {
         return "종목_" + stockCode;
     }
 
-    private static StockPriceDTO mapPriceSnapshotToStockPriceDTO(String stockCode, PriceSnapshot sn) {
+    private StockPriceDTO mapPriceSnapshotToStockPriceDTO(String stockCode, PriceSnapshot sn) {
+        String stockName = "종목_" + stockCode;
+        String market = "KRX";
+        String logoUrl = null;
         return StockPriceDTO.builder()
                 .stockCode(stockCode)
-                .stockName("종목_" + stockCode)
+                .stockName(stockName)
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisualAssetResolver.resolve(market, stockCode, stockName, logoUrl))
                 .currentPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
                 .changeAmount(sn.getChange() != null ? sn.getChange() : BigDecimal.ZERO)
                 .changeRate(sn.getChangeRate() != null ? sn.getChangeRate() : BigDecimal.ZERO)
@@ -582,9 +591,14 @@ public class KisApiService {
         if (volume == null) {
             volume = 0L;
         }
+        String market = "KRX";
+        String logoUrl = null;
         return StockPriceDTO.builder()
                 .stockCode(stockCode)
                 .stockName(stockName)
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisualAssetResolver.resolve(market, stockCode, stockName, logoUrl))
                 .currentPrice(currentPrice)
                 .changeAmount(changeAmount)
                 .changeRate(changeRate)
@@ -874,9 +888,14 @@ public class KisApiService {
     }
 
     private OrderResponseDTO placeOrderStub(String stockCode, int quantity, BigDecimal price, OrderType type) {
+        String market = "KRX";
+        String logoUrl = null;
         return OrderResponseDTO.builder()
                 .orderId(null)
                 .stockCode(stockCode)
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisualAssetResolver.resolve(market, stockCode, null, logoUrl))
                 .quantity(quantity)
                 .price(price)
                 .orderType(type)

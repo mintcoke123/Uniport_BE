@@ -15,6 +15,7 @@ import com.uniport.dto.CommunityPostsResponseDTO;
 import com.uniport.dto.CommunityReportRequestDTO;
 import com.uniport.dto.CommunityReportResponseDTO;
 import com.uniport.dto.InvestorSentimentDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.ManagedCommunityComment;
 import com.uniport.entity.ManagedCommunityPost;
 import com.uniport.entity.ManagedCommunityPostLike;
@@ -45,15 +46,18 @@ public class CommunityService {
     private final ManagedCommunityCommentRepository managedCommunityCommentRepository;
     private final ManagedCommunityPostLikeRepository managedCommunityPostLikeRepository;
     private final ManagedCommunityReportRepository managedCommunityReportRepository;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
     public CommunityService(ManagedCommunityPostRepository managedCommunityPostRepository,
                             ManagedCommunityCommentRepository managedCommunityCommentRepository,
                             ManagedCommunityPostLikeRepository managedCommunityPostLikeRepository,
-                            ManagedCommunityReportRepository managedCommunityReportRepository) {
+                            ManagedCommunityReportRepository managedCommunityReportRepository,
+                            StockVisualAssetResolver stockVisualAssetResolver) {
         this.managedCommunityPostRepository = managedCommunityPostRepository;
         this.managedCommunityCommentRepository = managedCommunityCommentRepository;
         this.managedCommunityPostLikeRepository = managedCommunityPostLikeRepository;
         this.managedCommunityReportRepository = managedCommunityReportRepository;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     @Transactional(readOnly = true)
@@ -478,6 +482,8 @@ public class CommunityService {
     }
 
     private CommunityPostSummaryDTO toSummary(ManagedCommunityPost post, User viewer) {
+        String market = marketFor(post.getStockCode());
+        String logoUrl = null;
         return CommunityPostSummaryDTO.builder()
                 .postId(postCursor(post))
                 .type(post.getType())
@@ -486,6 +492,9 @@ public class CommunityService {
                 .content(post.getContent())
                 .stockCode(post.getStockCode())
                 .stockName(post.getStockName())
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisual(post.getStockCode(), post.getStockName(), market, logoUrl))
                 .sentiment(post.getSentiment())
                 .likeCount(safeLikeCount(post))
                 .commentCount((int) managedCommunityCommentRepository.countByPost_Id(post.getId()))
@@ -496,6 +505,8 @@ public class CommunityService {
     }
 
     private CommunityPostDetailDTO toDetail(ManagedCommunityPost post, User viewer) {
+        String market = marketFor(post.getStockCode());
+        String logoUrl = null;
         return CommunityPostDetailDTO.builder()
                 .postId(postCursor(post))
                 .type(post.getType())
@@ -504,6 +515,9 @@ public class CommunityService {
                 .content(post.getContent())
                 .stockCode(post.getStockCode())
                 .stockName(post.getStockName())
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisual(post.getStockCode(), post.getStockName(), market, logoUrl))
                 .sentiment(post.getSentiment())
                 .likeCount(safeLikeCount(post))
                 .commentCount((int) managedCommunityCommentRepository.countByPost_Id(post.getId()))
@@ -539,6 +553,17 @@ public class CommunityService {
         return viewer != null
                 && viewer.getId() != null
                 && managedCommunityPostLikeRepository.existsByPost_IdAndUserId(post.getId(), viewer.getId());
+    }
+
+    private String marketFor(String stockCode) {
+        return stockCode == null || stockCode.isBlank() ? null : "KRX";
+    }
+
+    private StockVisualDTO stockVisual(String stockCode, String stockName, String market, String logoUrl) {
+        if (stockCode == null || stockCode.isBlank()) {
+            return null;
+        }
+        return stockVisualAssetResolver.resolve(market, stockCode, stockName, logoUrl);
     }
 
     private CommunityLikeResponseDTO buildLikeResponse(ManagedCommunityPost post, boolean liked) {

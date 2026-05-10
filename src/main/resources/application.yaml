@@ -79,6 +79,16 @@ stock:
       cron: ${STOCK_MASTER_IMPORT_CRON:0 30 7 * * *}
       zone: ${STOCK_MASTER_IMPORT_ZONE:Asia/Seoul}
 
+asset:
+  master:
+    us:
+      import:
+        enabled: ${US_ASSET_MASTER_IMPORT_ENABLED:true}
+        cron: ${US_ASSET_MASTER_IMPORT_CRON:0 45 7 * * *}
+        zone: ${US_ASSET_MASTER_IMPORT_ZONE:Asia/Seoul}
+        nasdaq-listed-url: ${US_ASSET_MASTER_NASDAQ_LISTED_URL:https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt}
+        other-listed-url: ${US_ASSET_MASTER_OTHER_LISTED_URL:https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt}
+
 # 시드/어드민 (env: UNIPORT_ADMIN_*, UNIPORT_SISU_ADMIN_*, UNIPORT_SEED_TEST_USER_ENABLED)
 uniport:
   admin:

@@ -73,15 +73,18 @@ public class EducationV1Service {
     private final EducationOverviewRepository educationOverviewRepository;
     private final EducationCardRepository educationCardRepository;
     private final EducationQuizRepository educationQuizRepository;
+    private final PointLedgerService pointLedgerService;
 
     public EducationV1Service(LearningUserStateRepository learningUserStateRepository,
                               EducationOverviewRepository educationOverviewRepository,
                               EducationCardRepository educationCardRepository,
-                              EducationQuizRepository educationQuizRepository) {
+                              EducationQuizRepository educationQuizRepository,
+                              PointLedgerService pointLedgerService) {
         this.learningUserStateRepository = learningUserStateRepository;
         this.educationOverviewRepository = educationOverviewRepository;
         this.educationCardRepository = educationCardRepository;
         this.educationQuizRepository = educationQuizRepository;
+        this.pointLedgerService = pointLedgerService;
     }
 
     public Map<String, Object> getHome(User user) {
@@ -372,14 +375,25 @@ public class EducationV1Service {
         int earnedPoint = alreadyCompleted ? 0 : DAILY_REWARD_POINT;
         int earnedExp = alreadyCompleted ? 0 : DAILY_REWARD_EXP;
         if (!alreadyCompleted) {
+            ensureDayCompletionReady(course, state, day);
             completedDays.add(day);
             state.point += DAILY_REWARD_POINT;
-            state.level = Math.max(0, state.point / 300);
+            state.exp += DAILY_REWARD_EXP;
+            LearningProgressPolicy.Progress progress = LearningProgressPolicy.fromExp(state.exp);
+            state.level = progress.level();
+            pointLedgerService.earn(
+                    user,
+                    DAILY_REWARD_POINT,
+                    "EDUCATION_DAY_COMPLETE",
+                    educationRewardSourceId(user.getId(), course.id(), day),
+                    "교육 Day 완료 보상"
+            );
             updateStreak(state);
             int nextDay = Math.min(day + 1, TOTAL_DAYS);
             state.currentDayByCourse.put(course.id(), nextDay);
             persistState(user.getId(), state);
         }
+        LearningProgressPolicy.Progress progress = LearningProgressPolicy.fromExp(state.exp);
 
         Map<String, Object> response = linkedMap();
         response.put("content_version", CONTENT_VERSION);
@@ -392,8 +406,11 @@ public class EducationV1Service {
         response.put("reward", Map.of(
                 "exp", earnedExp,
                 "point", earnedPoint,
-                "total_exp", state.point,
-                "total_point", state.point));
+                "total_exp", state.exp,
+                "total_point", state.point,
+                "level", progress.level(),
+                "current_exp", progress.currentExp(),
+                "max_exp", progress.maxExp()));
         response.put("character_asset_key", "learning_complete_character_default");
         Map<String, Object> nextAction = linkedMap();
         nextAction.put("type", "roadmap");
@@ -402,6 +419,26 @@ public class EducationV1Service {
         nextAction.put("course_completed", completedDays.size() >= TOTAL_DAYS);
         response.put("next_action", nextAction);
         return response;
+    }
+
+    private void ensureDayCompletionReady(CourseDefinition course, EducationApiState state, int day) {
+        DayTarget target = resolveDayTarget(course, state, day);
+        String dayKey = dayKey(course.id(), day);
+        Set<Integer> completedCards = state.completedCardIdxByDay.getOrDefault(dayKey, Set.of());
+        Map<String, Integer> answeredQuizzes = state.quizAnswersByDay.getOrDefault(dayKey, Map.of());
+
+        boolean cardsComplete = safeList(educationCardRepository
+                .findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(target.track(), target.sectorName(), target.sourceDay()))
+                .stream()
+                .allMatch(card -> card.getSourceIdx() != null && completedCards.contains(card.getSourceIdx()));
+        boolean quizzesComplete = safeList(educationQuizRepository
+                .findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(target.track(), target.sectorName(), target.sourceDay()))
+                .stream()
+                .allMatch(quiz -> answeredQuizzes.containsKey(quizId(course, day, quiz)));
+
+        if (!cardsComplete || !quizzesComplete) {
+            throw new ApiException("DAY_PROGRESS_INCOMPLETE", HttpStatus.CONFLICT);
+        }
     }
 
     private Map<String, Object> toCourseSummary(CourseDefinition course, EducationApiState state) {
@@ -881,6 +918,8 @@ public class EducationV1Service {
         EducationApiState state = new EducationApiState();
         state.level = entity.getLevel() == null ? 0 : entity.getLevel();
         state.point = entity.getPoint() == null ? 0 : entity.getPoint();
+        state.exp = entity.getExp() == null ? state.point : entity.getExp();
+        state.level = LearningProgressPolicy.fromExp(state.exp).level();
         state.streakDays = entity.getStreakDays() == null ? 0 : entity.getStreakDays();
         state.lastCompletedDate = entity.getLastCompletedDate();
         state.currentDayByCourse.putAll(readObject(entity.getEducationCurrentDayJson(), MAP_STRING_INTEGER_TYPE, new HashMap<>()));
@@ -907,6 +946,7 @@ public class EducationV1Service {
                         .build());
         entity.setLevel(state.level);
         entity.setPoint(state.point);
+        entity.setExp(state.exp);
         entity.setStreakDays(state.streakDays);
         entity.setLastCompletedDate(state.lastCompletedDate);
         entity.setCurrentDayByCourseJson(defaultObjectJson(entity.getCurrentDayByCourseJson()));
@@ -931,6 +971,10 @@ public class EducationV1Service {
             state.streakDays = 1;
         }
         state.lastCompletedDate = today;
+    }
+
+    private String educationRewardSourceId(Long userId, String courseId, int day) {
+        return "user-" + userId + "-" + courseId + "-day-" + day;
     }
 
     private <T> T readObject(String json, TypeReference<T> typeReference, T defaultValue) {
@@ -1035,6 +1079,10 @@ public class EducationV1Service {
                 .toList();
     }
 
+    private <T> List<T> safeList(List<T> values) {
+        return values == null ? List.of() : values;
+    }
+
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
     }
@@ -1065,8 +1113,9 @@ public class EducationV1Service {
     }
 
     private static class EducationApiState {
-        private int level;
+        private int level = 1;
         private int point;
+        private int exp;
         private int streakDays;
         private LocalDate lastCompletedDate;
         private final Map<String, Integer> currentDayByCourse = new HashMap<>();

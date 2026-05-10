@@ -19,6 +19,9 @@ public class EtfDiscoveryResponseDTO {
     @ArraySchema(schema = @Schema(implementation = EtfDiscoveryItemDTO.class))
     private List<EtfDiscoveryItemDTO> items;
 
+    @ArraySchema(schema = @Schema(example = "기술"))
+    private List<String> themes;
+
     @Schema(example = "8", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer totalCount;
 

@@ -18,6 +18,9 @@ public class StockPriceDTO {
 
     private String stockCode;
     private String stockName;
+    private String market;
+    private String logoUrl;
+    private StockVisualDTO visual;
     private BigDecimal currentPrice;
     private BigDecimal changeAmount;   // 전일 대비 변동 금액
     private BigDecimal changeRate;    // 변동률 (%)

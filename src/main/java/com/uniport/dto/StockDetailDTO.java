@@ -18,6 +18,9 @@ public class StockDetailDTO {
     private Long id;
     private String name;
     private String code;
+    private String market;
+    private String logoUrl;
+    private StockVisualDTO visual;
     private BigDecimal currentPrice;
     private BigDecimal change;
     private BigDecimal changeRate;

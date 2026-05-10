@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Objects;
@@ -22,11 +23,16 @@ public class EtfBacktestEngine {
 
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
     private static final double SQRT_TRADING_DAYS = Math.sqrt(252.0);
+    private static final String REBALANCE_MONTHLY = "MONTHLY";
+    private static final String REBALANCE_QUARTERLY = "QUARTERLY";
+    private static final String REBALANCE_SEMI_ANNUAL = "SEMI_ANNUAL";
+    private static final String REBALANCE_NONE = "NONE";
 
     public BacktestResult run(BacktestRequest request) {
         validate(request);
         BigDecimal principal = defaultPositive(request.getPrincipalAmountKrw(), BigDecimal.valueOf(100_000_000L));
         BigDecimal costRate = defaultZero(request.getTransactionFeeRate()).add(defaultZero(request.getSlippageRate()));
+        String rebalancePolicy = normalizeRebalancePolicy(request.getRebalancePolicy());
         List<BacktestHolding> holdings = request.getHoldings();
         Map<String, NavigableMap<LocalDate, BigDecimal>> priceMaps = normalizePriceMaps(request.getPriceSeriesBySecurityId());
         List<LocalDate> dates = collectDates(priceMaps);
@@ -40,14 +46,13 @@ public class EtfBacktestEngine {
         BigDecimal previousNav = null;
         BigDecimal peak = null;
         BigDecimal maxDrawdown = BigDecimal.ZERO;
-        YearMonth previousMonth = null;
+        LocalDate previousRebalanceDate = null;
         List<BigDecimal> returns = new ArrayList<>();
         List<BacktestNavPoint> navSeries = new ArrayList<>();
 
         for (LocalDate date : dates) {
             BigDecimal navBeforeRebalance = cash.add(positionValue(units, priceMaps, date));
-            YearMonth currentMonth = YearMonth.from(date);
-            boolean shouldRebalance = previousNav == null || !currentMonth.equals(previousMonth);
+            boolean shouldRebalance = shouldRebalance(date, previousRebalanceDate, previousNav, rebalancePolicy);
             BigDecimal nav = navBeforeRebalance;
 
             if (shouldRebalance) {
@@ -55,6 +60,7 @@ public class EtfBacktestEngine {
                 units = rebalanced.units();
                 cash = rebalanced.cash();
                 nav = cash.add(positionValue(units, priceMaps, date));
+                previousRebalanceDate = date;
             }
 
             if (previousNav != null && previousNav.compareTo(BigDecimal.ZERO) > 0) {
@@ -69,7 +75,6 @@ public class EtfBacktestEngine {
             }
             navSeries.add(new BacktestNavPoint(date, nav.setScale(2, RoundingMode.HALF_UP)));
             previousNav = nav;
-            previousMonth = currentMonth;
         }
 
         BigDecimal finalNav = navSeries.get(navSeries.size() - 1).valueKrw();
@@ -164,6 +169,31 @@ public class EtfBacktestEngine {
         }
         Map.Entry<LocalDate, BigDecimal> entry = prices.floorEntry(date);
         return entry != null ? entry.getValue() : null;
+    }
+
+    private boolean shouldRebalance(LocalDate date,
+                                    LocalDate previousRebalanceDate,
+                                    BigDecimal previousNav,
+                                    String rebalancePolicy) {
+        if (previousNav == null || previousRebalanceDate == null) {
+            return true;
+        }
+        return switch (rebalancePolicy) {
+            case REBALANCE_NONE -> false;
+            case REBALANCE_QUARTERLY -> quarterIndex(date) != quarterIndex(previousRebalanceDate)
+                    || date.getYear() != previousRebalanceDate.getYear();
+            case REBALANCE_SEMI_ANNUAL -> halfYearIndex(date) != halfYearIndex(previousRebalanceDate)
+                    || date.getYear() != previousRebalanceDate.getYear();
+            default -> !YearMonth.from(date).equals(YearMonth.from(previousRebalanceDate));
+        };
+    }
+
+    private int quarterIndex(LocalDate date) {
+        return ((date.getMonthValue() - 1) / 3) + 1;
+    }
+
+    private int halfYearIndex(LocalDate date) {
+        return date.getMonthValue() <= 6 ? 1 : 2;
     }
 
     private Map<String, NavigableMap<LocalDate, BigDecimal>> normalizePriceMaps(Map<String, List<BacktestPricePoint>> seriesById) {
@@ -351,6 +381,16 @@ public class EtfBacktestEngine {
 
     private BigDecimal defaultPositive(BigDecimal value, BigDecimal defaultValue) {
         return value != null && value.compareTo(BigDecimal.ZERO) > 0 ? value : defaultValue;
+    }
+
+    private String normalizeRebalancePolicy(String value) {
+        String normalized = value == null || value.isBlank()
+                ? REBALANCE_MONTHLY
+                : value.trim().toUpperCase(Locale.ROOT);
+        if (!List.of(REBALANCE_MONTHLY, REBALANCE_QUARTERLY, REBALANCE_SEMI_ANNUAL, REBALANCE_NONE).contains(normalized)) {
+            throw new IllegalArgumentException("rebalancePolicy must be one of MONTHLY, QUARTERLY, SEMI_ANNUAL, NONE");
+        }
+        return normalized;
     }
 
     private void validate(BacktestRequest request) {

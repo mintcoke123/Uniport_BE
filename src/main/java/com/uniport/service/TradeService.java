@@ -43,16 +43,19 @@ public class TradeService {
     private final TeamAccountRepository teamAccountRepository;
     private final TeamHoldingRepository teamHoldingRepository;
     private final ChatService chatService;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
     public TradeService(OrderRepository orderRepository, KisApiService kisApiService,
                         TeamAccountRepository teamAccountRepository,
                         TeamHoldingRepository teamHoldingRepository,
-                        ChatService chatService) {
+                        ChatService chatService,
+                        StockVisualAssetResolver stockVisualAssetResolver) {
         this.orderRepository = orderRepository;
         this.kisApiService = kisApiService;
         this.teamAccountRepository = teamAccountRepository;
         this.teamHoldingRepository = teamHoldingRepository;
         this.chatService = chatService;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     /** 한국 시간 기준 거래 가능 여부. 09:00 ~ 15:30 미만만 허용. */
@@ -211,6 +214,10 @@ public class TradeService {
         return OrderResponseDTO.builder()
                 .orderId(order.getId())
                 .stockCode(order.getStockCode())
+                .stockName(request.getStockName())
+                .market("KRX")
+                .logoUrl(null)
+                .visual(stockVisualAssetResolver.resolve("KRX", order.getStockCode(), request.getStockName(), null))
                 .quantity(order.getQuantity())
                 .price(order.getPrice())
                 .orderType(order.getOrderType())
@@ -287,6 +294,9 @@ public class TradeService {
         return OrderResponseDTO.builder()
                 .orderId(order.getId())
                 .stockCode(order.getStockCode())
+                .market("KRX")
+                .logoUrl(null)
+                .visual(stockVisualAssetResolver.resolve("KRX", order.getStockCode(), null, null))
                 .quantity(order.getQuantity())
                 .price(order.getPrice())
                 .orderType(order.getOrderType())

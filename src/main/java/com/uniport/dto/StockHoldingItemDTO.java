@@ -15,7 +15,11 @@ import java.math.BigDecimal;
 public class StockHoldingItemDTO {
 
     private Long id;
+    private String stockCode;
     private String name;
+    private String market;
+    private String logoUrl;
+    private StockVisualDTO visual;
     private Integer quantity;
     private BigDecimal currentValue;
     private BigDecimal profitLoss;

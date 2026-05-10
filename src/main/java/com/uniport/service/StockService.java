@@ -37,6 +37,7 @@ public class StockService {
     private final StockMasterRepository stockMasterRepository;
     private final ManagedStockNewsService managedStockNewsService;
     private final CommunityService communityService;
+    private final StockVisualAssetResolver stockVisualAssetResolver;
 
     public StockService(KisApiService kisApiService,
                         HoldingRepository holdingRepository,
@@ -44,7 +45,8 @@ public class StockService {
                         @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
                         StockMasterRepository stockMasterRepository,
                         ManagedStockNewsService managedStockNewsService,
-                        CommunityService communityService) {
+                        CommunityService communityService,
+                        StockVisualAssetResolver stockVisualAssetResolver) {
         this.kisApiService = kisApiService;
         this.holdingRepository = holdingRepository;
         this.teamHoldingRepository = teamHoldingRepository;
@@ -52,6 +54,7 @@ public class StockService {
         this.stockMasterRepository = stockMasterRepository;
         this.managedStockNewsService = managedStockNewsService;
         this.communityService = communityService;
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
     }
 
     private static Long parseTeamId(User user) {
@@ -100,6 +103,8 @@ public class StockService {
 
         StockPriceDTO price = getStockPrice(code);
         String displayName = resolveDisplayName(code, price.getStockName());
+        String market = resolveMarket(code, price.getMarket());
+        String logoUrl = null;
         MyHoldingDTO myHolding = resolveMyHolding(user, code, price);
 
         BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
@@ -134,9 +139,9 @@ public class StockService {
                 .filter(text -> text != null && !text.isBlank())
                 .orElseGet(() -> stockMasterRepository.findById(code)
                         .map(master -> {
-                            String market = master.getMarket() != null ? master.getMarket().trim() : "";
+                            String masterMarket = master.getMarket() != null ? master.getMarket().trim() : "";
                             String name = master.getNameKr() != null ? master.getNameKr().trim() : displayName;
-                            return market.isBlank() ? name : name + " (" + market + ")";
+                            return masterMarket.isBlank() ? name : name + " (" + masterMarket + ")";
                         })
                         .orElse(displayName));
 
@@ -147,6 +152,9 @@ public class StockService {
                 .id(id != null ? id : 0L)
                 .name(displayName)
                 .code(code)
+                .market(market)
+                .logoUrl(logoUrl)
+                .visual(stockVisualAssetResolver.resolve(market, code, displayName, logoUrl))
                 .currentPrice(currentPrice)
                 .change(price.getChangeAmount() != null ? price.getChangeAmount() : BigDecimal.ZERO)
                 .changeRate(price.getChangeRate() != null ? price.getChangeRate() : BigDecimal.ZERO)
@@ -204,5 +212,12 @@ public class StockService {
                     .orElse("종목_" + code);
         }
         return displayName;
+    }
+
+    private String resolveMarket(String code, String fallbackMarket) {
+        return stockMasterRepository.findById(code)
+                .map(master -> master.getMarket() != null ? master.getMarket().trim() : "")
+                .filter(market -> !market.isBlank())
+                .orElse(fallbackMarket != null && !fallbackMarket.isBlank() ? fallbackMarket : "KRX");
     }
 }

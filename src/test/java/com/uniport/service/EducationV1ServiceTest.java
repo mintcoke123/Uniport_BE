@@ -34,6 +34,8 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,6 +53,9 @@ class EducationV1ServiceTest {
     @Mock
     private EducationQuizRepository educationQuizRepository;
 
+    @Mock
+    private PointLedgerService pointLedgerService;
+
     private EducationV1Service service;
     private User user;
 
@@ -60,7 +65,8 @@ class EducationV1ServiceTest {
                 learningUserStateRepository,
                 educationOverviewRepository,
                 educationCardRepository,
-                educationQuizRepository);
+                educationQuizRepository,
+                pointLedgerService);
         user = User.builder().id(1L).studentId("20260001").password("pw").nickname("kmp").build();
     }
 
@@ -332,6 +338,7 @@ class EducationV1ServiceTest {
 
         Map<String, Object> first = service.completeCourseDay(user, "intro", 1, Map.of("last_step_id", "intro_d1_card_1"));
         Map<String, Object> second = service.completeCourseDay(user, "intro", 1, Map.of("last_step_id", "intro_d1_card_1"));
+        LearningUserStateEntity savedState = storedState.get();
 
         assertEquals("day_completion", first.get("template_type"));
         assertEquals("오늘도 정복 완료!", first.get("completion_title"));
@@ -348,8 +355,25 @@ class EducationV1ServiceTest {
         Map<String, Object> secondReward = (Map<String, Object>) second.get("reward");
         assertEquals(500, firstReward.get("point"));
         assertEquals(500, firstReward.get("total_point"));
+        assertEquals(500, firstReward.get("exp"));
+        assertEquals(500, firstReward.get("total_exp"));
+        assertEquals(2, firstReward.get("level"));
+        assertEquals(200, firstReward.get("current_exp"));
+        assertEquals(300, firstReward.get("max_exp"));
         assertEquals(0, secondReward.get("point"));
         assertEquals(500, secondReward.get("total_point"));
+        assertEquals(0, secondReward.get("exp"));
+        assertEquals(500, secondReward.get("total_exp"));
+        assertEquals(2, savedState.getLevel());
+        assertEquals(500, savedState.getPoint());
+        assertEquals(500, savedState.getExp());
+        verify(pointLedgerService, times(1)).earn(
+                user,
+                500,
+                "EDUCATION_DAY_COMPLETE",
+                "user-1-intro-day-1",
+                "교육 Day 완료 보상"
+        );
     }
 
     @Test
@@ -365,10 +389,31 @@ class EducationV1ServiceTest {
             savedState.set(entity);
             return entity;
         });
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of());
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of());
 
         service.completeCourseDay(user, "intro", 1, Map.of("last_step_id", "intro_d1_completion"));
 
         assertEquals(createdAt, savedState.get().getCreatedAt());
+    }
+
+    @Test
+    void dayCompletionRejectsIncompleteCardsAndQuizzes() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of(card(1, "placeholder", "인플레이션과 내 돈", "{}")));
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of(quiz(1)));
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.completeCourseDay(user, "intro", 1, Map.of("last_step_id", "intro_d1_completion"))
+        );
+
+        assertEquals("DAY_PROGRESS_INCOMPLETE", exception.getMessage());
+        assertEquals(HttpStatus.CONFLICT, exception.getStatus());
     }
 
     private LearningUserStateEntity stateWithSelectedSectors() {
@@ -391,8 +436,9 @@ class EducationV1ServiceTest {
     private LearningUserStateEntity existingLearningState() {
         return LearningUserStateEntity.builder()
                 .userId(1L)
-                .level(0)
+                .level(1)
                 .point(0)
+                .exp(0)
                 .streakDays(0)
                 .currentDayByCourseJson("{}")
                 .completedDaysByCourseJson("{}")

@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Getter
 @Builder
 @NoArgsConstructor
@@ -39,6 +41,18 @@ public class EtfAnalysisBacktestMetadataDTO {
 
     @Schema(example = "KIS_DOMESTIC_ADJUSTED_CLOSE", description = "가격 데이터 출처")
     private String priceSource;
+
+    @Schema(example = "asset_price_daily", description = "가격 캐시 정책")
+    private String priceCachePolicy;
+
+    @Schema(example = "fx_rate_daily", description = "환율 캐시 정책")
+    private String fxCachePolicy;
+
+    @Schema(description = "백테스트 계산 가정")
+    private List<String> assumptions;
+
+    @Schema(description = "백테스트 한계 및 데이터 주의사항")
+    private List<String> limitations;
 
     @Schema(example = "none", description = "MVP에서는 LLM을 호출하지 않습니다.")
     private String llmModel;

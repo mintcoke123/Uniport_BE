@@ -31,6 +31,8 @@ public class LearningUserStateEntity extends AuditableEntity {
     @Column(nullable = false)
     private Integer point;
 
+    private Integer exp;
+
     private Long activeCourseId;
 
     @Column(nullable = false)

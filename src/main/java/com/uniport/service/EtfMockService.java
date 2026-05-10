@@ -73,6 +73,12 @@ public class EtfMockService {
     private final AtomicInteger etfSequence = new AtomicInteger(103);
     private final AtomicInteger reportSequence = new AtomicInteger(301);
 
+    private final StockVisualAssetResolver stockVisualAssetResolver;
+
+    public EtfMockService(StockVisualAssetResolver stockVisualAssetResolver) {
+        this.stockVisualAssetResolver = stockVisualAssetResolver;
+    }
+
     public CustomEtfListResponseDTO getCustomEtfs(User user) {
         LinkedHashMap<String, CustomEtfState> etfs = getUserEtfs(user);
         List<CustomEtfSummaryDTO> items = etfs.values().stream()
@@ -241,13 +247,25 @@ public class EtfMockService {
                 .thumbnailUrl(state.thumbnailUrl())
                 .trend(buildDiscoveryTrend(safePeriod, state))
                 .holdings(state.holdings().stream()
-                        .map(holding -> EtfDiscoveryDetailHoldingDTO.builder()
-                                .name(holding.name())
-                                .symbol(holding.symbol())
-                                .weight(holding.weight())
-                                .changeRate(holding.changeRate())
-                                .logoUrl(holding.logoUrl())
-                                .build())
+                        .map(holding -> {
+                            String logoUrl = null;
+                            return EtfDiscoveryDetailHoldingDTO.builder()
+                                    .name(holding.name())
+                                    .symbol(holding.symbol())
+                                    .market(inferMarket(holding.symbol()))
+                                    .assetType("STOCK")
+                                    .currency("US".equals(inferMarket(holding.symbol())) ? "USD" : "KRW")
+                                    .weight(holding.weight())
+                                    .changeRate(holding.changeRate())
+                                    .logoUrl(logoUrl)
+                                    .visual(stockVisualAssetResolver.resolve(
+                                            inferMarket(holding.symbol()),
+                                            holding.symbol(),
+                                            holding.name(),
+                                            logoUrl
+                                    ))
+                                    .build();
+                        })
                         .toList())
                 .build();
     }
@@ -416,12 +434,22 @@ public class EtfMockService {
                 .items(state.items.stream()
                         .map(item -> {
                             StockMeta meta = STOCK_META.getOrDefault(item.stockId(), new StockMeta(item.stockId(), item.stockId(), item.stockId(), null));
+                            String logoUrl = null;
                             return CustomEtfHoldingDTO.builder()
                                     .stockId(item.stockId())
                                     .name(meta.name())
                                     .symbol(meta.symbol())
+                                    .market(inferMarket(item.stockId()))
+                                    .assetType("STOCK")
+                                    .currency("US".equals(inferMarket(item.stockId())) ? "USD" : "KRW")
                                     .weight(item.weight())
-                                    .logoUrl(meta.logoUrl())
+                                    .logoUrl(logoUrl)
+                                    .visual(stockVisualAssetResolver.resolve(
+                                            inferMarket(item.stockId()),
+                                            meta.symbol(),
+                                            meta.name(),
+                                            logoUrl
+                                    ))
                                     .build();
                         })
                         .toList())
@@ -449,8 +477,19 @@ public class EtfMockService {
                 .map(item -> {
                     StockMeta meta = STOCK_META.getOrDefault(item.stockId(), new StockMeta(item.stockId(), item.stockId(), item.stockId(), null));
                     return EtfAnalysisAllocationItemDTO.builder()
+                            .securityId(item.stockId())
                             .name(meta.name())
+                            .symbol(meta.symbol())
+                            .market(inferMarket(item.stockId()))
+                            .assetType("STOCK")
+                            .currency("US".equals(inferMarket(item.stockId())) ? "USD" : "KRW")
                             .weight(item.weight())
+                            .visual(stockVisualAssetResolver.resolve(
+                                    inferMarket(item.stockId()),
+                                    meta.symbol(),
+                                    meta.name(),
+                                    null
+                            ))
                             .build();
                 })
                 .toList();
@@ -642,6 +681,16 @@ public class EtfMockService {
                 .date(date.format(formatter))
                 .value(value)
                 .build();
+    }
+
+    private String inferMarket(String symbolOrStockId) {
+        if (symbolOrStockId != null) {
+            String normalized = symbolOrStockId.toUpperCase(Locale.ROOT);
+            if (normalized.startsWith("KRX_") || normalized.matches("\\d{6}")) {
+                return "KRX";
+            }
+        }
+        return "US";
     }
 
     private record StockMeta(String stockId, String name, String symbol, String logoUrl) {

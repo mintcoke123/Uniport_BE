@@ -27,4 +27,7 @@ public class StockSearchItemDTO {
 
     @Schema(example = "https://cdn.example.com/samsung.png")
     private String logoUrl;
+
+    @Schema(implementation = StockVisualDTO.class)
+    private StockVisualDTO visual;
 }

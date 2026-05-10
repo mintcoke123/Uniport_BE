@@ -1,6 +1,7 @@
 package com.uniport.controller;
 
 import com.uniport.config.FirebaseAuthenticatedUser;
+import com.uniport.dto.CustomEtfMutationResponseDTO;
 import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.dto.EtfDiscoveryDetailResponseDTO;
 import com.uniport.dto.EtfDiscoveryResponseDTO;
@@ -81,6 +82,24 @@ public class EtfDiscoveryController {
             @RequestParam(value = "period", required = false) String period) {
         User user = currentUserResolver.resolveNullable(principal, authorization);
         return ResponseEntity.ok(etfDataService.getDiscoveryDetail(etfId, period, user));
+    }
+
+    @PostMapping("/{etfId}/apply")
+    @Operation(summary = "인기 ETF를 내 포트폴리오에 적용", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "적용 성공",
+                    content = @Content(schema = @Schema(implementation = CustomEtfMutationResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 ETF",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<CustomEtfMutationResponseDTO> applyDiscoveryEtf(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String etfId) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(etfDataService.applyDiscoveryEtf(user, etfId));
     }
 
     @PostMapping("/{etfId}/favorite")

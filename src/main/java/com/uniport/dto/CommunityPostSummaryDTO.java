@@ -33,6 +33,15 @@ public class CommunityPostSummaryDTO {
     @Schema(example = "삼성전자")
     private String stockName;
 
+    @Schema(example = "KRX")
+    private String market;
+
+    @Schema(example = "https://cdn.example.com/samsung.png")
+    private String logoUrl;
+
+    @Schema(implementation = StockVisualDTO.class)
+    private StockVisualDTO visual;
+
     @Schema(example = "BULLISH")
     private String sentiment;
 

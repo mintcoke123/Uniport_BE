@@ -19,6 +19,15 @@ public class EtfDiscoveryDetailHoldingDTO {
     @Schema(example = "005930", requiredMode = Schema.RequiredMode.REQUIRED)
     private String symbol;
 
+    @Schema(example = "KOSPI", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String market;
+
+    @Schema(example = "STOCK", allowableValues = {"STOCK", "BOND", "CASH"})
+    private String assetType;
+
+    @Schema(example = "KRW", allowableValues = {"KRW", "USD"})
+    private String currency;
+
     @Schema(example = "100", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer weight;
 
@@ -27,4 +36,7 @@ public class EtfDiscoveryDetailHoldingDTO {
 
     @Schema(example = "https://cdn.example.com/lges.png")
     private String logoUrl;
+
+    @Schema(implementation = StockVisualDTO.class)
+    private StockVisualDTO visual;
 }

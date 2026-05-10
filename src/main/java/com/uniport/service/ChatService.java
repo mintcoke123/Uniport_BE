@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 public class ChatService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    public static final String TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT = "GROUP_INVESTMENT_FEEDBACK_REPORT";
 
     private final ChatMessageRepository chatMessageRepository;
     private final GroupChatBroadcaster groupChatBroadcaster;
@@ -148,6 +149,38 @@ public class ChatService {
         }
     }
 
+    /** 그룹 모의투자 종료 리포트 메시지. reportId 기준으로 방 안에서 1건만 유지한다. */
+    @Transactional
+    public ChatMessage saveFeedbackReportMessage(Long roomId, Long reportId, Map<String, Object> reportSnapshot) {
+        if (roomId == null) {
+            throw new IllegalArgumentException("roomId is required");
+        }
+        if (reportId == null) {
+            throw new IllegalArgumentException("reportId is required");
+        }
+        try {
+            List<ChatMessage> roomMessages = chatMessageRepository.findByRoomIdOrderByCreatedAtAsc(roomId);
+            for (ChatMessage message : roomMessages) {
+                if (isFeedbackReportMessageFor(message, reportId)) {
+                    return message;
+                }
+            }
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT);
+            payload.put("reportId", reportId);
+            payload.put("report", reportSnapshot != null ? reportSnapshot : Map.of("reportId", reportId));
+            String messageJson = OBJECT_MAPPER.writeValueAsString(payload);
+
+            ChatMessage msg = ChatMessage.of(roomId, 0L, "시스템", messageJson);
+            ChatMessage saved = chatMessageRepository.save(msg);
+            broadcastToGroup(roomId, saved);
+            return saved;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to save feedback report message", e);
+        }
+    }
+
     /** 저장된 메시지를 같은 방 WebSocket 연결된 클라이언트에 실시간 전달 (채팅·투표 공유 시) */
     private void broadcastToGroup(Long roomId, ChatMessage saved) {
         try {
@@ -168,7 +201,8 @@ public class ChatService {
                 try {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> parsed = OBJECT_MAPPER.readValue(msg, Map.class);
-                    if ("feedback".equals(parsed.get("type"))) return true;
+                    Object type = parsed.get("type");
+                    if ("feedback".equals(type) || TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT.equals(type)) return true;
                 } catch (Exception ignored) {
                 }
             }
@@ -216,6 +250,15 @@ public class ChatService {
                     map.put("tradeData", null);
                     return map;
                 }
+                if (TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT.equals(parsed.get("type"))) {
+                    map.put("type", TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT);
+                    map.put("reportId", parsed.get("reportId"));
+                    map.put("report", parsed.get("report"));
+                    map.put("chatDisabled", true);
+                    map.put("message", null);
+                    map.put("tradeData", null);
+                    return map;
+                }
             } catch (Exception ignored) {
             }
         }
@@ -223,5 +266,26 @@ public class ChatService {
         map.put("message", msg);
         map.put("tradeData", null);
         return map;
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean isFeedbackReportMessageFor(ChatMessage message, Long reportId) {
+        String value = message != null ? message.getMessage() : null;
+        if (value == null || !value.trim().startsWith("{")) {
+            return false;
+        }
+        try {
+            Map<String, Object> parsed = OBJECT_MAPPER.readValue(value, Map.class);
+            if (!TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT.equals(parsed.get("type"))) {
+                return false;
+            }
+            Object parsedReportId = parsed.get("reportId");
+            if (parsedReportId instanceof Number number) {
+                return number.longValue() == reportId;
+            }
+            return parsedReportId != null && reportId.toString().equals(String.valueOf(parsedReportId));
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 }

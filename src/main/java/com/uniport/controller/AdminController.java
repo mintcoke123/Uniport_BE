@@ -6,6 +6,7 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.OrderRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.AuthService;
@@ -14,6 +15,7 @@ import com.uniport.service.CompetitionService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
 import com.uniport.service.VoteService;
+import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
 import com.uniport.websocket.PriceBroadcaster;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +48,7 @@ public class AdminController {
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
     private final HoldingRepository holdingRepository;
+    private final MatchingRoomRepository matchingRoomRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final MatchingRoomService matchingRoomService;
     private final CompetitionService competitionService;
@@ -53,16 +56,20 @@ public class AdminController {
     private final ChatService chatService;
     private final VoteService voteService;
     private final PriceBroadcaster priceBroadcaster;
+    private final GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase;
 
     public AdminController(AuthService authService, UserRepository userRepository,
                            OrderRepository orderRepository, HoldingRepository holdingRepository,
+                           MatchingRoomRepository matchingRoomRepository,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
                            MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService, VoteService voteService,
-                           PriceBroadcaster priceBroadcaster) {
+                           PriceBroadcaster priceBroadcaster,
+                           GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
         this.holdingRepository = holdingRepository;
+        this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.matchingRoomService = matchingRoomService;
         this.competitionService = competitionService;
@@ -70,6 +77,7 @@ public class AdminController {
         this.chatService = chatService;
         this.voteService = voteService;
         this.priceBroadcaster = priceBroadcaster;
+        this.feedbackReportUseCase = feedbackReportUseCase;
     }
 
     private User requireAdmin(String authorization) {
@@ -224,6 +232,25 @@ public class AdminController {
         requireAdminOrSisuAdmin(authorization);
         Long groupId = parseRoomIdToGroupId(roomId);
         return ResponseEntity.ok(chatService.getMessages(groupId));
+    }
+
+    /** 그룹 모의투자 종료 후 피드백 리포트 생성/재조회. room status를 ended로 고정해 스케줄러와 동일한 기준을 만든다. */
+    @PostMapping("/matching-rooms/{roomId}/feedback-report")
+    public ResponseEntity<Map<String, Object>> generateFeedbackReport(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String roomId) {
+        requireAdminOrSisuAdmin(authorization);
+        Long groupId = parseRoomIdToGroupId(roomId);
+        var room = matchingRoomRepository.findById(groupId)
+                .orElseThrow(() -> new ApiException("방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if (!"ended".equalsIgnoreCase(room.getStatus())) {
+            room.setStatus("ended");
+        }
+        if (room.getEndedAt() == null) {
+            room.setEndedAt(java.time.Instant.now());
+        }
+        matchingRoomRepository.save(room);
+        return ResponseEntity.ok(feedbackReportUseCase.generateForRoom(groupId));
     }
 
     private static Long parseRoomIdToGroupId(String roomId) {

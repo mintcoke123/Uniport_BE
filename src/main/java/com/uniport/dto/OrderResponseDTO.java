@@ -21,6 +21,10 @@ public class OrderResponseDTO {
 
     private Long orderId;
     private String stockCode;
+    private String stockName;
+    private String market;
+    private String logoUrl;
+    private StockVisualDTO visual;
     private int quantity;
     private BigDecimal price;
     private OrderType orderType;

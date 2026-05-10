@@ -17,4 +17,22 @@ public interface StockMasterRepository extends JpaRepository<StockMaster, String
     @Query(value = "SELECT * FROM stock_master WHERE name_kr ILIKE CONCAT('%', :q, '%') ORDER BY name_kr ASC",
             nativeQuery = true)
     List<StockMaster> findByNameKrIlikeOrderByNameKrAsc(@Param("q") String q, Pageable pageable);
+
+    @Query(value = """
+            SELECT *
+            FROM stock_master
+            WHERE name_kr ILIKE CONCAT('%', :q, '%')
+               OR code ILIKE CONCAT('%', :q, '%')
+               OR market ILIKE CONCAT('%', :q, '%')
+            ORDER BY
+                CASE
+                    WHEN code ILIKE :q THEN 0
+                    WHEN name_kr ILIKE CONCAT(:q, '%') THEN 1
+                    ELSE 2
+                END,
+                market ASC,
+                name_kr ASC
+            """,
+            nativeQuery = true)
+    List<StockMaster> searchForEtfAssetCandidates(@Param("q") String q, Pageable pageable);
 }
