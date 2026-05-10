@@ -56,6 +56,7 @@ import com.uniport.service.backtest.EtfBacktestEngine;
 import com.uniport.service.backtest.HistoricalPriceProvider;
 import com.uniport.service.backtest.InsightFacts;
 import com.uniport.service.backtest.RuleBasedFeedback;
+import jakarta.annotation.PreDestroy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -74,6 +75,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 @Service
 public class EtfDataService {
@@ -98,6 +108,8 @@ public class EtfDataService {
     private static final int MAX_ASSET_SEARCH_SIZE = 30;
     private static final int ASSET_SEARCH_POOL_SIZE = 200;
     private static final int ON_DEMAND_VERIFICATION_LOOKBACK_DAYS = 45;
+    private static final int PRICE_FETCH_POOL_SIZE = 6;
+    private static final int PRICE_FETCH_TIMEOUT_SECONDS = 8;
     private static final String ASSET_TYPE_STOCK = "STOCK";
     private static final String ASSET_TYPE_BOND = "BOND";
     private static final String ASSET_TYPE_CASH = "CASH";
@@ -116,6 +128,7 @@ public class EtfDataService {
     private final EtfBacktestEngine etfBacktestEngine;
     private final EtfAiFeedbackService etfAiFeedbackService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final ExecutorService priceFetchExecutor = Executors.newFixedThreadPool(PRICE_FETCH_POOL_SIZE, priceFetchThreadFactory());
 
     public EtfDataService(ManagedEtfRepository managedEtfRepository,
                           ManagedEtfAnalysisReportRepository managedEtfAnalysisReportRepository,
@@ -137,6 +150,11 @@ public class EtfDataService {
         this.etfBacktestEngine = etfBacktestEngine;
         this.etfAiFeedbackService = etfAiFeedbackService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+    }
+
+    @PreDestroy
+    void shutdownPriceFetchExecutor() {
+        priceFetchExecutor.shutdownNow();
     }
 
     public CustomEtfAssetSearchResponseDTO searchAssets(String keywordParam,
@@ -830,16 +848,7 @@ public class EtfDataService {
                     );
                 })
                 .toList();
-        Map<String, List<BacktestPricePoint>> priceSeriesBySecurityId = new LinkedHashMap<>();
-        for (HoldingPayload holding : holdings) {
-            List<BacktestPricePoint> series = historicalPriceProvider.getSecurityPriceSeries(holding.stockId(), startDate, endDate);
-            if (series == null || series.size() < 2) {
-                throw new ApiException("ETF asset has insufficient price data for backtest: " + holding.stockId(),
-                        HttpStatus.UNPROCESSABLE_ENTITY);
-            }
-            priceSeriesBySecurityId.put(holding.stockId(), series);
-        }
-        List<BacktestPricePoint> benchmarkSeries = historicalPriceProvider.getBenchmarkSeries(benchmark, startDate, endDate);
+        BacktestPriceSeries priceSeries = fetchBacktestPriceSeries(holdings, startDate, endDate, benchmark);
 
         BacktestResult backtestResult;
         try {
@@ -851,8 +860,8 @@ public class EtfDataService {
                     .periodLabel(periodLabel(period))
                     .benchmarkName(benchmarkDisplayName(benchmark))
                     .holdings(backtestHoldings)
-                    .priceSeriesBySecurityId(priceSeriesBySecurityId)
-                    .benchmarkSeries(benchmarkSeries)
+                    .priceSeriesBySecurityId(priceSeries.priceSeriesBySecurityId())
+                    .benchmarkSeries(priceSeries.benchmarkSeries())
                     .build());
         } catch (IllegalArgumentException e) {
             throw new ApiException(e.getMessage(), HttpStatus.UNPROCESSABLE_ENTITY);
@@ -932,6 +941,68 @@ public class EtfDataService {
                 .insightFacts(OBJECT_MAPPER.convertValue(facts, MAP_TYPE))
                 .createdAt(java.time.OffsetDateTime.now(ZoneOffset.UTC).toString())
                 .build();
+    }
+
+    private BacktestPriceSeries fetchBacktestPriceSeries(List<HoldingPayload> holdings,
+                                                         LocalDate startDate,
+                                                         LocalDate endDate,
+                                                         String benchmark) {
+        List<CompletableFuture<SecurityPriceSeries>> holdingFutures = holdings.stream()
+                .map(holding -> fetchPriceAsync(() -> new SecurityPriceSeries(
+                        holding.stockId(),
+                        historicalPriceProvider.getSecurityPriceSeries(holding.stockId(), startDate, endDate)
+                )))
+                .toList();
+        CompletableFuture<List<BacktestPricePoint>> benchmarkFuture = fetchPriceAsync(
+                () -> historicalPriceProvider.getBenchmarkSeries(benchmark, startDate, endDate));
+
+        Map<String, List<BacktestPricePoint>> priceSeriesBySecurityId = new LinkedHashMap<>();
+        for (CompletableFuture<SecurityPriceSeries> future : holdingFutures) {
+            SecurityPriceSeries priceSeries = joinPriceFetch(future);
+            if (priceSeries.series() == null || priceSeries.series().size() < 2) {
+                throw new ApiException("ETF asset has insufficient price data for backtest: " + priceSeries.securityId(),
+                        HttpStatus.UNPROCESSABLE_ENTITY);
+            }
+            priceSeriesBySecurityId.put(priceSeries.securityId(), priceSeries.series());
+        }
+        return new BacktestPriceSeries(priceSeriesBySecurityId, joinPriceFetch(benchmarkFuture));
+    }
+
+    private <T> CompletableFuture<T> fetchPriceAsync(Supplier<T> supplier) {
+        return CompletableFuture
+                .supplyAsync(supplier, priceFetchExecutor)
+                .orTimeout(PRICE_FETCH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    private <T> T joinPriceFetch(CompletableFuture<T> future) {
+        try {
+            return future.join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof ApiException apiException) {
+                throw apiException;
+            }
+            if (cause instanceof TimeoutException) {
+                throw new ApiException("ETF price data fetch timed out. Please try again after price cache is warmed.",
+                        HttpStatus.SERVICE_UNAVAILABLE);
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new ApiException("ETF price data fetch failed", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    private static ThreadFactory priceFetchThreadFactory() {
+        AtomicInteger sequence = new AtomicInteger(1);
+        return runnable -> {
+            Thread thread = new Thread(runnable, "etf-price-fetch-" + sequence.getAndIncrement());
+            thread.setDaemon(true);
+            return thread;
+        };
     }
 
     private BigDecimal resolvePrincipal(Long principalAmountKrw) {
@@ -1412,6 +1483,9 @@ public class EtfDataService {
 
     private record HoldingPayload(String stockId, Integer weight, Double changeRate) {}
     private record StockRef(String name, String symbol, String market, String assetType, String currency) {}
+    private record SecurityPriceSeries(String securityId, List<BacktestPricePoint> series) {}
+    private record BacktestPriceSeries(Map<String, List<BacktestPricePoint>> priceSeriesBySecurityId,
+                                       List<BacktestPricePoint> benchmarkSeries) {}
     private record EtfAssetCatalogItem(String assetId,
                                        String name,
                                        String symbol,

@@ -40,6 +40,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.List;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -538,6 +540,57 @@ class EtfDataServiceTest {
     }
 
     @Test
+    void analyze_fetchesHoldingAndBenchmarkPricesConcurrently() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("분석 ETF")
+                .theme("테크")
+                .holdingsJson("""
+                        [{"stockId":"KRX_373220","weight":40},{"stockId":"KRX_005930","weight":35},{"stockId":"KRX_000660","weight":25}]
+                        """)
+                .build();
+        AssetMaster lgEnergy = asset("KRX_373220", "STOCK", "LG에너지솔루션", "373220", "KOSPI", "KRW");
+        AssetMaster samsung = asset("KRX_005930", "STOCK", "삼성전자", "005930", "KOSPI", "KRW");
+        AssetMaster hynix = asset("KRX_000660", "STOCK", "SK하이닉스", "000660", "KOSPI", "KRW");
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_373220")).thenReturn(Optional.of(lgEnergy));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_005930")).thenReturn(Optional.of(samsung));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_000660")).thenReturn(Optional.of(hynix));
+
+        CyclicBarrier barrier = new CyclicBarrier(4);
+        when(historicalPriceProvider.getSecurityPriceSeries(any(), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    awaitConcurrentPriceFetch(barrier);
+                    return List.of(point("2025-01-02", "100"), point("2025-01-03", "101"));
+                });
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    awaitConcurrentPriceFetch(barrier);
+                    return List.of(point("2025-01-02", "100"), point("2025-01-03", "101"));
+                });
+        BacktestResult result = backtestResult();
+        when(etfBacktestEngine.run(any())).thenReturn(result);
+        InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result))).thenReturn(facts);
+        when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "백테스트 기준 요약입니다.",
+                List.of(),
+                "BALANCED",
+                "과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.",
+                true
+        ));
+
+        EtfAnalysisStartResponseDTO response = etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("1Y").benchmark("SP500").build());
+
+        assertEquals("COMPLETED", response.getStatus());
+    }
+
+    @Test
     void analyze_defaultsMissingRequestFieldsToOneYearAndSp500() {
         User user = User.builder().id(1L).build();
         ManagedEtf etf = ManagedEtf.builder()
@@ -594,6 +647,14 @@ class EtfDataServiceTest {
                 .backtestEnabled(true)
                 .priceSourceStatus("VERIFIED")
                 .build();
+    }
+
+    private void awaitConcurrentPriceFetch(CyclicBarrier barrier) {
+        try {
+            barrier.await(1, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            throw new AssertionError("price fetches should run concurrently", e);
+        }
     }
 
     private ManagedEtf discoveryEtf(String etfCode,
