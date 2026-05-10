@@ -239,18 +239,23 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void searchAssets_filtersDomesticStockWithoutVerifiedAssetMaster() {
+    void searchAssets_includesDomesticStockWithoutVerifiedAssetMasterForOnDemandVerification() {
         StockMaster samsung = stock("005930", "삼성전자", "KOSPI");
         when(stockMasterRepository.searchForEtfAssetCandidates(eq("삼성"), any()))
                 .thenReturn(List.of(samsung));
         when(assetMasterRepository.searchActive(eq("삼성"), eq("STOCK"), eq(null), any(Pageable.class)))
                 .thenReturn(List.of());
         when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_005930")).thenReturn(Optional.empty());
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
 
         CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("삼성", "STOCK", null, 0, 10);
 
-        assertEquals(0, response.getItems().size());
-        assertEquals(0, response.getTotalCount());
+        assertEquals(1, response.getItems().size());
+        assertEquals("KRX_005930", response.getItems().get(0).getAssetId());
+        assertEquals(true, response.getItems().get(0).getBacktestEnabled());
+        assertEquals("PENDING_VERIFICATION", response.getItems().get(0).getDataStatus());
+        assertEquals(null, response.getItems().get(0).getDataStatusMessage());
+        assertEquals(1, response.getTotalCount());
     }
 
     @Test
@@ -293,6 +298,29 @@ class EtfDataServiceTest {
         assertEquals("US_AAPL", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
         assertEquals("VERIFIED", response.getItems().get(0).getDataStatus());
+        assertEquals(null, response.getItems().get(0).getDataStatusMessage());
+    }
+
+    @Test
+    void searchAssets_includesPendingAssetMasterStockForOnDemandVerification() {
+        AssetMaster pending = asset("KRX_373220", "STOCK", "LG에너지솔루션", "373220", "KOSPI", "KRW");
+        pending.setBacktestEnabled(false);
+        pending.setPriceSourceStatus("PENDING_VERIFICATION");
+        pending.setLastPriceError("Price data has not been verified");
+        when(assetMasterRepository.searchActive(eq("LG"), eq("STOCK"), eq(null), any(Pageable.class)))
+                .thenReturn(List.of(pending));
+        when(assetAliasRepository.searchActiveAssetMatches(eq("LG"), eq("STOCK"), eq(null), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(stockMasterRepository.searchForEtfAssetCandidates(eq("LG"), any()))
+                .thenReturn(List.of());
+        when(stockVisualAssetResolver.resolve("KOSPI", "373220", "LG에너지솔루션", null)).thenReturn(visual("LG"));
+
+        CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("LG", "STOCK", null, 0, 10);
+
+        assertEquals(1, response.getItems().size());
+        assertEquals("KRX_373220", response.getItems().get(0).getAssetId());
+        assertEquals(true, response.getItems().get(0).getBacktestEnabled());
+        assertEquals("PENDING_VERIFICATION", response.getItems().get(0).getDataStatus());
         assertEquals(null, response.getItems().get(0).getDataStatusMessage());
     }
 

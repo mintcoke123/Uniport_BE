@@ -176,10 +176,11 @@ public class EtfDataService {
                     .filter(this::isSearchVisibleAsset)
                     .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
         }
-        exactUsTickerFallback(keyword, assetType, market)
-                .filter(item -> !candidates.containsKey(item.assetId()))
-                .filter(this::isSearchVisibleAsset)
-                .ifPresent(item -> candidates.put(item.assetId(), toAssetSearchItem(item)));
+        if (candidates.isEmpty()) {
+            exactUsTickerFallback(keyword, assetType, market)
+                    .filter(this::isSearchVisibleAsset)
+                    .ifPresent(item -> candidates.put(item.assetId(), toAssetSearchItem(item)));
+        }
 
         List<CustomEtfAssetSearchItemDTO> all = new ArrayList<>(candidates.values());
         int fromIndex = Math.min(page * size, all.size());
@@ -660,6 +661,7 @@ public class EtfDataService {
 
     private CustomEtfAssetSearchItemDTO toAssetSearchItem(EtfAssetCatalogItem item) {
         String logoUrl = null;
+        boolean selectable = isCustomEtfSelectableAsset(item);
         return CustomEtfAssetSearchItemDTO.builder()
                 .assetId(item.assetId())
                 .stockId(item.assetId())
@@ -668,16 +670,20 @@ public class EtfDataService {
                 .market(item.market())
                 .assetType(item.assetType())
                 .currency(item.currency())
-                .backtestEnabled(isBacktestEligible(item))
+                .backtestEnabled(selectable)
                 .dataStatus(item.priceSourceStatus())
-                .dataStatusMessage(isBacktestEligible(item) ? null : item.lastPriceError())
+                .dataStatusMessage(selectable ? null : item.lastPriceError())
                 .logoUrl(logoUrl)
                 .visual(stockVisualAssetResolver.resolve(item.market(), item.symbol(), item.name(), logoUrl))
                 .build();
     }
 
     private boolean isSearchVisibleAsset(EtfAssetCatalogItem item) {
-        return isBacktestEligible(item);
+        return isCustomEtfSelectableAsset(item);
+    }
+
+    private boolean isCustomEtfSelectableAsset(EtfAssetCatalogItem item) {
+        return ASSET_TYPE_STOCK.equals(item.assetType()) && !isKnownPriceUnavailable(item);
     }
 
     private boolean isBacktestEligible(EtfAssetCatalogItem item) {
