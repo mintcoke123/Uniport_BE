@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -66,6 +68,39 @@ class UsAssetMasterImporterServiceTest {
                     "US_A".equals(asset.getAssetId())
                             && "Agilent Technologies, Inc. Common Stock".equals(asset.getName())
                             && "NYSE".equals(asset.getMarket()));
+        }));
+    }
+
+    @Test
+    void importAll_truncatesSecurityNamesToAssetMasterColumnLimit() {
+        NasdaqSymbolDirectoryClient client = mock(NasdaqSymbolDirectoryClient.class);
+        AssetMasterRepository repository = mock(AssetMasterRepository.class);
+        UsAssetMasterImporterService service = new UsAssetMasterImporterService(
+                client,
+                new NasdaqSymbolDirectoryParser(),
+                repository
+        );
+        String longName = IntStream.range(0, 170)
+                .mapToObj(i -> "A")
+                .collect(Collectors.joining());
+        when(client.downloadNasdaqListed()).thenReturn("""
+                Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares
+                LONG|%s|Q|N|N|40|N|N
+                File Creation Time: 0509202618:03|||||||
+                """.formatted(longName));
+        when(client.downloadOtherListed()).thenReturn("""
+                ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol
+                File Creation Time: 0509202618:03|||||||
+                """);
+        when(repository.findByAssetIdAndActiveTrue("US_LONG")).thenReturn(Optional.empty());
+
+        service.importAll();
+
+        verify(repository).saveAll(argThat(values -> {
+            List<AssetMaster> saved = (List<AssetMaster>) values;
+            return saved.size() == 1
+                    && "US_LONG".equals(saved.get(0).getAssetId())
+                    && saved.get(0).getName().length() == 160;
         }));
     }
 }

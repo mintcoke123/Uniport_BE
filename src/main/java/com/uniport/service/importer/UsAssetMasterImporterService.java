@@ -20,6 +20,7 @@ public class UsAssetMasterImporterService {
     private static final String ASSET_TYPE_STOCK = "STOCK";
     private static final String CURRENCY_USD = "USD";
     private static final String DATA_STATUS_PENDING = "PENDING_VERIFICATION";
+    private static final int ASSET_NAME_MAX_LENGTH = 160;
 
     private final NasdaqSymbolDirectoryClient client;
     private final NasdaqSymbolDirectoryParser parser;
@@ -58,7 +59,7 @@ public class UsAssetMasterImporterService {
                 inserted++;
             }
             asset.setAssetType(ASSET_TYPE_STOCK);
-            asset.setName(row.name());
+            asset.setName(truncate(row.name(), ASSET_NAME_MAX_LENGTH));
             asset.setSymbol(row.symbol());
             asset.setMarket(row.market());
             asset.setCurrency(CURRENCY_USD);
@@ -82,5 +83,16 @@ public class UsAssetMasterImporterService {
         log.info("us asset_master importAll done: inserted={} updated={} skipped={}",
                 result.getInserted(), result.getUpdated(), result.getSkipped());
         return result;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() <= maxLength) {
+            return trimmed;
+        }
+        return trimmed.substring(0, maxLength);
     }
 }
