@@ -72,6 +72,11 @@ public class EducationAssetRedirectService {
     }
 
     public URI createRedirectUri(String objectKey) {
+        return createRedirectUri("GET", objectKey);
+    }
+
+    public URI createRedirectUri(String httpMethod, String objectKey) {
+        String signedMethod = normalizeHttpMethod(httpMethod);
         String normalizedObjectKey = normalizeObjectKey(objectKey);
         ensureConfigured();
 
@@ -95,7 +100,7 @@ public class EducationAssetRedirectService {
 
         String canonicalQueryString = canonicalQueryString(queryParams);
         String canonicalRequest = String.join("\n",
-                "GET",
+                signedMethod,
                 canonicalUri,
                 canonicalQueryString,
                 "host:" + host + "\n",
@@ -111,6 +116,14 @@ public class EducationAssetRedirectService {
 
         return URI.create(endpointUri.getScheme() + "://" + host + canonicalUri
                 + "?" + canonicalQueryString + "&X-Amz-Signature=" + signature);
+    }
+
+    private static String normalizeHttpMethod(String httpMethod) {
+        String method = trimToDefault(httpMethod, "GET").toUpperCase();
+        if ("GET".equals(method) || "HEAD".equals(method)) {
+            return method;
+        }
+        throw new IllegalArgumentException("Unsupported education asset method: " + httpMethod);
     }
 
     private String resolveHost(URI endpointUri) {

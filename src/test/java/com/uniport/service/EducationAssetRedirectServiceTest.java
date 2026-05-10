@@ -38,6 +38,30 @@ class EducationAssetRedirectServiceTest {
     }
 
     @Test
+    void createsMethodSpecificSignatureForHeadRequests() {
+        EducationAssetRedirectService service = new EducationAssetRedirectService(
+                "https://t3.storageapi.dev",
+                "education-assets-abc123",
+                "access",
+                "secret",
+                "",
+                "auto",
+                "virtual-host",
+                Duration.ofSeconds(900),
+                Clock.fixed(Instant.parse("2026-05-11T00:00:00Z"), ZoneOffset.UTC));
+
+        URI getRedirectUri = service.createRedirectUri("GET", "/education-assets/real_images/day 1.png");
+        URI headRedirectUri = service.createRedirectUri("HEAD", "/education-assets/real_images/day 1.png");
+
+        assertEquals(getRedirectUri.getScheme(), headRedirectUri.getScheme());
+        assertEquals(getRedirectUri.getHost(), headRedirectUri.getHost());
+        assertEquals(getRedirectUri.getRawPath(), headRedirectUri.getRawPath());
+        assertTrue(getRedirectUri.getRawQuery().contains("X-Amz-Signature="));
+        assertTrue(headRedirectUri.getRawQuery().contains("X-Amz-Signature="));
+        assertTrue(!getRedirectUri.getRawQuery().equals(headRedirectUri.getRawQuery()));
+    }
+
+    @Test
     void rejectsTraversalLikeObjectKey() {
         EducationAssetRedirectService service = new EducationAssetRedirectService(
                 "https://t3.storageapi.dev",

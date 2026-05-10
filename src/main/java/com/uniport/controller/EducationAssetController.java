@@ -24,7 +24,7 @@ public class EducationAssetController {
     @GetMapping("/education-assets/**")
     public ResponseEntity<Void> redirectToBucketAsset(HttpServletRequest request) {
         String path = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
-        URI redirectUri = redirectService.createRedirectUri(path);
+        URI redirectUri = redirectService.createRedirectUri(request.getMethod(), path);
 
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(redirectUri)

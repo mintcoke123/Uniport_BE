@@ -91,7 +91,7 @@ if [[ "$CHECK_REMOTE_URLS" == "1" ]]; then
       path="/${url#*://*/education-assets/}"
       url="${ASSET_BASE_URL%/}$path"
     fi
-    curl -fsSI "$url" >/dev/null
+    curl -fsSIL "$url" >/dev/null
   done < <(jq -r '.cards[] | select(.renderer_type == "raster_asset") | .image_url' "$RENDER_MANIFEST")
 fi
 
