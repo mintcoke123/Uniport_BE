@@ -198,6 +198,8 @@ class EtfDataServiceTest {
 
         assertEquals("AI 테크", response.getTitle());
         assertEquals(100, response.getTotalWeight());
+        assertEquals("2026-05-10T12:00Z", response.getCreatedAt());
+        assertEquals("2026-05-10T12:00Z", response.getUpdatedAt());
     }
 
     @Test
@@ -369,6 +371,8 @@ class EtfDataServiceTest {
 
         assertEquals("기본 ETF", response.getTitle());
         assertEquals(100, response.getTotalWeight());
+        assertEquals("2026-05-10T09:00Z", response.getCreatedAt());
+        assertEquals("2026-05-10T09:00Z", response.getUpdatedAt());
     }
 
     @Test

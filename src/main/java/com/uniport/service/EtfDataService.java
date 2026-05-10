@@ -219,7 +219,8 @@ public class EtfDataService {
                 .etfId(saved.getEtfCode())
                 .title(saved.getTitle())
                 .totalWeight(sumWeights(readHoldings(saved.getHoldingsJson())))
-                .createdAt(saved.getCreatedAt().atOffset(ZoneOffset.UTC).toString())
+                .createdAt(timestamp(saved.getCreatedAt(), saved.getUpdatedAt()))
+                .updatedAt(timestamp(saved.getUpdatedAt(), saved.getCreatedAt()))
                 .build();
     }
 
@@ -238,7 +239,8 @@ public class EtfDataService {
                 .etfId(saved.getEtfCode())
                 .title(saved.getTitle())
                 .totalWeight(sumWeights(readHoldings(saved.getHoldingsJson())))
-                .updatedAt(saved.getUpdatedAt().atOffset(ZoneOffset.UTC).toString())
+                .createdAt(timestamp(saved.getCreatedAt(), saved.getUpdatedAt()))
+                .updatedAt(timestamp(saved.getUpdatedAt(), saved.getCreatedAt()))
                 .build();
     }
 
@@ -401,7 +403,8 @@ public class EtfDataService {
                 .etfId(saved.getEtfCode())
                 .title(saved.getTitle())
                 .totalWeight(sumWeights(readHoldings(saved.getHoldingsJson())))
-                .createdAt(saved.getCreatedAt().atOffset(ZoneOffset.UTC).toString())
+                .createdAt(timestamp(saved.getCreatedAt(), saved.getUpdatedAt()))
+                .updatedAt(timestamp(saved.getUpdatedAt(), saved.getCreatedAt()))
                 .build();
     }
 
@@ -796,6 +799,11 @@ public class EtfDataService {
 
     private String normalizeSearch(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String timestamp(LocalDateTime primary, LocalDateTime fallback) {
+        LocalDateTime value = primary != null ? primary : fallback;
+        return value == null ? java.time.OffsetDateTime.now(ZoneOffset.UTC).toString() : value.atOffset(ZoneOffset.UTC).toString();
     }
 
     private EtfAnalysisReportResponseDTO buildReport(String reportId,
