@@ -38,16 +38,25 @@ import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class EtfDataServiceTest {
@@ -80,6 +89,10 @@ class EtfDataServiceTest {
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
         yahooAssetSearchClient = mock(YahooAssetSearchClient.class);
         stockSymbolLogoUrlResolver = new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app");
+        when(historicalPriceProvider.getSecurityPriceSeries(any(), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(this::fullCoverageSeries);
+        when(historicalPriceProvider.getSecurityPriceSeriesForEligibility(any(), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(this::fullCoverageSeries);
         etfDataService = new EtfDataService(
                 managedEtfRepository,
                 managedEtfAnalysisReportRepository,
@@ -249,7 +262,7 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void searchAssets_includesDomesticStockWithoutVerifiedAssetMasterForOnDemandVerification() {
+    void searchAssets_includesDomesticStockWithApproximateBacktestFallback() {
         StockMaster samsung = stock("005930", "삼성전자", "KOSPI");
         when(stockMasterRepository.searchForEtfAssetCandidates(eq("삼성"), any()))
                 .thenReturn(List.of(samsung));
@@ -263,8 +276,9 @@ class EtfDataServiceTest {
         assertEquals(1, response.getItems().size());
         assertEquals("KRX_005930", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
-        assertEquals("PENDING_VERIFICATION", response.getItems().get(0).getDataStatus());
-        assertEquals(null, response.getItems().get(0).getDataStatusMessage());
+        assertEquals("FALLBACK_AVAILABLE", response.getItems().get(0).getDataStatus());
+        assertEquals("실가격이 부족하면 추정 가격으로 백테스트합니다.",
+                response.getItems().get(0).getDataStatusMessage());
         assertEquals(1, response.getTotalCount());
     }
 
@@ -288,7 +302,7 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void searchAssets_includesPriceUnavailableStockForFallbackAnalysis() {
+    void searchAssets_includesStockForApproximateBacktestWhenFiveYearCoverageIsUnavailable() {
         AssetMaster unsupported = asset("US_FAKE", "STOCK", "Fake Corp.", "FAKE", "NASDAQ", "USD");
         unsupported.setBacktestEnabled(false);
         unsupported.setPriceSourceStatus("PRICE_UNAVAILABLE");
@@ -300,14 +314,18 @@ class EtfDataServiceTest {
         when(stockMasterRepository.searchForEtfAssetCandidates(eq("fake"), any()))
                 .thenReturn(List.of());
         when(stockVisualAssetResolver.resolve("NASDAQ", "FAKE", "Fake Corp.", null)).thenReturn(visual("FAKE"));
+        when(historicalPriceProvider.getSecurityPriceSeriesForEligibility(eq("US_FAKE"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point(LocalDate.now().minusYears(1).toString(), "100"), point(LocalDate.now().toString(), "110")));
 
         CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("fake", "STOCK", null, 0, 10);
 
         assertEquals(1, response.getItems().size());
+        assertEquals(1, response.getTotalCount());
         assertEquals("US_FAKE", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
-        assertEquals("PRICE_UNAVAILABLE", response.getItems().get(0).getDataStatus());
-        assertEquals(null, response.getItems().get(0).getDataStatusMessage());
+        assertEquals("FALLBACK_AVAILABLE", response.getItems().get(0).getDataStatus());
+        assertEquals("실가격이 부족하면 추정 가격으로 백테스트합니다.",
+                response.getItems().get(0).getDataStatusMessage());
     }
 
     @Test
@@ -357,13 +375,99 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void searchAssets_includesPendingAssetMasterStockForOnDemandVerification() {
+    void searchAssets_mergesYahooSearchResultsWhenLocalCatalogHasPartialUsMatches() {
+        AssetMaster local = asset("US_TECH", "STOCK", "Tech Local Inc.", "TECH", "NASDAQ", "USD");
+        when(assetMasterRepository.searchActive(eq("tech"), eq("STOCK"), eq("US"), any(Pageable.class)))
+                .thenReturn(List.of(local));
+        when(assetAliasRepository.searchActiveAssetMatches(eq("tech"), eq("STOCK"), eq("US"), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(stockMasterRepository.searchForEtfAssetCandidates(eq("tech"), any()))
+                .thenReturn(List.of());
+        when(yahooAssetSearchClient.searchUsEquities("tech", 10)).thenReturn(List.of(
+                new YahooAssetSearchClient.YahooAssetResult("AAPL", "Apple Inc.", "NASDAQ", "USD")
+        ));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "TECH", "Tech Local Inc.", null)).thenReturn(visual("TECH"));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "AAPL", "Apple Inc.", null)).thenReturn(visual("AAPL"));
+
+        CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("tech", "STOCK", "US", 0, 10);
+
+        assertEquals(2, response.getTotalCount());
+        assertEquals(List.of("US_TECH", "US_AAPL"),
+                response.getItems().stream().map(item -> item.getAssetId()).toList());
+    }
+
+    @Test
+    void searchAssets_allowsAddingOneHundredDistinctUsSearchResults() {
+        User user = User.builder().id(1L).build();
+        List<AssetFlowCase> cases = broadAssetSearchCases();
+        Set<String> uniqueAssetIds = new LinkedHashSet<>(cases.stream().map(AssetFlowCase::assetId).toList());
+        assertEquals(100, cases.size());
+        assertEquals(100, uniqueAssetIds.size());
+        Map<String, List<YahooAssetSearchClient.YahooAssetResult>> yahooResultsByQuery = cases.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        AssetFlowCase::query,
+                        testCase -> List.of(new YahooAssetSearchClient.YahooAssetResult(
+                                testCase.symbol(),
+                                testCase.name(),
+                                testCase.market(),
+                                "USD"
+                        ))
+                ));
+        when(assetMasterRepository.searchActive(any(), any(), any(), any(Pageable.class))).thenReturn(List.of());
+        when(assetAliasRepository.searchActiveAssetMatches(any(), any(), any(), any(Pageable.class))).thenReturn(List.of());
+        when(stockMasterRepository.searchForEtfAssetCandidates(any(), any(Pageable.class))).thenReturn(List.of());
+        when(assetMasterRepository.findByAssetIdAndActiveTrue(any())).thenReturn(Optional.empty());
+        when(assetMasterRepository.findFirstBySymbolIgnoreCaseAndAssetTypeAndActiveTrue(any(), eq("STOCK")))
+                .thenReturn(Optional.empty());
+        when(yahooAssetSearchClient.searchUsEquities(any(), anyInt()))
+                .thenAnswer(invocation -> yahooResultsByQuery.getOrDefault(invocation.getArgument(0), List.of()));
+        when(stockVisualAssetResolver.resolve(any(), any(), any(), any()))
+                .thenAnswer(invocation -> visual(invocation.getArgument(1)));
+        when(managedEtfRepository.save(any(ManagedEtf.class))).thenAnswer(invocation -> {
+            ManagedEtf saved = invocation.getArgument(0);
+            saved.setCreatedAt(java.time.LocalDateTime.parse("2026-05-11T09:00:00"));
+            saved.setUpdatedAt(java.time.LocalDateTime.parse("2026-05-11T09:00:00"));
+            return saved;
+        });
+
+        for (AssetFlowCase testCase : cases) {
+            CustomEtfAssetSearchResponseDTO search = etfDataService.searchAssets(
+                    testCase.query(),
+                    "STOCK",
+                    testCase.marketFilter(),
+                    0,
+                    10
+            );
+            var found = search.getItems().stream()
+                    .filter(item -> testCase.assetId().equals(item.getAssetId()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("검색 결과 누락: " + testCase));
+
+            assertEquals(true, found.getBacktestEnabled(), "추가 불가 상태: " + testCase);
+            assertNotNull(found.getLogoUrl(), "로고 URL 누락: " + testCase);
+
+            CustomEtfMutationResponseDTO created = etfDataService.createCustomEtf(user, CustomEtfCreateRequestDTO.builder()
+                    .title("검수 ETF " + testCase.symbol())
+                    .items(List.of(CustomEtfItemRequestDTO.builder()
+                            .stockId(found.getAssetId())
+                            .weight(100)
+                            .build()))
+                    .build());
+
+            assertEquals(100, created.getTotalWeight(), "종목 추가 실패: " + testCase);
+        }
+    }
+
+    @Test
+    void searchAssets_includesPendingAssetMasterStockForApproximateBacktest() {
         AssetMaster pending = asset("KRX_373220", "STOCK", "LG에너지솔루션", "373220", "KOSPI", "KRW");
         pending.setBacktestEnabled(false);
         pending.setPriceSourceStatus("PENDING_VERIFICATION");
         pending.setLastPriceError("Price data has not been verified");
         when(assetMasterRepository.searchActive(eq("LG"), eq("STOCK"), eq(null), any(Pageable.class)))
                 .thenReturn(List.of(pending));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_373220"))
+                .thenReturn(Optional.of(pending));
         when(assetAliasRepository.searchActiveAssetMatches(eq("LG"), eq("STOCK"), eq(null), any(Pageable.class)))
                 .thenReturn(List.of());
         when(stockMasterRepository.searchForEtfAssetCandidates(eq("LG"), any()))
@@ -375,8 +479,38 @@ class EtfDataServiceTest {
         assertEquals(1, response.getItems().size());
         assertEquals("KRX_373220", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
-        assertEquals("PENDING_VERIFICATION", response.getItems().get(0).getDataStatus());
-        assertEquals(null, response.getItems().get(0).getDataStatusMessage());
+        assertEquals("FALLBACK_AVAILABLE", response.getItems().get(0).getDataStatus());
+        assertEquals("실가격이 부족하면 추정 가격으로 백테스트합니다.",
+                response.getItems().get(0).getDataStatusMessage());
+        assertEquals(false, pending.getBacktestEnabled());
+        assertEquals("PENDING_VERIFICATION", pending.getPriceSourceStatus());
+        verify(assetMasterRepository, never()).save(pending);
+    }
+
+    @Test
+    void searchAssets_includesYahooFallbackForApproximateBacktestWhenCoverageIsUnavailable() {
+        when(assetMasterRepository.searchActive(eq("new co"), eq("STOCK"), eq("US"), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(assetAliasRepository.searchActiveAssetMatches(eq("new co"), eq("STOCK"), eq("US"), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(stockMasterRepository.searchForEtfAssetCandidates(eq("new co"), any()))
+                .thenReturn(List.of());
+        when(yahooAssetSearchClient.searchUsEquities("new co", 10)).thenReturn(List.of(
+                new YahooAssetSearchClient.YahooAssetResult("NEWC", "NewCo Inc.", "NASDAQ", "USD")
+        ));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "NEWC", "NewCo Inc.", null)).thenReturn(visual("NEWC"));
+        when(historicalPriceProvider.getSecurityPriceSeriesForEligibility(eq("US_NEWC"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point(LocalDate.now().minusMonths(6).toString(), "100"), point(LocalDate.now().toString(), "105")));
+
+        CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("new co", "STOCK", "US", 0, 10);
+
+        assertEquals(1, response.getItems().size());
+        assertEquals(1, response.getTotalCount());
+        assertEquals("US_NEWC", response.getItems().get(0).getAssetId());
+        assertEquals(true, response.getItems().get(0).getBacktestEnabled());
+        assertEquals("FALLBACK_AVAILABLE", response.getItems().get(0).getDataStatus());
+        verify(historicalPriceProvider, never())
+                .getSecurityPriceSeriesForEligibility(eq("US_NEWC"), any(LocalDate.class), any(LocalDate.class));
     }
 
     @Test
@@ -499,7 +633,7 @@ class EtfDataServiceTest {
         BacktestResult result = backtestResult();
         when(etfBacktestEngine.run(any())).thenReturn(result);
         InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result))).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -543,7 +677,7 @@ class EtfDataServiceTest {
         BacktestResult result = backtestResult();
         when(etfBacktestEngine.run(any())).thenReturn(result);
         InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("기본 ETF"), eq("1년"), eq("S&P 500"), eq(result))).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("기본 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -590,7 +724,7 @@ class EtfDataServiceTest {
                 .positiveFacts(List.of("분산이 양호합니다."))
                 .riskFacts(List.of("과거 데이터 한계가 있습니다."))
                 .build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result))).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -612,7 +746,7 @@ class EtfDataServiceTest {
                 .readValue(captor.getValue().getReportJson(), EtfAnalysisReportResponseDTO.class);
         assertEquals("QUARTERLY", report.getMetadata().getRebalancePolicy());
         assertEquals("none", report.getMetadata().getPriceCachePolicy());
-        assertEquals("Yahoo Finance chart API with synthetic fallback", report.getMetadata().getPriceSource());
+        assertEquals("Yahoo Finance chart API with approximate fallback", report.getMetadata().getPriceSource());
         assertEquals("fx_rate_daily", report.getMetadata().getFxCachePolicy());
         assertEquals(true, report.getMetadata().getAssumptions().stream()
                 .anyMatch(value -> value.contains("transaction fee") && value.contains("slippage")));
@@ -655,7 +789,7 @@ class EtfDataServiceTest {
         BacktestResult result = backtestResult();
         when(etfBacktestEngine.run(any())).thenReturn(result);
         InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result))).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -692,7 +826,7 @@ class EtfDataServiceTest {
         BacktestResult result = backtestResult();
         when(etfBacktestEngine.run(any())).thenReturn(result);
         InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result))).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -706,6 +840,48 @@ class EtfDataServiceTest {
 
         org.mockito.Mockito.verify(historicalPriceProvider)
                 .getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class));
+    }
+
+    @Test
+    void analyze_usesRequestedPeriodForBacktestWindow() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("분석 ETF")
+                .theme("테크")
+                .holdingsJson("[{\"stockId\":\"US_AAPL\",\"weight\":100}]")
+                .build();
+        AssetMaster apple = asset("US_AAPL", "STOCK", "Apple Inc.", "AAPL", "NASDAQ", "USD");
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_AAPL")).thenReturn(Optional.of(apple));
+        when(historicalPriceProvider.getSecurityPriceSeries(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point("2021-01-02", "100"), point("2026-01-03", "150")));
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point("2021-01-02", "100"), point("2026-01-03", "150")));
+        BacktestResult result = backtestResult();
+        when(etfBacktestEngine.run(any())).thenReturn(result);
+        InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("5년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
+        when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "백테스트 기준 요약입니다.",
+                List.of(),
+                "BALANCED",
+                "과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.",
+                true
+        ));
+        ArgumentCaptor<LocalDate> startCaptor = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<LocalDate> endCaptor = ArgumentCaptor.forClass(LocalDate.class);
+
+        etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("5Y").benchmark("SP500").build());
+
+        org.mockito.Mockito.verify(historicalPriceProvider)
+                .getSecurityPriceSeries(eq("US_AAPL"), startCaptor.capture(), endCaptor.capture());
+        assertEquals(LocalDate.now().minusYears(5), startCaptor.getValue());
+        assertEquals(LocalDate.now(), endCaptor.getValue());
     }
 
     private StockMaster stock(String code, String name, String market) {
@@ -767,6 +943,15 @@ class EtfDataServiceTest {
         return new BacktestPricePoint(LocalDate.parse(date), new BigDecimal(adjustedCloseKrw));
     }
 
+    private List<BacktestPricePoint> fullCoverageSeries(org.mockito.invocation.InvocationOnMock invocation) {
+        LocalDate startDate = invocation.getArgument(1);
+        LocalDate endDate = invocation.getArgument(2);
+        return List.of(
+                point(startDate.plusDays(1).toString(), "100"),
+                point(endDate.minusDays(1).toString(), "120")
+        );
+    }
+
     private BacktestResult backtestResult() {
         return new BacktestResult(
                 BigDecimal.valueOf(100_000_000L),
@@ -796,6 +981,46 @@ class EtfDataServiceTest {
         );
     }
 
+    private List<AssetFlowCase> broadAssetSearchCases() {
+        List<String> symbols = List.of(
+                "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL", "META", "NFLX", "AMD", "INTC",
+                "AVGO", "QCOM", "ORCL", "CRM", "ADBE", "NOW", "SNOW", "PLTR", "IBM", "CSCO",
+                "JPM", "BAC", "GS", "MS", "C", "WFC", "V", "MA", "PYPL", "SQ",
+                "KO", "PEP", "MCD", "SBUX", "NKE", "DIS", "WMT", "COST", "TGT", "HD",
+                "UNH", "JNJ", "PFE", "MRK", "ABBV", "LLY", "TMO", "ABT", "ISRG", "GILD",
+                "XOM", "CVX", "COP", "SLB", "ENPH", "FSLR", "NEE", "GE", "CAT", "BA",
+                "LMT", "RTX", "DE", "MMM", "SPY", "QQQ", "DIA", "IWM", "VTI", "VXUS",
+                "SOXX", "SMH", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLU",
+                "ARKK", "ARKG", "ARKW", "TQQQ", "SQQQ", "GLD", "SLV", "USO", "VNQ", "HYG",
+                "LQD", "TLT", "SHY", "IEI", "BND", "AGG", "SCHD", "VOO", "IVV", "IREN"
+        );
+        List<AssetFlowCase> cases = new ArrayList<>();
+        for (int i = 0; i < symbols.size(); i++) {
+            String symbol = symbols.get(i);
+            String market = switch (i % 3) {
+                case 0 -> "NASDAQ";
+                case 1 -> "NYSE";
+                default -> "AMEX";
+            };
+            String marketFilter = switch (i % 5) {
+                case 0 -> "US";
+                case 1 -> "ALL";
+                case 2 -> market;
+                case 3 -> "";
+                default -> "US";
+            };
+            String query = switch (i % 4) {
+                case 0 -> symbol.toLowerCase(Locale.ROOT);
+                case 1 -> symbol;
+                case 2 -> "search " + symbol.toLowerCase(Locale.ROOT);
+                default -> "asset " + symbol.toLowerCase(Locale.ROOT);
+            };
+            String suffix = i >= 64 ? " ETF" : " Inc.";
+            cases.add(new AssetFlowCase(query, marketFilter, "US_" + symbol, symbol, "Verified " + symbol + suffix, market));
+        }
+        return cases;
+    }
+
     private StockVisualDTO visual(String text) {
         return StockVisualDTO.builder()
                 .type("FALLBACK_SYMBOL")
@@ -803,5 +1028,13 @@ class EtfDataServiceTest {
                 .bgColor("#EEF2FF")
                 .textColor("#4F46E5")
                 .build();
+    }
+
+    private record AssetFlowCase(String query,
+                                 String marketFilter,
+                                 String assetId,
+                                 String symbol,
+                                 String name,
+                                 String market) {
     }
 }

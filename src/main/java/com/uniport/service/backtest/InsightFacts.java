@@ -24,6 +24,7 @@ public record InsightFacts(
         BigDecimal top3WeightPercent,
         String dominantSector,
         BigDecimal dominantSectorWeightPercent,
+        List<BacktestHolding> holdings,
         List<String> positiveFacts,
         List<String> riskFacts,
         String disclaimer

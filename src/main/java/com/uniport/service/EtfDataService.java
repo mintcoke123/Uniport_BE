@@ -102,7 +102,7 @@ public class EtfDataService {
     private static final List<String> SUPPORTED_REBALANCE_POLICIES = List.of("MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "NONE");
     private static final String ANALYSIS_VERSION = "backtest-v1.0.0";
     private static final String MESSAGE_VERSION = "ai-feedback-v1.0.0";
-    private static final String PRICE_SOURCE = "Yahoo Finance chart API with synthetic fallback";
+    private static final String PRICE_SOURCE = "Yahoo Finance chart API with approximate fallback";
     private static final String PRICE_CACHE_POLICY = "none";
     private static final String FX_CACHE_POLICY = "fx_rate_daily";
     private static final int DEFAULT_ASSET_SEARCH_SIZE = 10;
@@ -114,9 +114,11 @@ public class EtfDataService {
     private static final String ASSET_TYPE_BOND = "BOND";
     private static final String ASSET_TYPE_CASH = "CASH";
     private static final String DATA_STATUS_VERIFIED = "VERIFIED";
+    private static final String DATA_STATUS_FALLBACK_AVAILABLE = "FALLBACK_AVAILABLE";
     private static final String DATA_STATUS_PROXY = "PROXY";
     private static final String DATA_STATUS_PENDING = "PENDING_VERIFICATION";
     private static final String DATA_STATUS_PRICE_UNAVAILABLE = "PRICE_UNAVAILABLE";
+    private static final String FALLBACK_AVAILABLE_MESSAGE = "실가격이 부족하면 추정 가격으로 백테스트합니다.";
 
     private final ManagedEtfRepository managedEtfRepository;
     private final ManagedEtfAnalysisReportRepository managedEtfAnalysisReportRepository;
@@ -200,11 +202,9 @@ public class EtfDataService {
                     .filter(this::isSearchVisibleAsset)
                     .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
         }
-        if (candidates.isEmpty()) {
-            yahooSearchFallback(keyword, assetType, market, size).stream()
-                    .filter(this::isSearchVisibleAsset)
-                    .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
-        }
+        yahooSearchFallback(keyword, assetType, market, size).stream()
+                .filter(this::isSearchVisibleAsset)
+                .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
         if (candidates.isEmpty()) {
             exactUsTickerFallback(keyword, assetType, market)
                     .filter(this::isSearchVisibleAsset)
@@ -719,6 +719,7 @@ public class EtfDataService {
     private CustomEtfAssetSearchItemDTO toAssetSearchItem(EtfAssetCatalogItem item) {
         ResolvedStockVisual visual = resolveStockVisual(item.market(), item.symbol(), item.name());
         boolean selectable = isCustomEtfSelectableAsset(item);
+        String dataStatus = selectable ? searchDataStatus(item) : item.priceSourceStatus();
         return CustomEtfAssetSearchItemDTO.builder()
                 .assetId(item.assetId())
                 .stockId(item.assetId())
@@ -728,11 +729,22 @@ public class EtfDataService {
                 .assetType(item.assetType())
                 .currency(item.currency())
                 .backtestEnabled(selectable)
-                .dataStatus(item.priceSourceStatus())
-                .dataStatusMessage(selectable ? null : item.lastPriceError())
+                .dataStatus(dataStatus)
+                .dataStatusMessage(selectable ? searchDataStatusMessage(dataStatus) : item.lastPriceError())
                 .logoUrl(visual.logoUrl())
                 .visual(visual.visual())
                 .build();
+    }
+
+    private String searchDataStatus(EtfAssetCatalogItem item) {
+        if (Boolean.TRUE.equals(item.backtestEnabled()) && DATA_STATUS_VERIFIED.equals(item.priceSourceStatus())) {
+            return DATA_STATUS_VERIFIED;
+        }
+        return DATA_STATUS_FALLBACK_AVAILABLE;
+    }
+
+    private String searchDataStatusMessage(String dataStatus) {
+        return DATA_STATUS_VERIFIED.equals(dataStatus) ? null : FALLBACK_AVAILABLE_MESSAGE;
     }
 
     private ResolvedStockVisual resolveStockVisual(String market, String symbol, String name) {
@@ -911,7 +923,8 @@ public class EtfDataService {
                 etf.getTitle(),
                 periodLabel(period),
                 benchmarkDisplayName(benchmark),
-                backtestResult
+                backtestResult,
+                backtestHoldings
         );
         RuleBasedFeedback feedback = etfAiFeedbackService.buildFeedback(facts);
 
@@ -1089,7 +1102,7 @@ public class EtfDataService {
 
     private List<String> backtestLimitations() {
         return List.of(
-                "Custom ETF backtests accept verified stock assets only.",
+                "Custom ETF backtests accept stock assets and may use approximate fallback prices when live history is unavailable.",
                 "dividend, split, delisting, tax, and liquidity effects are not separately modeled unless already reflected in the source adjusted price.",
                 "Past performance simulation does not guarantee future returns."
         );

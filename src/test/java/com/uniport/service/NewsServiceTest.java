@@ -4,6 +4,8 @@ import com.uniport.dto.NewsListResponseDTO;
 import com.uniport.dto.NewsShareRequestDTO;
 import com.uniport.dto.NewsShareResponseDTO;
 import com.uniport.dto.NewsItemResponseDTO;
+import com.uniport.dto.RealtimeNewsDetailResponseDTO;
+import com.uniport.dto.RealtimeNewsListResponseDTO;
 import com.uniport.entity.ChatMessage;
 import com.uniport.entity.ManagedNewsArticle;
 import com.uniport.entity.User;
@@ -43,7 +45,13 @@ class NewsServiceTest {
         chatService = mock(ChatService.class);
         newsFeedClient = mock(NewsFeedClient.class);
         when(newsFeedClient.fetchLatest()).thenReturn(List.of());
-        newsService = new NewsService(newsRepository, matchingRoomMemberRepository, chatService, newsFeedClient);
+        newsService = new NewsService(
+                newsRepository,
+                matchingRoomMemberRepository,
+                chatService,
+                newsFeedClient,
+                new KeywordNewsSentimentAnalyzer()
+        );
     }
 
     @Test
@@ -60,6 +68,129 @@ class NewsServiceTest {
 
         assertEquals("naver_market_1", response.getFeatured().getId());
         assertEquals(List.of("naver_domestic_1"), response.getItems().stream().map(NewsItemResponseDTO::getId).toList());
+    }
+
+    @Test
+    void getRealtimeNewsList_returnsPointBasedContractAndFiltersByRealtimeCategory() {
+        when(newsFeedClient.fetchLatest()).thenReturn(List.of(
+                fetchedWithTitle(
+                        "hankyung_earnings_1",
+                        NewsCategory.DOMESTIC_STOCK,
+                        "삼성전자 실적 기대, 반도체 업황 회복 전망",
+                        "영업이익 개선 기대가 커지며 투자 심리가 회복되고 있어요.",
+                        "한국경제",
+                        false,
+                        LocalDateTime.of(2026, 5, 11, 16, 20)
+                ),
+                fetchedWithTitle(
+                        "naver_policy_1",
+                        NewsCategory.MARKET,
+                        "정부, 밸류업 세제 정책 발표",
+                        "정책 기대가 증시에 영향을 주고 있어요.",
+                        "네이버 뉴스",
+                        false,
+                        LocalDateTime.of(2026, 5, 11, 16, 10)
+                )
+        ));
+
+        RealtimeNewsListResponseDTO response = newsService.getRealtimeNewsList("EARNINGS", null, 20);
+
+        assertEquals("EARNINGS", response.getSelectedCategory());
+        assertEquals(List.of("ALL", "MARKET", "EARNINGS", "POLICY", "GEOPOLITICAL", "THEME", "COMPANY"),
+                response.getCategories().stream().map(category -> category.getCategory()).toList());
+        assertEquals("hankyung_earnings_1", response.getHeroNews().getNewsId());
+        assertEquals("실적", response.getHeroNews().getCategoryLabel());
+        assertEquals("한국경제", response.getHeroNews().getSourceName());
+        assertEquals(List.of("삼성전자"), response.getHeroNews().getRelatedStocks());
+        assertEquals("POSITIVE", response.getHeroNews().getSentiment());
+        assertEquals("호재", response.getHeroNews().getSentimentLabel());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getHeroNews().getSentimentReason().contains("긍정"));
+        org.junit.jupiter.api.Assertions.assertFalse(response.getHeroNews().getInvestmentPoints().isEmpty());
+        org.junit.jupiter.api.Assertions.assertFalse(response.getHeroNews().getRiskPoints().isEmpty());
+        assertEquals(List.of(), response.getItems());
+        assertEquals(false, response.getHasNext());
+    }
+
+    @Test
+    void getRealtimeNewsList_classifiesNegativeSentimentFromActualArticleText() {
+        when(newsFeedClient.fetchLatest()).thenReturn(List.of(
+                fetchedWithTitle(
+                        "naver_negative_1",
+                        NewsCategory.DOMESTIC_STOCK,
+                        "삼성전자 실적 쇼크 우려에 반도체 급락",
+                        "영업이익 둔화와 차익실현 매물이 겹치며 투자 심리가 악화되고 있어요.",
+                        "네이버 뉴스",
+                        false,
+                        LocalDateTime.of(2026, 5, 11, 16, 30)
+                )
+        ));
+
+        RealtimeNewsListResponseDTO response = newsService.getRealtimeNewsList("ALL", null, 20);
+
+        assertEquals("naver_negative_1", response.getHeroNews().getNewsId());
+        assertEquals("NEGATIVE", response.getHeroNews().getSentiment());
+        assertEquals("악재", response.getHeroNews().getSentimentLabel());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getHeroNews().getSentimentReason().contains("부정"));
+        assertEquals(List.of("삼성전자"), response.getHeroNews().getRelatedStocks());
+    }
+
+    @Test
+    void getRealtimeNewsList_prefersFinbertAnalyzerResultOverKeywordFallback() {
+        when(newsFeedClient.fetchLatest()).thenReturn(List.of(
+                fetchedWithTitle(
+                        "finbert_positive_1",
+                        NewsCategory.DOMESTIC_STOCK,
+                        "삼성전자 반등 기대",
+                        "제목에는 기대가 있지만 모델은 문맥상 악재로 판단한 케이스예요.",
+                        "네이버 뉴스",
+                        false,
+                        LocalDateTime.of(2026, 5, 11, 16, 40)
+                )
+        ));
+        NewsService modelBackedNewsService = new NewsService(
+                newsRepository,
+                matchingRoomMemberRepository,
+                chatService,
+                newsFeedClient,
+                input -> NewsSentimentAnalysis.negative(0.93, "FinBERT가 금융 문맥상 부정 신호로 분류했어요.")
+        );
+
+        RealtimeNewsListResponseDTO response = modelBackedNewsService.getRealtimeNewsList("ALL", null, 20);
+
+        assertEquals("NEGATIVE", response.getHeroNews().getSentiment());
+        assertEquals("악재", response.getHeroNews().getSentimentLabel());
+        assertEquals(0.93, response.getHeroNews().getSentimentScore());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getHeroNews().getSentimentReason().contains("FinBERT"));
+    }
+
+    @Test
+    void getRealtimeNewsDetail_returnsSummaryPointsRisksRelatedStocksAndSourceArticles() {
+        when(newsFeedClient.fetchLatest()).thenReturn(List.of(
+                fetchedWithTitle(
+                        "hankyung_company_1",
+                        NewsCategory.DOMESTIC_STOCK,
+                        "삼성전자 반등, 반도체 투자 심리 회복",
+                        "AI 서버 수요 기대가 반도체 밸류체인으로 이어지고 있어요.",
+                        "한국경제",
+                        false,
+                        LocalDateTime.of(2026, 5, 11, 16, 10)
+                )
+        ));
+
+        RealtimeNewsDetailResponseDTO response = newsService.getRealtimeNewsDetail("hankyung_company_1");
+
+        assertEquals("hankyung_company_1", response.getNewsId());
+        assertEquals("삼성전자 반등, 반도체 투자 심리 회복", response.getTitle());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getCoreSummary().contains("AI 서버 수요 기대"));
+        assertEquals("POSITIVE", response.getSentiment());
+        assertEquals("호재", response.getSentimentLabel());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getSentimentReason().contains("긍정"));
+        org.junit.jupiter.api.Assertions.assertFalse(response.getInvestmentPoints().isEmpty());
+        org.junit.jupiter.api.Assertions.assertFalse(response.getRiskPoints().isEmpty());
+        assertEquals("삼성전자", response.getRelatedStocks().get(0).getName());
+        assertEquals("005930", response.getRelatedStocks().get(0).getSymbol());
+        assertEquals("한국경제", response.getSourceArticles().get(0).getSourceName());
+        assertEquals("https://example.com/hankyung_company_1", response.getSourceArticles().get(0).getExternalUrl());
     }
 
     @Test
@@ -148,6 +279,11 @@ class NewsServiceTest {
         assertEquals(3L, response.getChatRoomId());
         assertEquals("NEWS_SHARE", response.getType());
         assertEquals("news_share", response.getNews().getId());
+        assertEquals("UniPort Markets", response.getNews().getSourceName());
+        assertEquals("2026-05-11T09:00:00+09:00", response.getNews().getPublishedAt());
+        assertEquals("호재", response.getNews().getSentimentLabel());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getNews().getSentimentReason().contains("긍정"));
+        org.junit.jupiter.api.Assertions.assertFalse(response.getNews().getInvestmentPoints().isEmpty());
         verify(chatService).saveNewsShareMessage(eq(3L), eq(7L), eq("뉴스공유러"), any());
     }
 
@@ -178,12 +314,22 @@ class NewsServiceTest {
     }
 
     private FetchedNewsArticle fetched(String id, NewsCategory category, boolean featured, LocalDateTime publishedAt) {
+        return fetchedWithTitle(id, category, id + " 제목", id + " 요약", "네이버 뉴스", featured, publishedAt);
+    }
+
+    private FetchedNewsArticle fetchedWithTitle(String id,
+                                                NewsCategory category,
+                                                String title,
+                                                String summary,
+                                                String sourceName,
+                                                boolean featured,
+                                                LocalDateTime publishedAt) {
         return FetchedNewsArticle.builder()
                 .id(id)
                 .category(category)
-                .title(id + " 제목")
-                .summary(id + " 요약")
-                .sourceName("네이버 뉴스")
+                .title(title)
+                .summary(summary)
+                .sourceName(sourceName)
                 .publishedAt(publishedAt)
                 .featured(featured)
                 .externalUrl("https://example.com/" + id)

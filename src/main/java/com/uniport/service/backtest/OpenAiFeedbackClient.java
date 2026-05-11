@@ -20,7 +20,7 @@ import java.util.Optional;
 public class OpenAiFeedbackClient implements LlmFeedbackClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String PROMPT_VERSION = "etf-feedback-v1";
+    private static final String PROMPT_VERSION = "etf-feedback-v2";
 
     private final RestTemplate restTemplate;
     private final String apiKey;
@@ -96,6 +96,7 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
     private String systemPrompt() {
         return "You write short Korean ETF backtest feedback. "
                 + "Use only facts in the JSON. Do not invent numbers. "
+                + "When holdings are provided, make the bullets about the largest holdings and their portfolio impact. "
                 + "Do not give investment advice, buy/sell calls, guarantees, or predictions. "
                 + "Return JSON only.";
     }

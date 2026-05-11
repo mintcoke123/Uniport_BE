@@ -76,7 +76,7 @@ public class YahooAssetSearchClient {
             if (results.size() >= limit) {
                 break;
             }
-            if (!"EQUITY".equalsIgnoreCase(text(quote, "quoteType"))) {
+            if (!isSupportedQuoteType(text(quote, "quoteType"))) {
                 continue;
             }
             String symbol = normalizeSymbol(text(quote, "symbol"));
@@ -88,6 +88,11 @@ public class YahooAssetSearchClient {
             results.add(new YahooAssetResult(symbol, name, market, "USD"));
         }
         return results;
+    }
+
+    private boolean isSupportedQuoteType(String quoteType) {
+        String normalized = normalize(quoteType);
+        return "EQUITY".equals(normalized) || "ETF".equals(normalized);
     }
 
     private String toUsMarket(String exchange, String exchangeDisplay) {

@@ -36,6 +36,14 @@ public class EtfAiFeedbackService {
                                           String periodLabel,
                                           String benchmarkName,
                                           BacktestResult result) {
+        return buildInsightFacts(portfolioLabel, periodLabel, benchmarkName, result, List.of());
+    }
+
+    public InsightFacts buildInsightFacts(String portfolioLabel,
+                                          String periodLabel,
+                                          String benchmarkName,
+                                          BacktestResult result,
+                                          List<BacktestHolding> holdings) {
         List<String> positiveFacts = new ArrayList<>();
         List<String> riskFacts = new ArrayList<>();
         if (result.excessReturnPercent() != null) {
@@ -88,6 +96,7 @@ public class EtfAiFeedbackService {
                 .top3WeightPercent(result.top3WeightPercent())
                 .dominantSector(result.dominantSector())
                 .dominantSectorWeightPercent(result.dominantSectorWeightPercent())
+                .holdings(sortedHoldings(holdings))
                 .positiveFacts(positiveFacts)
                 .riskFacts(riskFacts)
                 .disclaimer(DEFAULT_DISCLAIMER)
@@ -99,7 +108,9 @@ public class EtfAiFeedbackService {
         String summary;
         String tone = "BALANCED";
         if (isConcentrationRisk(facts)) {
-            summary = "성과는 양호하지만 특정 종목이나 섹터에 비중이 몰려 있어요. "
+            summary = "백테스트 수익률은 " + formatPercent(facts.totalReturnPercent())
+                    + "이고 최대 낙폭은 " + formatPercent(facts.maxDrawdownPercent()) + "였습니다. "
+                    + topHoldingPhrase(facts)
                     + fallbackSector(facts) + " 비중이 " + formatPercent(fallbackConcentrationWeight(facts))
                     + "라 관련 업황 변화에 민감할 수 있습니다.";
             tone = "CAUTION";
@@ -156,6 +167,10 @@ public class EtfAiFeedbackService {
     }
 
     private List<FeedbackBullet> bullets(InsightFacts facts) {
+        List<FeedbackBullet> holdingBullets = holdingBullets(facts);
+        if (!holdingBullets.isEmpty()) {
+            return holdingBullets;
+        }
         List<FeedbackBullet> bullets = new ArrayList<>();
         if (facts.positiveFacts() != null && !facts.positiveFacts().isEmpty()) {
             bullets.add(new FeedbackBullet("STRENGTH", facts.positiveFacts().get(0)));
@@ -169,6 +184,50 @@ public class EtfAiFeedbackService {
             bullets.add(new FeedbackBullet("INFO", "수익률, 변동성, 최대 낙폭을 함께 확인해보세요."));
         }
         return bullets.size() > 3 ? bullets.subList(0, 3) : bullets;
+    }
+
+    private List<FeedbackBullet> holdingBullets(InsightFacts facts) {
+        List<BacktestHolding> holdings = sortedHoldings(facts.holdings());
+        if (holdings.isEmpty()) {
+            return List.of();
+        }
+        return holdings.stream()
+                .limit(3)
+                .map(this::holdingBullet)
+                .toList();
+    }
+
+    private FeedbackBullet holdingBullet(BacktestHolding holding) {
+        BigDecimal weight = holding.weightPercent() != null ? holding.weightPercent() : BigDecimal.ZERO;
+        String name = holding.name() != null && !holding.name().isBlank()
+                ? holding.name()
+                : holding.securityId();
+        if (weight.compareTo(BigDecimal.valueOf(40)) >= 0) {
+            return new FeedbackBullet(
+                    "RISK",
+                    name + " " + formatPercent(weight) + ": 단일 종목 영향이 큽니다. 이 종목 하락 시 전체 ETF 변동성이 커질 수 있습니다."
+            );
+        }
+        if (weight.compareTo(BigDecimal.valueOf(25)) >= 0) {
+            return new FeedbackBullet(
+                    "INFO",
+                    name + " " + formatPercent(weight) + ": 핵심 비중입니다. 실적, 제품 사이클, 업종 뉴스가 ETF 흐름에 크게 반영됩니다."
+            );
+        }
+        return new FeedbackBullet(
+                "STRENGTH",
+                name + " " + formatPercent(weight) + ": 보조 비중으로 포트폴리오 분산에 기여합니다."
+        );
+    }
+
+    private List<BacktestHolding> sortedHoldings(List<BacktestHolding> holdings) {
+        if (holdings == null || holdings.isEmpty()) {
+            return List.of();
+        }
+        return holdings.stream()
+                .filter(Objects::nonNull)
+                .sorted((left, right) -> normalizePercent(right.weightPercent()).compareTo(normalizePercent(left.weightPercent())))
+                .toList();
     }
 
     private boolean containsProhibitedExpression(RuleBasedFeedback feedback) {
@@ -205,6 +264,13 @@ public class EtfAiFeedbackService {
             allowed.add(won.toPlainString() + "원");
             allowed.add(won.abs().toPlainString() + "원");
         }
+        if (facts.holdings() != null) {
+            for (BacktestHolding holding : facts.holdings()) {
+                if (holding != null && holding.weightPercent() != null) {
+                    allowed.add(formatPercent(holding.weightPercent()));
+                }
+            }
+        }
         return allowed;
     }
 
@@ -238,6 +304,19 @@ public class EtfAiFeedbackService {
             return facts.dominantSectorWeightPercent();
         }
         return facts.topHoldingWeightPercent();
+    }
+
+    private String topHoldingPhrase(InsightFacts facts) {
+        if (facts.topHoldingName() == null || facts.topHoldingName().isBlank()
+                || facts.topHoldingWeightPercent() == null) {
+            return "";
+        }
+        return "최대 비중은 " + facts.topHoldingName() + " "
+                + formatPercent(facts.topHoldingWeightPercent()) + "이고, ";
+    }
+
+    private BigDecimal normalizePercent(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 
     private String formatPercentPoint(BigDecimal value) {

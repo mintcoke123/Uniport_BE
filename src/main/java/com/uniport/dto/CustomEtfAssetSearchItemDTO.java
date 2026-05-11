@@ -34,7 +34,7 @@ public class CustomEtfAssetSearchItemDTO {
     @Schema(example = "KRW", allowableValues = {"KRW", "USD"})
     private String currency;
 
-    @Schema(example = "true", description = "백테스트/ETF 구성에 사용할 수 있는 검증 완료 자산 여부")
+    @Schema(example = "true", description = "ETF 구성/분석 요청 가능 여부. 실제 가격이 부족하면 추정 백테스트가 사용될 수 있음")
     private Boolean backtestEnabled;
 
     @Schema(example = "VERIFIED", description = "가격 데이터 검증 상태")

@@ -35,7 +35,8 @@ public class NewsShareController {
 
     @PostMapping({
             "/api/chatrooms/{chatRoomId}/messages/news",
-            "/api/chat/rooms/{chatRoomId}/messages/news"
+            "/api/chat/rooms/{chatRoomId}/messages/news",
+            "/api/chat/rooms/{chatRoomId}/messages/news-share"
     })
     @Operation(summary = "뉴스를 채팅방에 공유")
     @ApiResponses({

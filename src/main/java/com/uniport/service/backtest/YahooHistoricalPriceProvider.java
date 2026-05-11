@@ -68,6 +68,17 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
     }
 
     @Override
+    public List<BacktestPricePoint> getSecurityPriceSeriesForEligibility(String securityId,
+                                                                         LocalDate startDate,
+                                                                         LocalDate endDate) {
+        String normalizedSecurityId = normalize(securityId);
+        if (normalizedSecurityId.startsWith("CASH_") || normalizedSecurityId.startsWith("BOND_")) {
+            return List.of();
+        }
+        return fetchYahooSeries(toSecurityTicker(normalizedSecurityId), startDate, endDate);
+    }
+
+    @Override
     public List<BacktestPricePoint> getBenchmarkSeries(String benchmarkId, LocalDate startDate, LocalDate endDate) {
         String normalized = normalize(benchmarkId);
         AssetTicker ticker = switch (normalized) {

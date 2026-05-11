@@ -122,6 +122,33 @@ class YahooHistoricalPriceProviderTest {
     }
 
     @Test
+    void getSecurityPriceSeriesForEligibility_ignoresSyntheticFallback() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        AssetMasterRepository assetMasterRepository = mock(AssetMasterRepository.class);
+        YahooHistoricalPriceProvider provider = new YahooHistoricalPriceProvider(
+                restTemplate,
+                (currency, date) -> BigDecimal.ONE,
+                assetMasterRepository,
+                true,
+                "https://query1.finance.yahoo.com"
+        );
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_MISSING")).thenReturn(Optional.of(asset(
+                "US_MISSING", "MISSING", "NASDAQ", "USD"
+        )));
+        stubYahoo(restTemplate, """
+                {"chart":{"result":[],"error":null}}
+                """);
+
+        List<BacktestPricePoint> result = provider.getSecurityPriceSeriesForEligibility(
+                "US_MISSING",
+                LocalDate.parse("2025-01-01"),
+                LocalDate.parse("2025-01-10")
+        );
+
+        assertEquals(0, result.size());
+    }
+
+    @Test
     void getBenchmarkSeries_mapsSp500ToSpy() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         AssetMasterRepository assetMasterRepository = mock(AssetMasterRepository.class);

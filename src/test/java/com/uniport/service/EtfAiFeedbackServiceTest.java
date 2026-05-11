@@ -5,9 +5,11 @@ import com.uniport.service.backtest.FeedbackBullet;
 import com.uniport.service.backtest.InsightFacts;
 import com.uniport.service.backtest.LlmFeedbackClient;
 import com.uniport.service.backtest.RuleBasedFeedback;
+import com.uniport.service.backtest.BacktestHolding;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -44,6 +46,31 @@ class EtfAiFeedbackServiceTest {
 
         assertTrue(feedback.summary().contains("상위 종목"));
         assertTrue(feedback.summary().contains("45.0%"));
+    }
+
+    @Test
+    void buildFeedback_prioritizesTopHoldingSpecificBullets() {
+        InsightFacts facts = baseFacts()
+                .holdings(List.of(
+                        new BacktestHolding("US_NVDA", "NVIDIA Corp.", BigDecimal.valueOf(45.0), "반도체"),
+                        new BacktestHolding("US_AAPL", "Apple Inc.", BigDecimal.valueOf(30.0), "빅테크"),
+                        new BacktestHolding("US_MSFT", "Microsoft Corp.", BigDecimal.valueOf(25.0), "소프트웨어")
+                ))
+                .topHoldingName("NVIDIA Corp.")
+                .topHoldingWeightPercent(BigDecimal.valueOf(45.0))
+                .top3WeightPercent(BigDecimal.valueOf(100.0))
+                .dominantSector("테크")
+                .dominantSectorWeightPercent(BigDecimal.valueOf(100.0))
+                .build();
+
+        RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
+
+        assertTrue(feedback.summary().contains("NVIDIA Corp."));
+        assertEquals(3, feedback.bullets().size());
+        assertEquals("RISK", feedback.bullets().get(0).type());
+        assertTrue(feedback.bullets().get(0).message().contains("NVIDIA Corp. 45.0%"));
+        assertTrue(feedback.bullets().get(1).message().contains("Apple Inc. 30.0%"));
+        assertTrue(feedback.bullets().get(2).message().contains("Microsoft Corp. 25.0%"));
     }
 
     @Test
