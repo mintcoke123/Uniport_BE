@@ -77,6 +77,14 @@ openai:
   feedback:
     enabled: ${OPENAI_FEEDBACK_ENABLED:false}
 
+naver:
+  news:
+    enabled: ${NAVER_NEWS_ENABLED:true}
+    client-id: ${NAVER_NEWS_CLIENT_ID:}
+    client-secret: ${NAVER_NEWS_CLIENT_SECRET:}
+    cache-ttl-seconds: ${NAVER_NEWS_CACHE_TTL_SECONDS:300}
+    display-per-query: ${NAVER_NEWS_DISPLAY_PER_QUERY:10}
+
 # 종목 마스터 매일 자동 갱신 (Postgres advisory lock 사용, 다중 인스턴스 중 1개만 실행)
 stock:
   master:

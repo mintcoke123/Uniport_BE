@@ -1,6 +1,7 @@
 package com.uniport.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uniport.dto.NewsSharePreviewDTO;
 import com.uniport.entity.ChatMessage;
 import com.uniport.repository.ChatMessageRepository;
 import com.uniport.websocket.GroupChatBroadcaster;
@@ -21,6 +22,7 @@ public class ChatService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     public static final String TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT = "GROUP_INVESTMENT_FEEDBACK_REPORT";
+    public static final String TYPE_NEWS_SHARE = "NEWS_SHARE";
 
     private final ChatMessageRepository chatMessageRepository;
     private final GroupChatBroadcaster groupChatBroadcaster;
@@ -95,6 +97,23 @@ public class ChatService {
             return saved;
         } catch (Exception e) {
             throw new RuntimeException("Failed to save trade message", e);
+        }
+    }
+
+    /** 뉴스 공유용: type=NEWS_SHARE, news 카드 데이터를 저장한다. */
+    @Transactional
+    public ChatMessage saveNewsShareMessage(Long roomId, Long userId, String userNickname, NewsSharePreviewDTO news) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", TYPE_NEWS_SHARE);
+            payload.put("news", news != null ? news : Map.of());
+            String message = OBJECT_MAPPER.writeValueAsString(payload);
+            ChatMessage msg = ChatMessage.of(roomId, userId, userNickname, message);
+            ChatMessage saved = chatMessageRepository.save(msg);
+            broadcastToGroup(roomId, saved);
+            return saved;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to save news share message", e);
         }
     }
 
@@ -255,6 +274,13 @@ public class ChatService {
                     map.put("reportId", parsed.get("reportId"));
                     map.put("report", parsed.get("report"));
                     map.put("chatDisabled", true);
+                    map.put("message", null);
+                    map.put("tradeData", null);
+                    return map;
+                }
+                if (TYPE_NEWS_SHARE.equals(parsed.get("type"))) {
+                    map.put("type", TYPE_NEWS_SHARE);
+                    map.put("news", parsed.get("news"));
                     map.put("message", null);
                     map.put("tradeData", null);
                     return map;

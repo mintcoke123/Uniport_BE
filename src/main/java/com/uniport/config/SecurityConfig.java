@@ -66,6 +66,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/onboarding/**",
                                 "/api/chat/**",
+                                "/api/chatrooms/**",
                                 "/api/matching-rooms/**",
                                 "/api/custom-etfs/**",
                                 "/api/etf-analysis-reports/**",

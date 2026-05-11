@@ -269,6 +269,14 @@ public class ChatRoomService {
                     preview.put("preview", "투자 끝! 피드백 리포트가 도착했어요!");
                     preview.put("title", "피드백 리포트");
                     preview.put("description", "이번 투자 결과를 요약한 리포트가 도착했어요.");
+                } else if (ChatService.TYPE_NEWS_SHARE.equals(type)) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> news = (Map<String, Object>) parsed.get("news");
+                    String title = news != null && news.get("title") != null ? String.valueOf(news.get("title")) : "뉴스";
+                    preview.put("type", ChatService.TYPE_NEWS_SHARE);
+                    preview.put("preview", title);
+                    preview.put("title", "뉴스 공유");
+                    preview.put("description", "팀원이 함께 볼 뉴스를 공유했어요.");
                 }
             } catch (Exception ignored) {
             }

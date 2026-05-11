@@ -46,11 +46,21 @@ public class ManagedNewsArticle extends AuditableEntity {
     @Column(length = 120)
     private String stockName;
 
+    @Column(length = 30)
+    private String category;
+
+    @Builder.Default
+    @Column
+    private Boolean featured = false;
+
     @Column(length = 2000)
     private String summary;
 
     @Column(columnDefinition = "TEXT")
     private String content;
+
+    @Column(length = 500)
+    private String externalUrl;
 
     @Column(columnDefinition = "TEXT")
     private String companyInfoJson;
