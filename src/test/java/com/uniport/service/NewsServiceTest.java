@@ -96,10 +96,11 @@ class NewsServiceTest {
         RealtimeNewsListResponseDTO response = newsService.getRealtimeNewsList("EARNINGS", null, 20);
 
         assertEquals("EARNINGS", response.getSelectedCategory());
-        assertEquals(List.of("ALL", "MARKET", "EARNINGS", "POLICY", "GEOPOLITICAL", "THEME", "COMPANY"),
+        assertEquals(List.of("ALL", "MARKET", "THEME", "COMPANY"),
                 response.getCategories().stream().map(category -> category.getCategory()).toList());
         assertEquals("hankyung_earnings_1", response.getHeroNews().getNewsId());
-        assertEquals("실적", response.getHeroNews().getCategoryLabel());
+        assertEquals("COMPANY", response.getHeroNews().getCategory());
+        assertEquals("종목", response.getHeroNews().getCategoryLabel());
         assertEquals("한국경제", response.getHeroNews().getSourceName());
         assertEquals(List.of("삼성전자"), response.getHeroNews().getRelatedStocks());
         assertEquals("POSITIVE", response.getHeroNews().getSentiment());

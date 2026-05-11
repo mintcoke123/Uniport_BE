@@ -313,14 +313,15 @@ public class NewsService {
         RealtimeNewsCategory category = selectedCategory == RealtimeNewsCategory.ALL
                 ? classifyArticle(article)
                 : selectedCategory;
+        RealtimeNewsCategory displayCategory = displayRealtimeCategory(category);
         List<String> relatedStocks = extractRelatedStocks(article).stream()
                 .map(RealtimeNewsRelatedStockDTO::getName)
                 .toList();
         NewsSentimentAnalysis sentiment = newsSentimentAnalyzer.analyze(toSentimentInput(article));
         return RealtimeNewsItemDTO.builder()
                 .newsId(article.id())
-                .category(category.name())
-                .categoryLabel(category.label())
+                .category(displayCategory.name())
+                .categoryLabel(displayCategory.label())
                 .title(article.title())
                 .summary(article.summary())
                 .sourceName(article.sourceName())
@@ -375,7 +376,12 @@ public class NewsService {
     }
 
     private List<RealtimeNewsCategoryDTO> realtimeCategories() {
-        return List.of(RealtimeNewsCategory.values()).stream()
+        return List.of(
+                        RealtimeNewsCategory.ALL,
+                        RealtimeNewsCategory.MARKET,
+                        RealtimeNewsCategory.THEME,
+                        RealtimeNewsCategory.COMPANY
+                ).stream()
                 .map(category -> RealtimeNewsCategoryDTO.builder()
                         .category(category.name())
                         .label(category.label())
@@ -428,6 +434,15 @@ public class NewsService {
             return RealtimeNewsCategory.COMPANY;
         }
         return RealtimeNewsCategory.MARKET;
+    }
+
+    private RealtimeNewsCategory displayRealtimeCategory(RealtimeNewsCategory category) {
+        return switch (category) {
+            case ALL -> RealtimeNewsCategory.ALL;
+            case THEME -> RealtimeNewsCategory.THEME;
+            case EARNINGS, COMPANY -> RealtimeNewsCategory.COMPANY;
+            case MARKET, POLICY, GEOPOLITICAL -> RealtimeNewsCategory.MARKET;
+        };
     }
 
     private String buildCoreSummary(NewsArticleView article) {
