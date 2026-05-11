@@ -34,6 +34,7 @@ import com.uniport.dto.EtfDiscoveryTrendPointDTO;
 import com.uniport.dto.EtfFavoriteResponseDTO;
 import com.uniport.dto.EtfShareRequestDTO;
 import com.uniport.dto.EtfShareResponseDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.AssetMaster;
 import com.uniport.entity.ManagedEtf;
 import com.uniport.entity.ManagedEtfAnalysisReport;
@@ -128,6 +129,7 @@ public class EtfDataService {
     private final EtfAiFeedbackService etfAiFeedbackService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final YahooAssetSearchClient yahooAssetSearchClient;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
     private final ExecutorService priceFetchExecutor = Executors.newFixedThreadPool(PRICE_FETCH_POOL_SIZE, priceFetchThreadFactory());
 
     public EtfDataService(ManagedEtfRepository managedEtfRepository,
@@ -140,7 +142,8 @@ public class EtfDataService {
                           EtfBacktestEngine etfBacktestEngine,
                           EtfAiFeedbackService etfAiFeedbackService,
                           StockVisualAssetResolver stockVisualAssetResolver,
-                          YahooAssetSearchClient yahooAssetSearchClient) {
+                          YahooAssetSearchClient yahooAssetSearchClient,
+                          StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.managedEtfRepository = managedEtfRepository;
         this.managedEtfAnalysisReportRepository = managedEtfAnalysisReportRepository;
         this.managedEtfFavoriteRepository = managedEtfFavoriteRepository;
@@ -152,6 +155,7 @@ public class EtfDataService {
         this.etfAiFeedbackService = etfAiFeedbackService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.yahooAssetSearchClient = yahooAssetSearchClient;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
 
     @PreDestroy
@@ -515,7 +519,7 @@ public class EtfDataService {
 
     private CustomEtfHoldingDTO toCustomHolding(HoldingPayload item) {
         StockRef ref = resolveStock(item.stockId());
-        String logoUrl = null;
+        ResolvedStockVisual visual = resolveStockVisual(ref.market(), ref.symbol(), ref.name());
         return CustomEtfHoldingDTO.builder()
                 .stockId(item.stockId())
                 .name(ref.name())
@@ -524,14 +528,14 @@ public class EtfDataService {
                 .assetType(ref.assetType())
                 .currency(ref.currency())
                 .weight(item.weight())
-                .logoUrl(logoUrl)
-                .visual(stockVisualAssetResolver.resolve(ref.market(), ref.symbol(), ref.name(), logoUrl))
+                .logoUrl(visual.logoUrl())
+                .visual(visual.visual())
                 .build();
     }
 
     private EtfDiscoveryDetailHoldingDTO toDiscoveryHolding(HoldingPayload item) {
         StockRef ref = resolveStock(item.stockId());
-        String logoUrl = null;
+        ResolvedStockVisual visual = resolveStockVisual(ref.market(), ref.symbol(), ref.name());
         return EtfDiscoveryDetailHoldingDTO.builder()
                 .name(ref.name())
                 .symbol(ref.symbol())
@@ -540,8 +544,8 @@ public class EtfDataService {
                 .currency(ref.currency())
                 .weight(item.weight())
                 .changeRate(item.changeRate() != null ? item.changeRate() : 0.0)
-                .logoUrl(logoUrl)
-                .visual(stockVisualAssetResolver.resolve(ref.market(), ref.symbol(), ref.name(), logoUrl))
+                .logoUrl(visual.logoUrl())
+                .visual(visual.visual())
                 .build();
     }
 
@@ -713,7 +717,7 @@ public class EtfDataService {
     }
 
     private CustomEtfAssetSearchItemDTO toAssetSearchItem(EtfAssetCatalogItem item) {
-        String logoUrl = null;
+        ResolvedStockVisual visual = resolveStockVisual(item.market(), item.symbol(), item.name());
         boolean selectable = isCustomEtfSelectableAsset(item);
         return CustomEtfAssetSearchItemDTO.builder()
                 .assetId(item.assetId())
@@ -726,9 +730,14 @@ public class EtfDataService {
                 .backtestEnabled(selectable)
                 .dataStatus(item.priceSourceStatus())
                 .dataStatusMessage(selectable ? null : item.lastPriceError())
-                .logoUrl(logoUrl)
-                .visual(stockVisualAssetResolver.resolve(item.market(), item.symbol(), item.name(), logoUrl))
+                .logoUrl(visual.logoUrl())
+                .visual(visual.visual())
                 .build();
+    }
+
+    private ResolvedStockVisual resolveStockVisual(String market, String symbol, String name) {
+        StockVisualDTO visual = stockVisualAssetResolver.resolve(market, symbol, name, null);
+        return new ResolvedStockVisual(stockSymbolLogoUrlResolver.resolve(market, symbol, visual), visual);
     }
 
     private boolean isSearchVisibleAsset(EtfAssetCatalogItem item) {
@@ -938,7 +947,7 @@ public class EtfDataService {
                         .items(holdings.stream()
                                 .map(holding -> {
                                     StockRef ref = resolveStock(holding.stockId());
-                                    String logoUrl = null;
+                                    ResolvedStockVisual visual = resolveStockVisual(ref.market(), ref.symbol(), ref.name());
                                     return EtfAnalysisAllocationItemDTO.builder()
                                             .securityId(holding.stockId())
                                             .name(ref.name())
@@ -947,7 +956,8 @@ public class EtfDataService {
                                             .assetType(ref.assetType())
                                             .currency(ref.currency())
                                             .weight(holding.weight())
-                                            .visual(stockVisualAssetResolver.resolve(ref.market(), ref.symbol(), ref.name(), logoUrl))
+                                            .logoUrl(visual.logoUrl())
+                                            .visual(visual.visual())
                                             .build();
                                 })
                                 .toList())
@@ -1498,6 +1508,7 @@ public class EtfDataService {
 
     private record HoldingPayload(String stockId, Integer weight, Double changeRate) {}
     private record StockRef(String name, String symbol, String market, String assetType, String currency) {}
+    private record ResolvedStockVisual(String logoUrl, StockVisualDTO visual) {}
     private record SecurityPriceSeries(String securityId, List<BacktestPricePoint> series) {}
     private record BacktestPriceSeries(Map<String, List<BacktestPricePoint>> priceSeriesBySecurityId,
                                        List<BacktestPricePoint> benchmarkSeries) {}

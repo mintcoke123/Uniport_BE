@@ -63,6 +63,7 @@ class EtfDataServiceTest {
     private EtfAiFeedbackService etfAiFeedbackService;
     private StockVisualAssetResolver stockVisualAssetResolver;
     private YahooAssetSearchClient yahooAssetSearchClient;
+    private StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
     private EtfDataService etfDataService;
 
     @BeforeEach
@@ -78,6 +79,7 @@ class EtfDataServiceTest {
         etfAiFeedbackService = mock(EtfAiFeedbackService.class);
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
         yahooAssetSearchClient = mock(YahooAssetSearchClient.class);
+        stockSymbolLogoUrlResolver = new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app");
         etfDataService = new EtfDataService(
                 managedEtfRepository,
                 managedEtfAnalysisReportRepository,
@@ -89,7 +91,8 @@ class EtfDataServiceTest {
                 etfBacktestEngine,
                 etfAiFeedbackService,
                 stockVisualAssetResolver,
-                yahooAssetSearchClient
+                yahooAssetSearchClient,
+                stockSymbolLogoUrlResolver
         );
     }
 
@@ -327,6 +330,8 @@ class EtfDataServiceTest {
         assertEquals("Apple Inc.", response.getItems().get(0).getName());
         assertEquals("AAPL", response.getItems().get(0).getSymbol());
         assertEquals("NASDAQ", response.getItems().get(0).getMarket());
+        assertEquals("https://uniportbe-production.up.railway.app/api/stock-symbols/NASDAQ/AAPL.svg?text=AAPL&bg=EEF2FF&fg=4F46E5",
+                response.getItems().get(0).getLogoUrl());
     }
 
     @Test

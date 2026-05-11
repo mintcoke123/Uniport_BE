@@ -34,6 +34,9 @@ public class EtfAnalysisAllocationItemDTO {
     @Schema(example = "40", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer weight;
 
+    @Schema(example = "https://uniportbe-production.up.railway.app/api/stock-symbols/NASDAQ/AAPL.svg?text=APP&bg=F3E8FF&fg=9333EA")
+    private String logoUrl;
+
     @Schema(implementation = StockVisualDTO.class)
     private StockVisualDTO visual;
 }

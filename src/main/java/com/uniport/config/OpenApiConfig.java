@@ -80,11 +80,13 @@ public class OpenApiConfig {
 
         String normalizedPath = path.startsWith("/") ? path : "/" + path;
         String normalizedMethod = httpMethod == null ? "" : httpMethod.toUpperCase(Locale.ROOT);
+        boolean publicCustomEtfAssetSearch = normalizedPath.startsWith("/api/custom-etfs/assets/search")
+                && "GET".equals(normalizedMethod);
 
         return normalizedPath.startsWith("/api/onboarding/")
                 || normalizedPath.startsWith("/api/chat/")
                 || normalizedPath.startsWith("/api/matching-rooms/")
-                || normalizedPath.startsWith("/api/custom-etfs/")
+                || (normalizedPath.startsWith("/api/custom-etfs/") && !publicCustomEtfAssetSearch)
                 || normalizedPath.startsWith("/api/etf-analysis-reports/")
                 || normalizedPath.startsWith("/api/mypage")
                 || normalizedPath.startsWith("/api/points/")

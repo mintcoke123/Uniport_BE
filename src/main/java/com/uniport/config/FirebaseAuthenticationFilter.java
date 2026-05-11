@@ -62,6 +62,9 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
         String requestUri = request.getRequestURI();
         String method = request.getMethod();
+        boolean publicCustomEtfAssetSearch = requestUri != null
+                && requestUri.startsWith("/api/custom-etfs/assets/search")
+                && "GET".equalsIgnoreCase(method);
         boolean protectedRequest = requestUri != null
                 && (requestUri.startsWith("/api/investment-survey/")
                 || requestUri.startsWith("/api/onboarding/")
@@ -70,7 +73,7 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
                 || requestUri.startsWith("/api/matching-rooms/")
                 || requestUri.startsWith("/investment-survey/")
                 || requestUri.startsWith("/surveys/")
-                || requestUri.startsWith("/api/custom-etfs/")
+                || (requestUri.startsWith("/api/custom-etfs/") && !publicCustomEtfAssetSearch)
                 || requestUri.startsWith("/api/etf-analysis-reports/")
                 || (requestUri.startsWith("/api/etf-discovery/") && !"GET".equalsIgnoreCase(request.getMethod()))
                 || requestUri.startsWith("/api/mypage")

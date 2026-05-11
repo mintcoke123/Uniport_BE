@@ -83,26 +83,22 @@ public class CustomEtfController {
     }
 
     @GetMapping("/assets/search")
-    @Operation(summary = "나만의 ETF 구성 주식 검색", description = "직접 구성 플로우는 검증된 주식형 자산만 지원합니다.",
-            security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @Operation(summary = "나만의 ETF 구성 주식 검색", description = "직접 구성 플로우는 검증된 주식형 자산만 지원합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "검색 성공",
                     content = @Content(schema = @Schema(implementation = CustomEtfAssetSearchResponseDTO.class))),
             @ApiResponse(responseCode = "400", description = "잘못된 요청",
-                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
-            @ApiResponse(responseCode = "401", description = "인증 실패",
                     content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
     })
     public ResponseEntity<CustomEtfAssetSearchResponseDTO> searchAssets(
-            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
-            @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "query", required = false) String query,
+            @RequestParam(value = "q", required = false) String q,
             @RequestParam(value = "assetType", required = false) String assetType,
             @RequestParam(value = "market", required = false) String market,
             @RequestParam(value = "page", required = false) Integer page,
             @RequestParam(value = "size", required = false) Integer size) {
-        currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(etfDataService.searchAssets(keyword, assetType, market, page, size));
+        return ResponseEntity.ok(etfDataService.searchAssets(firstNonBlank(keyword, query, q), assetType, market, page, size));
     }
 
     @GetMapping("/{etfId}")
@@ -206,5 +202,14 @@ public class CustomEtfController {
             @RequestBody EtfShareRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(etfDataService.shareCustomEtf(user, etfId, request));
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 }
