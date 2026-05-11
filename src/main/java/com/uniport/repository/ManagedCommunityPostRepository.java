@@ -14,9 +14,9 @@ public interface ManagedCommunityPostRepository extends JpaRepository<ManagedCom
     @Query("""
             select p
             from ManagedCommunityPost p
-            where (:type is null or upper(p.type) = upper(:type))
-              and (:stockCode is null or upper(coalesce(p.stockCode, '')) = upper(:stockCode))
-              and (:sentiment is null or upper(coalesce(p.sentiment, '')) = upper(:sentiment))
+            where (:type is null or upper(p.type) = :type)
+              and (:stockCode is null or upper(coalesce(p.stockCode, '')) = :stockCode)
+              and (:sentiment is null or upper(coalesce(p.sentiment, '')) = :sentiment)
             order by p.createdAt desc, p.id desc
             """)
     List<ManagedCommunityPost> search(String type, String stockCode, String sentiment);

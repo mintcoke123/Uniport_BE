@@ -66,9 +66,12 @@ public class CommunityService {
         String safeType = normalizeType(type, false);
         String safeStockCode = normalizeStockCode(stockCode);
         String safeSentiment = normalizeSentiment(sentiment, false);
+        String typeFilter = safeType == null ? null : safeType.toUpperCase(Locale.ROOT);
+        String stockCodeFilter = safeStockCode == null ? null : safeStockCode.toUpperCase(Locale.ROOT);
+        String sentimentFilter = safeSentiment == null ? null : safeSentiment.toUpperCase(Locale.ROOT);
         int safeSize = size == null || size < 1 ? 10 : Math.min(size, 20);
 
-        List<ManagedCommunityPost> filtered = managedCommunityPostRepository.search(safeType, safeStockCode, safeSentiment)
+        List<ManagedCommunityPost> filtered = managedCommunityPostRepository.search(typeFilter, stockCodeFilter, sentimentFilter)
                 .stream()
                 .sorted("HOT".equals(safeSort) ? this::compareHot : this::compareLatest)
                 .toList();
