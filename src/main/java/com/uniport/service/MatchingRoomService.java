@@ -58,6 +58,14 @@ public class MatchingRoomService {
                 });
     }
 
+    public void assertTeamRoomForCallAll(Long groupId) {
+        matchingRoomRepository.findById(groupId)
+                .filter(room -> room.getCapacity() == 1)
+                .ifPresent(room -> {
+                    throw new ApiException("개인방에서는 전체 호출을 사용할 수 없습니다.", HttpStatus.FORBIDDEN);
+                });
+    }
+
     public void assertTeamRoomForVoteCreate(Long groupId, String orderStrategy) {
         var roomOpt = matchingRoomRepository.findById(groupId);
         if (roomOpt.isEmpty()) return;

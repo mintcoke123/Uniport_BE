@@ -1,6 +1,7 @@
 package com.uniport.service;
 
 import com.uniport.entity.FriendRelation;
+import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
@@ -150,6 +151,21 @@ class MatchingRoomServiceTest {
         );
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+    }
+
+    @Test
+    void assertTeamRoomForCallAll_rejectsPersonalRoomWithCallAllMessage() {
+        MatchingRoom room = MatchingRoom.create("개인방", 1);
+        entityManager.persist(room);
+        entityManager.flush();
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> matchingRoomService.assertTeamRoomForCallAll(room.getId())
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+        assertEquals("개인방에서는 전체 호출을 사용할 수 없습니다.", exception.getMessage());
     }
 
     private User persistUser(String studentId, String nickname) {
