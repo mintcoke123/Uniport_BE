@@ -13,6 +13,8 @@ import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import com.uniport.service.ChatService;
 import com.uniport.service.StockVisualAssetResolver;
+import com.uniport.service.TradeNewsContext;
+import com.uniport.service.TradeNewsContextService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -43,6 +45,7 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         FeedbackCommentGenerator commentGenerator = mock(FeedbackCommentGenerator.class);
         GroupInvestmentPointSettlementService pointSettlementService = mock(GroupInvestmentPointSettlementService.class);
         StockVisualAssetResolver stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        TradeNewsContextService tradeNewsContextService = mock(TradeNewsContextService.class);
         ChatService chatService = mock(ChatService.class);
         GenerateGroupInvestmentFeedbackReportUseCase useCase = new GenerateGroupInvestmentFeedbackReportUseCase(
                 matchingRoomRepository,
@@ -57,6 +60,7 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 commentGenerator,
                 pointSettlementService,
                 stockVisualAssetResolver,
+                tradeNewsContextService,
                 chatService
         );
         Instant endedAt = Instant.parse("2026-01-28T13:00:00Z");
@@ -107,6 +111,7 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         FeedbackCommentGenerator commentGenerator = mock(FeedbackCommentGenerator.class);
         GroupInvestmentPointSettlementService pointSettlementService = mock(GroupInvestmentPointSettlementService.class);
         StockVisualAssetResolver stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        TradeNewsContextService tradeNewsContextService = mock(TradeNewsContextService.class);
         ChatService chatService = mock(ChatService.class);
         GenerateGroupInvestmentFeedbackReportUseCase useCase = new GenerateGroupInvestmentFeedbackReportUseCase(
                 matchingRoomRepository,
@@ -121,6 +126,7 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 commentGenerator,
                 pointSettlementService,
                 stockVisualAssetResolver,
+                tradeNewsContextService,
                 chatService
         );
         MatchingRoom room = MatchingRoom.builder()
@@ -170,6 +176,7 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         FeedbackCommentGenerator commentGenerator = mock(FeedbackCommentGenerator.class);
         GroupInvestmentPointSettlementService pointSettlementService = mock(GroupInvestmentPointSettlementService.class);
         StockVisualAssetResolver stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        TradeNewsContextService tradeNewsContextService = mock(TradeNewsContextService.class);
         ChatService chatService = mock(ChatService.class);
         GenerateGroupInvestmentFeedbackReportUseCase useCase = new GenerateGroupInvestmentFeedbackReportUseCase(
                 matchingRoomRepository,
@@ -184,6 +191,7 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 commentGenerator,
                 pointSettlementService,
                 stockVisualAssetResolver,
+                tradeNewsContextService,
                 chatService
         );
         Instant endedAt = Instant.parse("2026-01-28T13:00:00Z");
@@ -224,6 +232,16 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         when(commentGenerator.generate(any(GroupInvestmentFeedbackCalculation.class)))
                 .thenReturn(new GeneratedFeedbackComment("삼성전자 거래가 성과에 기여했어요.", "TEMPLATE"));
         when(stockVisualAssetResolver.resolve("KRX", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
+        when(tradeNewsContextService.summarize("005930", "삼성전자", Instant.parse("2026-01-22T13:30:00Z")))
+                .thenReturn(new TradeNewsContext(
+                        1,
+                        1,
+                        "NEGATIVE",
+                        "POSITIVE",
+                        "매수 당시 관련 뉴스는 악재가 우세했지만 이후 호재 뉴스가 늘었어요.",
+                        List.of("삼성전자 실적 둔화 우려"),
+                        List.of("삼성전자 반등 기대 확대")
+                ));
         when(reportRepository.save(any(GroupInvestmentFeedbackReport.class))).thenAnswer(invocation -> {
             GroupInvestmentFeedbackReport report = invocation.getArgument(0);
             if (report.getId() == null) {
@@ -240,8 +258,12 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         Map<String, Object> bestTrade = (Map<String, Object>) response.get("bestTrade");
         @SuppressWarnings("unchecked")
         Map<String, Object> visual = (Map<String, Object>) bestTrade.get("visual");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> newsContext = (Map<String, Object>) bestTrade.get("newsContext");
         assertEquals("삼성", visual.get("text"));
         assertEquals("FALLBACK_SYMBOL", visual.get("type"));
+        assertEquals("NEGATIVE", newsContext.get("beforeSentiment"));
+        assertEquals("POSITIVE", newsContext.get("afterSentiment"));
     }
 
     private StockVisualDTO visual(String text) {

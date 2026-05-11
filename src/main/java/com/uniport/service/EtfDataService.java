@@ -54,6 +54,7 @@ import com.uniport.service.backtest.BacktestRequest;
 import com.uniport.service.backtest.BacktestResult;
 import com.uniport.service.backtest.EtfAiFeedbackService;
 import com.uniport.service.backtest.EtfBacktestEngine;
+import com.uniport.service.backtest.EtfNewsExposure;
 import com.uniport.service.backtest.HistoricalPriceProvider;
 import com.uniport.service.backtest.InsightFacts;
 import com.uniport.service.backtest.RuleBasedFeedback;
@@ -129,6 +130,7 @@ public class EtfDataService {
     private final HistoricalPriceProvider historicalPriceProvider;
     private final EtfBacktestEngine etfBacktestEngine;
     private final EtfAiFeedbackService etfAiFeedbackService;
+    private final EtfNewsExposureService etfNewsExposureService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final YahooAssetSearchClient yahooAssetSearchClient;
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
@@ -143,6 +145,7 @@ public class EtfDataService {
                           HistoricalPriceProvider historicalPriceProvider,
                           EtfBacktestEngine etfBacktestEngine,
                           EtfAiFeedbackService etfAiFeedbackService,
+                          EtfNewsExposureService etfNewsExposureService,
                           StockVisualAssetResolver stockVisualAssetResolver,
                           YahooAssetSearchClient yahooAssetSearchClient,
                           StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
@@ -155,6 +158,7 @@ public class EtfDataService {
         this.historicalPriceProvider = historicalPriceProvider;
         this.etfBacktestEngine = etfBacktestEngine;
         this.etfAiFeedbackService = etfAiFeedbackService;
+        this.etfNewsExposureService = etfNewsExposureService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.yahooAssetSearchClient = yahooAssetSearchClient;
         this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
@@ -924,7 +928,8 @@ public class EtfDataService {
                 periodLabel(period),
                 benchmarkDisplayName(benchmark),
                 backtestResult,
-                backtestHoldings
+                backtestHoldings,
+                newsExposure(backtestHoldings)
         );
         RuleBasedFeedback feedback = etfAiFeedbackService.buildFeedback(facts);
 
@@ -1022,6 +1027,12 @@ public class EtfDataService {
             priceSeriesBySecurityId.put(priceSeries.securityId(), priceSeries.series());
         }
         return new BacktestPriceSeries(priceSeriesBySecurityId, joinPriceFetch(benchmarkFuture));
+    }
+
+    private EtfNewsExposure newsExposure(List<BacktestHolding> holdings) {
+        return etfNewsExposureService != null
+                ? etfNewsExposureService.summarize(holdings)
+                : EtfNewsExposure.empty();
     }
 
     private <T> CompletableFuture<T> fetchPriceAsync(Supplier<T> supplier) {

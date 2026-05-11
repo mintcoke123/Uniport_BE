@@ -44,6 +44,15 @@ public class EtfAiFeedbackService {
                                           String benchmarkName,
                                           BacktestResult result,
                                           List<BacktestHolding> holdings) {
+        return buildInsightFacts(portfolioLabel, periodLabel, benchmarkName, result, holdings, EtfNewsExposure.empty());
+    }
+
+    public InsightFacts buildInsightFacts(String portfolioLabel,
+                                          String periodLabel,
+                                          String benchmarkName,
+                                          BacktestResult result,
+                                          List<BacktestHolding> holdings,
+                                          EtfNewsExposure newsExposure) {
         List<String> positiveFacts = new ArrayList<>();
         List<String> riskFacts = new ArrayList<>();
         if (result.excessReturnPercent() != null) {
@@ -77,6 +86,25 @@ public class EtfAiFeedbackService {
         if (result.benchmarkReturnPercent() == null) {
             riskFacts.add("벤치마크 과거 가격 데이터가 없어 초과 성과는 계산하지 않았습니다.");
         }
+        EtfNewsExposure safeNewsExposure = newsExposure != null ? newsExposure : EtfNewsExposure.empty();
+        if (safeNewsExposure.matchedNewsCount() > 0) {
+            if (safeNewsExposure.positiveExposurePercent().compareTo(BigDecimal.ZERO) > 0) {
+                positiveFacts.add("호재 뉴스 노출 비중은 "
+                        + formatPercent(safeNewsExposure.positiveExposurePercent()) + "입니다.");
+            }
+            if (safeNewsExposure.negativeExposurePercent().compareTo(BigDecimal.ZERO) > 0) {
+                riskFacts.add("악재 뉴스 노출 비중은 "
+                        + formatPercent(safeNewsExposure.negativeExposurePercent()) + "입니다.");
+            }
+            for (EtfRebalanceCandidate candidate : safeNewsExposure.rebalanceCandidates()) {
+                if ("INCREASE_WATCH".equals(candidate.action())) {
+                    positiveFacts.add(candidate.reason());
+                } else {
+                    riskFacts.add(candidate.reason());
+                }
+            }
+            riskFacts.addAll(safeNewsExposure.riskPoints());
+        }
 
         return InsightFacts.builder()
                 .portfolioLabel(portfolioLabel)
@@ -97,6 +125,7 @@ public class EtfAiFeedbackService {
                 .dominantSector(result.dominantSector())
                 .dominantSectorWeightPercent(result.dominantSectorWeightPercent())
                 .holdings(sortedHoldings(holdings))
+                .newsExposure(safeNewsExposure)
                 .positiveFacts(positiveFacts)
                 .riskFacts(riskFacts)
                 .disclaimer(DEFAULT_DISCLAIMER)

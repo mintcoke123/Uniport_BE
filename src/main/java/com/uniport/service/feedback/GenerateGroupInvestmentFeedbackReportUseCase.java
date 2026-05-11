@@ -18,6 +18,8 @@ import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import com.uniport.service.ChatService;
 import com.uniport.service.StockVisualAssetResolver;
+import com.uniport.service.TradeNewsContext;
+import com.uniport.service.TradeNewsContextService;
 import org.springframework.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +58,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
     private final FeedbackCommentGenerator commentGenerator;
     private final GroupInvestmentPointSettlementService pointSettlementService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final TradeNewsContextService tradeNewsContextService;
     private final ChatService chatService;
 
     public GenerateGroupInvestmentFeedbackReportUseCase(MatchingRoomRepository matchingRoomRepository,
@@ -70,6 +73,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
                                                         FeedbackCommentGenerator commentGenerator,
                                                         GroupInvestmentPointSettlementService pointSettlementService,
                                                         StockVisualAssetResolver stockVisualAssetResolver,
+                                                        TradeNewsContextService tradeNewsContextService,
                                                         ChatService chatService) {
         this.matchingRoomRepository = matchingRoomRepository;
         this.voteRepository = voteRepository;
@@ -83,6 +87,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
         this.commentGenerator = commentGenerator;
         this.pointSettlementService = pointSettlementService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.tradeNewsContextService = tradeNewsContextService;
         this.chatService = chatService;
     }
 
@@ -337,12 +342,32 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
         String logoUrl = null;
         map.put("logoUrl", logoUrl);
         map.put("visual", stockVisualAssetResolver.resolve("KRX", trade.stockCode(), trade.stockName(), logoUrl));
+        map.put("newsContext", tradeNewsContextToMap(tradeNewsContextService.summarize(
+                trade.stockCode(),
+                trade.stockName(),
+                trade.executedAt()
+        )));
         map.put("side", trade.side().name());
         map.put("quantity", trade.quantity());
         map.put("executedPrice", trade.executedPrice());
         map.put("pnlAmount", trade.pnlAmount());
         map.put("pnlRate", trade.pnlRate());
         map.put("executedAt", trade.executedAt() != null ? trade.executedAt().toString() : null);
+        return map;
+    }
+
+    private Map<String, Object> tradeNewsContextToMap(TradeNewsContext context) {
+        if (context == null || (context.beforeNewsCount() == 0 && context.afterNewsCount() == 0)) {
+            return null;
+        }
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("beforeNewsCount", context.beforeNewsCount());
+        map.put("afterNewsCount", context.afterNewsCount());
+        map.put("beforeSentiment", context.beforeSentiment());
+        map.put("afterSentiment", context.afterSentiment());
+        map.put("feedbackHint", context.feedbackHint());
+        map.put("beforeHeadlines", context.beforeHeadlines());
+        map.put("afterHeadlines", context.afterHeadlines());
         return map;
     }
 

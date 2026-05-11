@@ -1,11 +1,15 @@
 package com.uniport.service;
 
 import com.uniport.service.backtest.EtfAiFeedbackService;
+import com.uniport.service.backtest.EtfNewsExposure;
+import com.uniport.service.backtest.EtfRebalanceCandidate;
 import com.uniport.service.backtest.FeedbackBullet;
+import com.uniport.service.backtest.HoldingNewsExposure;
 import com.uniport.service.backtest.InsightFacts;
 import com.uniport.service.backtest.LlmFeedbackClient;
 import com.uniport.service.backtest.RuleBasedFeedback;
 import com.uniport.service.backtest.BacktestHolding;
+import com.uniport.service.backtest.BacktestResult;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -71,6 +75,50 @@ class EtfAiFeedbackServiceTest {
         assertTrue(feedback.bullets().get(0).message().contains("NVIDIA Corp. 45.0%"));
         assertTrue(feedback.bullets().get(1).message().contains("Apple Inc. 30.0%"));
         assertTrue(feedback.bullets().get(2).message().contains("Microsoft Corp. 25.0%"));
+    }
+
+    @Test
+    void buildInsightFacts_includesWeightedNewsExposureFacts() {
+        BacktestResult result = backtestResult();
+        EtfNewsExposure newsExposure = new EtfNewsExposure(
+                BigDecimal.valueOf(40.0).setScale(1),
+                BigDecimal.valueOf(60.0).setScale(1),
+                2,
+                List.of(new HoldingNewsExposure(
+                        "US_TSLA",
+                        "Tesla",
+                        BigDecimal.valueOf(60.0).setScale(1),
+                        "NEGATIVE",
+                        0.80,
+                        1,
+                        "수요 둔화 우려가 커지고 있어요.",
+                        "Tesla 수요 둔화 우려"
+                )),
+                List.of(new EtfRebalanceCandidate(
+                        "US_TSLA",
+                        "Tesla",
+                        BigDecimal.valueOf(60.0).setScale(1),
+                        "NEGATIVE",
+                        "REDUCE_WATCH",
+                        "Tesla는 악재 뉴스가 우세해 비중 축소 점검 후보입니다."
+                )),
+                List.of("Tesla 60.0%에 악재 뉴스가 우세해요: 수요 둔화 우려가 커지고 있어요.")
+        );
+
+        InsightFacts facts = service.buildInsightFacts(
+                "전기차 ETF",
+                "1년",
+                "S&P 500",
+                result,
+                List.of(new BacktestHolding("US_TSLA", "Tesla", BigDecimal.valueOf(60.0), "전기차")),
+                newsExposure
+        );
+
+        assertEquals(newsExposure, facts.newsExposure());
+        assertTrue(facts.positiveFacts().stream().anyMatch(fact -> fact.contains("호재 뉴스 노출 비중은 40.0%")));
+        assertTrue(facts.riskFacts().stream().anyMatch(fact -> fact.contains("악재 뉴스 노출 비중은 60.0%")));
+        assertTrue(facts.riskFacts().stream().anyMatch(fact -> fact.contains("Tesla 60.0%")));
+        assertTrue(facts.riskFacts().stream().anyMatch(fact -> fact.contains("비중 축소 점검 후보")));
     }
 
     @Test
@@ -163,5 +211,31 @@ class EtfAiFeedbackServiceTest {
                 .dominantSector("기술")
                 .dominantSectorWeightPercent(BigDecimal.valueOf(72.0))
                 .disclaimer("과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.");
+    }
+
+    private BacktestResult backtestResult() {
+        return new BacktestResult(
+                BigDecimal.valueOf(100_000_000),
+                BigDecimal.valueOf(114_700_000),
+                BigDecimal.valueOf(14_700_000),
+                BigDecimal.valueOf(14.7),
+                BigDecimal.valueOf(14.7),
+                BigDecimal.valueOf(14.2),
+                BigDecimal.valueOf(-8.5),
+                BigDecimal.valueOf(11.5),
+                BigDecimal.valueOf(3.2),
+                BigDecimal.valueOf(0.82),
+                BigDecimal.valueOf(1.0),
+                "Tesla",
+                BigDecimal.valueOf(60.0),
+                BigDecimal.valueOf(100.0),
+                "전기차",
+                BigDecimal.valueOf(60.0),
+                20,
+                "LOW",
+                "낮음",
+                252,
+                List.of()
+        );
     }
 }

@@ -25,6 +25,7 @@ public record InsightFacts(
         String dominantSector,
         BigDecimal dominantSectorWeightPercent,
         List<BacktestHolding> holdings,
+        EtfNewsExposure newsExposure,
         List<String> positiveFacts,
         List<String> riskFacts,
         String disclaimer

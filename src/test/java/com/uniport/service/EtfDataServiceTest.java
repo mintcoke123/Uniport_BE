@@ -28,6 +28,7 @@ import com.uniport.service.backtest.BacktestPricePoint;
 import com.uniport.service.backtest.BacktestResult;
 import com.uniport.service.backtest.EtfAiFeedbackService;
 import com.uniport.service.backtest.EtfBacktestEngine;
+import com.uniport.service.backtest.EtfNewsExposure;
 import com.uniport.service.backtest.HistoricalPriceProvider;
 import com.uniport.service.backtest.InsightFacts;
 import com.uniport.service.backtest.RuleBasedFeedback;
@@ -70,6 +71,7 @@ class EtfDataServiceTest {
     private HistoricalPriceProvider historicalPriceProvider;
     private EtfBacktestEngine etfBacktestEngine;
     private EtfAiFeedbackService etfAiFeedbackService;
+    private EtfNewsExposureService etfNewsExposureService;
     private StockVisualAssetResolver stockVisualAssetResolver;
     private YahooAssetSearchClient yahooAssetSearchClient;
     private StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
@@ -86,6 +88,7 @@ class EtfDataServiceTest {
         historicalPriceProvider = mock(HistoricalPriceProvider.class);
         etfBacktestEngine = mock(EtfBacktestEngine.class);
         etfAiFeedbackService = mock(EtfAiFeedbackService.class);
+        etfNewsExposureService = mock(EtfNewsExposureService.class);
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
         yahooAssetSearchClient = mock(YahooAssetSearchClient.class);
         stockSymbolLogoUrlResolver = new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app");
@@ -93,6 +96,7 @@ class EtfDataServiceTest {
                 .thenAnswer(this::fullCoverageSeries);
         when(historicalPriceProvider.getSecurityPriceSeriesForEligibility(any(), any(LocalDate.class), any(LocalDate.class)))
                 .thenAnswer(this::fullCoverageSeries);
+        when(etfNewsExposureService.summarize(any())).thenReturn(EtfNewsExposure.empty());
         etfDataService = new EtfDataService(
                 managedEtfRepository,
                 managedEtfAnalysisReportRepository,
@@ -103,6 +107,7 @@ class EtfDataServiceTest {
                 historicalPriceProvider,
                 etfBacktestEngine,
                 etfAiFeedbackService,
+                etfNewsExposureService,
                 stockVisualAssetResolver,
                 yahooAssetSearchClient,
                 stockSymbolLogoUrlResolver
@@ -633,7 +638,7 @@ class EtfDataServiceTest {
         BacktestResult result = backtestResult();
         when(etfBacktestEngine.run(any())).thenReturn(result);
         InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any(), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -677,7 +682,7 @@ class EtfDataServiceTest {
         BacktestResult result = backtestResult();
         when(etfBacktestEngine.run(any())).thenReturn(result);
         InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("기본 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("기본 ETF"), eq("1년"), eq("S&P 500"), eq(result), any(), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -724,7 +729,7 @@ class EtfDataServiceTest {
                 .positiveFacts(List.of("분산이 양호합니다."))
                 .riskFacts(List.of("과거 데이터 한계가 있습니다."))
                 .build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any(), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -752,6 +757,57 @@ class EtfDataServiceTest {
                 .anyMatch(value -> value.contains("transaction fee") && value.contains("slippage")));
         assertEquals(true, report.getMetadata().getLimitations().stream()
                 .anyMatch(value -> value.contains("dividend") && value.contains("split")));
+    }
+
+    @Test
+    void analyze_passesNewsExposureIntoAiInsightFacts() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("분석 ETF")
+                .theme("테크")
+                .holdingsJson("[{\"stockId\":\"US_TSLA\",\"weight\":60},{\"stockId\":\"KRX_005930\",\"weight\":40}]")
+                .build();
+        AssetMaster tesla = asset("US_TSLA", "STOCK", "Tesla", "TSLA", "NASDAQ", "USD");
+        AssetMaster samsung = asset("KRX_005930", "STOCK", "삼성전자", "005930", "KOSPI", "KRW");
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_TSLA")).thenReturn(Optional.of(tesla));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_005930")).thenReturn(Optional.of(samsung));
+        when(historicalPriceProvider.getSecurityPriceSeries(any(), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point("2025-01-02", "100"), point("2025-01-03", "101")));
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point("2025-01-02", "100"), point("2025-01-03", "101")));
+        BacktestResult result = backtestResult();
+        when(etfBacktestEngine.run(any())).thenReturn(result);
+        EtfNewsExposure exposure = new EtfNewsExposure(
+                BigDecimal.valueOf(40.0).setScale(1),
+                BigDecimal.valueOf(60.0).setScale(1),
+                2,
+                List.of(),
+                List.of(),
+                List.of("Tesla 60.0%에 악재 뉴스가 우세해요.")
+        );
+        when(etfNewsExposureService.summarize(any())).thenReturn(exposure);
+        InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any(), eq(exposure))).thenReturn(facts);
+        when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "뉴스 흐름을 반영한 백테스트 요약입니다.",
+                List.of(),
+                "CAUTION",
+                "과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.",
+                true
+        ));
+
+        EtfAnalysisStartResponseDTO response = etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("1Y").benchmark("SP500").build());
+
+        assertEquals("COMPLETED", response.getStatus());
+        org.mockito.Mockito.verify(etfNewsExposureService).summarize(any());
+        org.mockito.Mockito.verify(etfAiFeedbackService)
+                .buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any(), eq(exposure));
     }
 
     @Test
@@ -789,7 +845,7 @@ class EtfDataServiceTest {
         BacktestResult result = backtestResult();
         when(etfBacktestEngine.run(any())).thenReturn(result);
         InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any(), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -826,7 +882,7 @@ class EtfDataServiceTest {
         BacktestResult result = backtestResult();
         when(etfBacktestEngine.run(any())).thenReturn(result);
         InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any(), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
@@ -863,7 +919,7 @@ class EtfDataServiceTest {
         BacktestResult result = backtestResult();
         when(etfBacktestEngine.run(any())).thenReturn(result);
         InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
-        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("5년"), eq("S&P 500"), eq(result), any())).thenReturn(facts);
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("5년"), eq("S&P 500"), eq(result), any(), any())).thenReturn(facts);
         when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
                 "AI 리스크 진단",
                 "백테스트 기준 요약입니다.",
