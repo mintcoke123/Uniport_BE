@@ -61,6 +61,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/stock-symbols/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/custom-etfs/assets/search").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/etf-discovery/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/mock-investing/realtime-news/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/community/**").permitAll()
                         .requestMatchers("/groups/*/chat", "/prices").permitAll()
                         .requestMatchers(
