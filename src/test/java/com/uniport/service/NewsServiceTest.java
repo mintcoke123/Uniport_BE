@@ -95,7 +95,7 @@ class NewsServiceTest {
 
         RealtimeNewsListResponseDTO response = newsService.getRealtimeNewsList("EARNINGS", null, 20);
 
-        assertEquals("EARNINGS", response.getSelectedCategory());
+        assertEquals("COMPANY", response.getSelectedCategory());
         assertEquals(List.of("ALL", "MARKET", "THEME", "COMPANY"),
                 response.getCategories().stream().map(category -> category.getCategory()).toList());
         assertEquals("hankyung_earnings_1", response.getHeroNews().getNewsId());
@@ -133,6 +133,38 @@ class NewsServiceTest {
         assertEquals("악재", response.getHeroNews().getSentimentLabel());
         org.junit.jupiter.api.Assertions.assertTrue(response.getHeroNews().getSentimentReason().contains("부정"));
         assertEquals(List.of("삼성전자"), response.getHeroNews().getRelatedStocks());
+    }
+
+    @Test
+    void getRealtimeNewsList_companyIncludesMarketFeedArticleWhenStockIsMentioned() {
+        when(newsFeedClient.fetchLatest()).thenReturn(List.of(
+                fetchedWithTitle(
+                        "naver_market_stock_1",
+                        NewsCategory.MARKET,
+                        "삼성전자 실적 쇼크 우려에 반도체 급락",
+                        "영업이익 둔화와 차익실현 매물이 겹치며 투자 심리가 악화되고 있어요.",
+                        "네이버 뉴스",
+                        false,
+                        LocalDateTime.of(2026, 5, 11, 16, 30)
+                ),
+                fetchedWithTitle(
+                        "naver_market_plain_1",
+                        NewsCategory.MARKET,
+                        "코스피, 환율 안정에 상승 출발",
+                        "외국인 순매수가 지수 흐름을 이끌고 있어요.",
+                        "네이버 뉴스",
+                        false,
+                        LocalDateTime.of(2026, 5, 11, 16, 20)
+                )
+        ));
+
+        RealtimeNewsListResponseDTO response = newsService.getRealtimeNewsList("COMPANY", null, 20);
+
+        assertEquals("naver_market_stock_1", response.getHeroNews().getNewsId());
+        assertEquals("COMPANY", response.getHeroNews().getCategory());
+        assertEquals("종목", response.getHeroNews().getCategoryLabel());
+        assertEquals(List.of("삼성전자"), response.getHeroNews().getRelatedStocks());
+        assertEquals(List.of(), response.getItems());
     }
 
     @Test

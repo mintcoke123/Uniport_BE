@@ -76,4 +76,51 @@ class NaverNewsFeedClientTest {
 
         assertEquals(List.of(), client.fetchLatest());
     }
+
+    @Test
+    void fetchLatest_prefersStockCategoryWhenSameArticleAppearsInMarketAndStockFeeds() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        NaverNewsFeedClient client = new NaverNewsFeedClient(
+                restTemplate,
+                true,
+                "client-id",
+                "client-secret",
+                300,
+                10,
+                List.of(
+                        NaverNewsFeedClient.FeedDefinition.market("삼성전자 시황"),
+                        NaverNewsFeedClient.FeedDefinition.domesticStock("삼성전자")
+                )
+        );
+        String responseBody = """
+                {
+                  "items": [
+                    {
+                      "title": "삼성전자, 실적 우려에 약세 - 테스트경제",
+                      "originallink": "https://example.com/samsung",
+                      "link": "https://n.news.naver.com/article/001/0000000002",
+                      "description": "삼성전자 실적 우려가 투자심리에 부담을 주고 있어요.",
+                      "pubDate": "Mon, 11 May 2026 03:30:00 GMT"
+                    }
+                  ]
+                }
+                """;
+        when(restTemplate.exchange(
+                eq(URI.create("https://openapi.naver.com/v1/search/news.json?query=%EC%82%BC%EC%84%B1%EC%A0%84%EC%9E%90%20%EC%8B%9C%ED%99%A9&display=10&start=1&sort=date")),
+                eq(HttpMethod.GET),
+                org.mockito.ArgumentMatchers.<HttpEntity<Void>>any(),
+                eq(String.class)
+        )).thenReturn(ResponseEntity.ok(responseBody));
+        when(restTemplate.exchange(
+                eq(URI.create("https://openapi.naver.com/v1/search/news.json?query=%EC%82%BC%EC%84%B1%EC%A0%84%EC%9E%90&display=10&start=1&sort=date")),
+                eq(HttpMethod.GET),
+                org.mockito.ArgumentMatchers.<HttpEntity<Void>>any(),
+                eq(String.class)
+        )).thenReturn(ResponseEntity.ok(responseBody));
+
+        List<FetchedNewsArticle> articles = client.fetchLatest();
+
+        assertEquals(1, articles.size());
+        assertEquals(NewsCategory.DOMESTIC_STOCK, articles.get(0).getCategory());
+    }
 }

@@ -87,7 +87,10 @@ public class NaverNewsFeedClient implements NewsFeedClient {
                 String key = article.getExternalUrl() != null && !article.getExternalUrl().isBlank()
                         ? article.getExternalUrl()
                         : article.getTitle();
-                deduped.putIfAbsent(key, article);
+                FetchedNewsArticle existing = deduped.get(key);
+                if (existing == null || shouldPreferArticle(article, existing)) {
+                    deduped.put(key, article);
+                }
             }
         }
 
@@ -225,18 +228,33 @@ public class NaverNewsFeedClient implements NewsFeedClient {
         return builder.toString();
     }
 
+    private boolean shouldPreferArticle(FetchedNewsArticle candidate, FetchedNewsArticle existing) {
+        return categoryPriority(candidate.getCategory()) > categoryPriority(existing.getCategory());
+    }
+
+    private int categoryPriority(NewsCategory category) {
+        if (category == NewsCategory.DOMESTIC_STOCK || category == NewsCategory.OVERSEAS_STOCK) {
+            return 2;
+        }
+        if (category == NewsCategory.MARKET) {
+            return 1;
+        }
+        return 0;
+    }
+
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
     }
 
     private static List<FeedDefinition> defaultFeeds() {
         return List.of(
-                FeedDefinition.market("코스피 시황"),
-                FeedDefinition.market("환율 금리 증시"),
-                FeedDefinition.domesticStock("국내주식 코스피 코스닥"),
                 FeedDefinition.domesticStock("삼성전자 SK하이닉스"),
-                FeedDefinition.overseasStock("해외주식 미국증시 나스닥"),
-                FeedDefinition.overseasStock("엔비디아 애플 테슬라")
+                FeedDefinition.domesticStock("현대차 기아 LG에너지솔루션"),
+                FeedDefinition.domesticStock("NAVER 카카오 셀트리온"),
+                FeedDefinition.overseasStock("엔비디아 애플 테슬라"),
+                FeedDefinition.overseasStock("마이크로소프트 알파벳 아마존"),
+                FeedDefinition.market("코스피 시황"),
+                FeedDefinition.market("환율 금리 증시")
         );
     }
 

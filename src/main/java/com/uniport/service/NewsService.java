@@ -395,7 +395,7 @@ public class NewsService {
         }
         String value = rawCategory.trim().toUpperCase(Locale.ROOT);
         try {
-            return RealtimeNewsCategory.valueOf(value);
+            return displayRealtimeCategory(RealtimeNewsCategory.valueOf(value));
         } catch (IllegalArgumentException ignored) {
             throw new ApiException("Unsupported realtime news category: " + rawCategory, HttpStatus.BAD_REQUEST);
         }
@@ -405,17 +405,13 @@ public class NewsService {
         if (selectedCategory == RealtimeNewsCategory.ALL) {
             return true;
         }
-        if (selectedCategory == RealtimeNewsCategory.COMPANY
-                && (article.category() == NewsCategory.DOMESTIC_STOCK || article.category() == NewsCategory.OVERSEAS_STOCK)) {
-            return true;
-        }
-        if (selectedCategory == RealtimeNewsCategory.MARKET && article.category() == NewsCategory.MARKET) {
-            return true;
-        }
-        return classifyArticle(article) == selectedCategory;
+        return displayRealtimeCategory(classifyArticle(article)) == selectedCategory;
     }
 
     private RealtimeNewsCategory classifyArticle(NewsArticleView article) {
+        if (!extractRelatedStocks(article).isEmpty()) {
+            return RealtimeNewsCategory.COMPANY;
+        }
         String text = searchableText(article);
         if (containsAny(text, "실적", "영업이익", "매출", "어닝", "가이던스", "서프라이즈", "쇼크")) {
             return RealtimeNewsCategory.EARNINGS;
@@ -429,8 +425,7 @@ public class NewsService {
         if (containsAny(text, "AI", "반도체", "방산", "원전", "로봇", "2차전지", "배터리", "바이오", "전력")) {
             return RealtimeNewsCategory.THEME;
         }
-        if (article.category() == NewsCategory.DOMESTIC_STOCK || article.category() == NewsCategory.OVERSEAS_STOCK
-                || !extractRelatedStocks(article).isEmpty()) {
+        if (article.category() == NewsCategory.DOMESTIC_STOCK || article.category() == NewsCategory.OVERSEAS_STOCK) {
             return RealtimeNewsCategory.COMPANY;
         }
         return RealtimeNewsCategory.MARKET;
