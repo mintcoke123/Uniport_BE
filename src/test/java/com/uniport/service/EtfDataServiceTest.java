@@ -62,6 +62,7 @@ class EtfDataServiceTest {
     private EtfBacktestEngine etfBacktestEngine;
     private EtfAiFeedbackService etfAiFeedbackService;
     private StockVisualAssetResolver stockVisualAssetResolver;
+    private YahooAssetSearchClient yahooAssetSearchClient;
     private EtfDataService etfDataService;
 
     @BeforeEach
@@ -76,6 +77,7 @@ class EtfDataServiceTest {
         etfBacktestEngine = mock(EtfBacktestEngine.class);
         etfAiFeedbackService = mock(EtfAiFeedbackService.class);
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        yahooAssetSearchClient = mock(YahooAssetSearchClient.class);
         etfDataService = new EtfDataService(
                 managedEtfRepository,
                 managedEtfAnalysisReportRepository,
@@ -86,7 +88,8 @@ class EtfDataServiceTest {
                 historicalPriceProvider,
                 etfBacktestEngine,
                 etfAiFeedbackService,
-                stockVisualAssetResolver
+                stockVisualAssetResolver,
+                yahooAssetSearchClient
         );
     }
 
@@ -302,6 +305,50 @@ class EtfDataServiceTest {
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
         assertEquals("PRICE_UNAVAILABLE", response.getItems().get(0).getDataStatus());
         assertEquals(null, response.getItems().get(0).getDataStatusMessage());
+    }
+
+    @Test
+    void searchAssets_usesYahooSearchFallbackForUsCompanyNameWhenMasterMisses() {
+        when(assetMasterRepository.searchActive(eq("apple"), eq("STOCK"), eq("US"), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(assetAliasRepository.searchActiveAssetMatches(eq("apple"), eq("STOCK"), eq("US"), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(stockMasterRepository.searchForEtfAssetCandidates(eq("apple"), any()))
+                .thenReturn(List.of());
+        when(yahooAssetSearchClient.searchUsEquities("apple", 10)).thenReturn(List.of(
+                new YahooAssetSearchClient.YahooAssetResult("AAPL", "Apple Inc.", "NASDAQ", "USD")
+        ));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "AAPL", "Apple Inc.", null)).thenReturn(visual("AAPL"));
+
+        CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("apple", "STOCK", "US", 0, 10);
+
+        assertEquals(1, response.getTotalCount());
+        assertEquals("US_AAPL", response.getItems().get(0).getAssetId());
+        assertEquals("Apple Inc.", response.getItems().get(0).getName());
+        assertEquals("AAPL", response.getItems().get(0).getSymbol());
+        assertEquals("NASDAQ", response.getItems().get(0).getMarket());
+    }
+
+    @Test
+    void searchAssets_usesYahooSearchFallbackForUsTickerWhenMasterMisses() {
+        when(assetMasterRepository.searchActive(eq("iren"), eq("STOCK"), eq("US"), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(assetAliasRepository.searchActiveAssetMatches(eq("iren"), eq("STOCK"), eq("US"), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(stockMasterRepository.searchForEtfAssetCandidates(eq("iren"), any()))
+                .thenReturn(List.of());
+        when(yahooAssetSearchClient.searchUsEquities("iren", 10)).thenReturn(List.of(
+                new YahooAssetSearchClient.YahooAssetResult("IREN", "IREN Limited", "NASDAQ", "USD")
+        ));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "IREN", "IREN Limited", null)).thenReturn(visual("IREN"));
+
+        CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("iren", "STOCK", "US", 0, 10);
+
+        assertEquals(1, response.getTotalCount());
+        assertEquals("US_IREN", response.getItems().get(0).getAssetId());
+        assertEquals("IREN Limited", response.getItems().get(0).getName());
+        assertEquals("IREN", response.getItems().get(0).getSymbol());
+        assertEquals("NASDAQ", response.getItems().get(0).getMarket());
     }
 
     @Test

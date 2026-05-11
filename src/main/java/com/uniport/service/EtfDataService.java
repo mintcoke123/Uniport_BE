@@ -127,6 +127,7 @@ public class EtfDataService {
     private final EtfBacktestEngine etfBacktestEngine;
     private final EtfAiFeedbackService etfAiFeedbackService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final YahooAssetSearchClient yahooAssetSearchClient;
     private final ExecutorService priceFetchExecutor = Executors.newFixedThreadPool(PRICE_FETCH_POOL_SIZE, priceFetchThreadFactory());
 
     public EtfDataService(ManagedEtfRepository managedEtfRepository,
@@ -138,7 +139,8 @@ public class EtfDataService {
                           HistoricalPriceProvider historicalPriceProvider,
                           EtfBacktestEngine etfBacktestEngine,
                           EtfAiFeedbackService etfAiFeedbackService,
-                          StockVisualAssetResolver stockVisualAssetResolver) {
+                          StockVisualAssetResolver stockVisualAssetResolver,
+                          YahooAssetSearchClient yahooAssetSearchClient) {
         this.managedEtfRepository = managedEtfRepository;
         this.managedEtfAnalysisReportRepository = managedEtfAnalysisReportRepository;
         this.managedEtfFavoriteRepository = managedEtfFavoriteRepository;
@@ -149,6 +151,7 @@ public class EtfDataService {
         this.etfBacktestEngine = etfBacktestEngine;
         this.etfAiFeedbackService = etfAiFeedbackService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.yahooAssetSearchClient = yahooAssetSearchClient;
     }
 
     @PreDestroy
@@ -190,6 +193,11 @@ public class EtfDataService {
             stocks.stream()
                     .map(this::toAssetCatalogItem)
                     .filter(item -> matchesAssetSearch(item, keyword, assetType, market))
+                    .filter(this::isSearchVisibleAsset)
+                    .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
+        }
+        if (candidates.isEmpty()) {
+            yahooSearchFallback(keyword, assetType, market, size).stream()
                     .filter(this::isSearchVisibleAsset)
                     .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
         }
@@ -677,6 +685,31 @@ public class EtfDataService {
                 DATA_STATUS_PENDING,
                 "Price data has not been verified"
         ));
+    }
+
+    private List<EtfAssetCatalogItem> yahooSearchFallback(String keyword, String assetType, String market, int limit) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        if (!(assetType.isBlank() || ASSET_TYPE_STOCK.equals(assetType))) {
+            return List.of();
+        }
+        if (!market.isBlank() && !"ALL".equals(market) && !"US".equals(market) && !isUsMarket(market)) {
+            return List.of();
+        }
+        return yahooAssetSearchClient.searchUsEquities(keyword, limit).stream()
+                .map(result -> new EtfAssetCatalogItem(
+                        "US_" + result.symbol(),
+                        result.name(),
+                        result.symbol(),
+                        result.market(),
+                        ASSET_TYPE_STOCK,
+                        result.currency(),
+                        false,
+                        DATA_STATUS_PENDING,
+                        "Price data has not been verified"
+                ))
+                .toList();
     }
 
     private CustomEtfAssetSearchItemDTO toAssetSearchItem(EtfAssetCatalogItem item) {
