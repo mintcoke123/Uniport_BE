@@ -23,6 +23,8 @@ public class ChatService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     public static final String TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT = "GROUP_INVESTMENT_FEEDBACK_REPORT";
     public static final String TYPE_NEWS_SHARE = "NEWS_SHARE";
+    public static final String TYPE_MENTION_ALL = "mention_all";
+    public static final String MENTION_ALL_MESSAGE = "모든 팀원을 호출했어요!";
 
     private final ChatMessageRepository chatMessageRepository;
     private final GroupChatBroadcaster groupChatBroadcaster;
@@ -38,6 +40,25 @@ public class ChatService {
         ChatMessage saved = chatMessageRepository.save(msg);
         broadcastToGroup(roomId, saved);
         return saved;
+    }
+
+    /** 전체 호출 메시지: type=mention_all payload를 저장하고 같은 방에 실시간 브로드캐스트한다. */
+    @Transactional
+    public ChatMessage saveMentionAllMessage(Long roomId, Long userId, String userNickname) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", TYPE_MENTION_ALL);
+            payload.put("message", MENTION_ALL_MESSAGE);
+            payload.put("callerId", userId);
+            payload.put("callerNickname", userNickname != null ? userNickname : "");
+            String messageJson = OBJECT_MAPPER.writeValueAsString(payload);
+            ChatMessage msg = ChatMessage.of(roomId, userId, userNickname, messageJson);
+            ChatMessage saved = chatMessageRepository.save(msg);
+            broadcastToGroup(roomId, saved);
+            return saved;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to save mention all message", e);
+        }
     }
 
     /** 매수/매도 체결 완료 알림용: type=execution, executionData 저장. 채팅 목록에 "OOO 매수 체결 완료" 형태로 표시 */
@@ -236,6 +257,12 @@ public class ChatService {
                 .collect(Collectors.toList());
     }
 
+    public Map<String, Object> toResponseMap(ChatMessage message) {
+        Map<String, Object> map = toMap(message);
+        map.put("roomId", message.getRoomId());
+        return map;
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> toMap(ChatMessage m) {
         Map<String, Object> map = new HashMap<>();
@@ -282,6 +309,12 @@ public class ChatService {
                     map.put("type", TYPE_NEWS_SHARE);
                     map.put("news", parsed.get("news"));
                     map.put("message", null);
+                    map.put("tradeData", null);
+                    return map;
+                }
+                if (TYPE_MENTION_ALL.equals(parsed.get("type"))) {
+                    map.put("type", TYPE_MENTION_ALL);
+                    map.put("message", parsed.getOrDefault("message", MENTION_ALL_MESSAGE));
                     map.put("tradeData", null);
                     return map;
                 }

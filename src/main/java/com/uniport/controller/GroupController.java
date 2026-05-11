@@ -267,6 +267,23 @@ public class GroupController {
         return ResponseEntity.ok(Map.of("success", true, "messageId", saved.getId()));
     }
 
+    /** 채팅방 전체 호출: 팀 채팅방 멤버만 mention_all 메시지를 생성할 수 있다. */
+    @PostMapping("/{groupId}/chat/call-all")
+    public ResponseEntity<Map<String, Object>> postCallAll(
+            @PathVariable Long groupId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        matchingRoomService.assertTeamRoomForCallAll(groupId);
+        User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
+        if (user == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "message", "로그인이 필요합니다."));
+        }
+        if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(groupId, user.getId())) {
+            return ResponseEntity.status(403).body(Map.of("success", false, "message", "해당 채팅방에 대한 접근 권한이 없습니다."));
+        }
+        var saved = chatService.saveMentionAllMessage(groupId, user.getId(), user.getNickname());
+        return ResponseEntity.ok(Map.of("success", true, "message", chatService.toResponseMap(saved)));
+    }
+
     /** §8: 투표 목록 (DB 저장된 투표 반환). 개인방도 허용(지정가 대기 목록 조회용). */
     @GetMapping("/{groupId}/votes")
     public ResponseEntity<List<Map<String, Object>>> getVotes(@PathVariable Long groupId) {
