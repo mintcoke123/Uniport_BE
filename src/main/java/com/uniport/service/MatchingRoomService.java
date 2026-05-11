@@ -4,6 +4,7 @@ import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.UserRepository;
@@ -14,8 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -33,14 +37,17 @@ public class MatchingRoomService {
     private final MatchingRoomRepository matchingRoomRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final UserRepository userRepository;
+    private final FriendRelationRepository friendRelationRepository;
     private final Map<Long, List<Long>> pendingInviteUserIdsByRoomId = new ConcurrentHashMap<>();
 
     public MatchingRoomService(MatchingRoomRepository matchingRoomRepository,
                                MatchingRoomMemberRepository matchingRoomMemberRepository,
-                               UserRepository userRepository) {
+                               UserRepository userRepository,
+                               FriendRelationRepository friendRelationRepository) {
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.userRepository = userRepository;
+        this.friendRelationRepository = friendRelationRepository;
     }
 
     public void assertTeamRoom(Long groupId) {
@@ -118,13 +125,18 @@ public class MatchingRoomService {
         room.setInviteCode(generateUniqueInviteCode());
         room = matchingRoomRepository.save(room);
 
-        List<Long> invitedUserIds = inviteeUserIds != null ? new ArrayList<>(inviteeUserIds) : new ArrayList<>();
-        pendingInviteUserIdsByRoomId.put(room.getId(), invitedUserIds);
+        List<Long> sanitizedInvitees = sanitizeInviteeUserIds(inviteeUserIds);
 
         if (creator != null) {
             matchingRoomMemberRepository.save(MatchingRoomMember.of(room, creator));
             room.setMemberCount((int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId()));
             room = matchingRoomRepository.save(room);
+        }
+
+        if ("FRIEND".equalsIgnoreCase(resolvedMatchType) && creator != null && !sanitizedInvitees.isEmpty()) {
+            confirmFriendInvitees(room, sanitizedInvitees, creator);
+        } else {
+            pendingInviteUserIdsByRoomId.put(room.getId(), new ArrayList<>(sanitizedInvitees));
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -225,12 +237,17 @@ public class MatchingRoomService {
             throw new ApiException("친구 초대형 방에서만 초대할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
 
-        List<Long> sanitizedInvitees = inviteeUserIds != null ? inviteeUserIds.stream().distinct().toList() : List.of();
-        pendingInviteUserIdsByRoomId.put(room.getId(), new ArrayList<>(sanitizedInvitees));
+        List<Long> sanitizedInvitees = sanitizeInviteeUserIds(inviteeUserIds);
+        if (!sanitizedInvitees.isEmpty()) {
+            User host = findRoomHost(room);
+            confirmFriendInvitees(room, sanitizedInvitees, host);
+        } else {
+            pendingInviteUserIdsByRoomId.remove(room.getId());
+        }
 
         return Map.of(
                 "success", true,
-                "message", "친구 초대 목록을 저장했어요.",
+                "message", "친구를 방 멤버로 추가했어요.",
                 "detail", getRoomDetail(toApiId(room.getId()), user)
         );
     }
@@ -418,6 +435,80 @@ public class MatchingRoomService {
         );
     }
 
+    private void confirmFriendInvitees(MatchingRoom room, List<Long> inviteeUserIds, User hostUser) {
+        if (inviteeUserIds.isEmpty()) {
+            pendingInviteUserIdsByRoomId.remove(room.getId());
+            return;
+        }
+        if (hostUser == null || hostUser.getId() == null) {
+            throw new ApiException("방장 정보가 필요합니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        User host = userRepository.findById(hostUser.getId())
+                .orElseThrow(() -> new ApiException("방장을 찾을 수 없습니다.", HttpStatus.BAD_REQUEST));
+        List<MatchingRoomMember> currentMembers = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());
+        Set<Long> currentMemberIds = currentMembers.stream()
+                .map(MatchingRoomMember::getUser)
+                .map(User::getId)
+                .collect(Collectors.toCollection(HashSet::new));
+
+        List<User> usersToAdd = new ArrayList<>();
+        for (Long inviteeUserId : inviteeUserIds) {
+            if (currentMemberIds.contains(inviteeUserId)) {
+                continue;
+            }
+
+            User invitee = userRepository.findById(inviteeUserId)
+                    .orElseThrow(() -> new ApiException("존재하지 않는 초대 대상이 포함되어 있습니다.", HttpStatus.BAD_REQUEST));
+            boolean acceptedFriend = friendRelationRepository
+                    .findBetweenUsersByStatus(host.getId(), invitee.getId(), "ACCEPTED")
+                    .isPresent();
+            if (!acceptedFriend) {
+                throw new ApiException("방장과 친구 관계인 사용자만 초대할 수 있습니다.", HttpStatus.BAD_REQUEST);
+            }
+
+            boolean joinedOtherRoom = matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(invitee.getId()).stream()
+                    .anyMatch(member -> !room.getId().equals(member.getMatchingRoom().getId()));
+            if (joinedOtherRoom) {
+                throw new ApiException("이미 다른 매칭방에 참가 중인 사용자가 포함되어 있습니다.", HttpStatus.BAD_REQUEST);
+            }
+
+            usersToAdd.add(invitee);
+        }
+
+        if (currentMemberIds.size() + usersToAdd.size() > room.getCapacity()) {
+            throw new ApiException("방 정원을 초과할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+
+        for (User invitee : usersToAdd) {
+            matchingRoomMemberRepository.save(MatchingRoomMember.of(room, invitee));
+        }
+        room.setMemberCount((int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId()));
+        matchingRoomRepository.save(room);
+        pendingInviteUserIdsByRoomId.remove(room.getId());
+    }
+
+    private User findRoomHost(MatchingRoom room) {
+        return matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId()).stream()
+                .findFirst()
+                .map(MatchingRoomMember::getUser)
+                .orElseThrow(() -> new ApiException("방장을 찾을 수 없습니다.", HttpStatus.BAD_REQUEST));
+    }
+
+    private List<Long> sanitizeInviteeUserIds(List<Long> inviteeUserIds) {
+        if (inviteeUserIds == null || inviteeUserIds.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> distinctIds = new LinkedHashSet<>();
+        for (Long inviteeUserId : inviteeUserIds) {
+            if (inviteeUserId == null) {
+                throw new ApiException("초대 대상 ID가 필요합니다.", HttpStatus.BAD_REQUEST);
+            }
+            distinctIds.add(inviteeUserId);
+        }
+        return new ArrayList<>(distinctIds);
+    }
+
     private MatchingRoom findJoinableRandomRoom(String marketType) {
         for (MatchingRoom room : matchingRoomRepository.findAllByOrderByCreatedAtDesc()) {
             if (!"waiting".equalsIgnoreCase(room.getStatus())) continue;
@@ -529,14 +620,9 @@ public class MatchingRoomService {
     private Map<String, Object> buildProgress(MatchingRoom room,
                                               List<MatchingRoomMember> joinedMembers,
                                               List<Long> invitedUserIds) {
-        int current = 1;
-        if ("FRIEND".equalsIgnoreCase(room.getMatchType()) && !invitedUserIds.isEmpty()) {
-            current = 2;
-        }
-        if ("started".equalsIgnoreCase(room.getStatus()) || joinedMembers.size() >= room.getCapacity()) {
-            current = 3;
-        }
-        return Map.of("current", current, "total", 3);
+        int total = Math.max(1, room.getCapacity());
+        int current = Math.min(joinedMembers.size(), total);
+        return Map.of("current", current, "total", total);
     }
 
     private List<Map<String, Object>> buildMemberCards(MatchingRoom room,
