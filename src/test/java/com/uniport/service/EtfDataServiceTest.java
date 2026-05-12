@@ -939,6 +939,8 @@ class EtfDataServiceTest {
         assertEquals("035420", response.getItems().get(0).getSymbol());
         assertEquals(true, response.getItems().get(0).getFitScore() > response.getItems().get(1).getFitScore());
         assertEquals(true, response.getItems().get(0).getReason().contains("포트폴리오"));
+        assertEquals(true, response.getItems().get(0).getReason().contains("NAVER"));
+        assertEquals(true, response.getItems().get(1).getReason().contains("Tesla"));
         assertEquals(true, response.getItems().get(0).getTags().size() <= 3);
         assertEquals(true, response.getItems().stream().noneMatch(item -> item.getStockId().equals("KRX_005930")));
         assertEquals(true, response.getItems().stream().noneMatch(item -> item.getStockId().equals("KRX_000660")));

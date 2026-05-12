@@ -640,7 +640,7 @@ public class EtfDataService {
                 .symbol(item.symbol())
                 .market(item.market())
                 .fitScore(roundScore(score))
-                .reason(recommendationReason(profile, sameMarket, themeMatch, candidateKeywords))
+                .reason(recommendationReason(item, profile, sameMarket, themeMatch, candidateKeywords))
                 .tags(tags)
                 .backtestEnabled(selectable)
                 .dataStatus(dataStatus)
@@ -697,21 +697,25 @@ public class EtfDataService {
         return tags.stream().distinct().limit(3).toList();
     }
 
-    private String recommendationReason(RecommendationProfile profile,
+    private String recommendationReason(EtfAssetCatalogItem item,
+                                        RecommendationProfile profile,
                                         boolean sameMarket,
                                         boolean themeMatch,
                                         List<String> candidateKeywords) {
+        String candidateName = item.name() != null && !item.name().isBlank()
+                ? item.name()
+                : item.symbol();
         if (themeMatch) {
             String keyword = candidateKeywords.stream()
                     .filter(profile.keywords()::contains)
                     .findFirst()
                     .orElse("핵심 테마");
-            return "현재 포트폴리오의 " + keyword + " 성격과 이어지는 보완 후보예요.";
+            return candidateName + "은 현재 포트폴리오의 " + keyword + " 성격과 이어지는 보완 후보예요.";
         }
         if (sameMarket && profile.dominantMarket() != null && !profile.dominantMarket().isBlank()) {
-            return "현재 포트폴리오의 " + profile.dominantMarket() + " 중심 구성과 같은 시장에서 보완할 수 있는 후보예요.";
+            return candidateName + "은 현재 포트폴리오의 " + profile.dominantMarket() + " 중심 구성과 같은 시장에서 보완할 수 있는 후보예요.";
         }
-        return "현재 포트폴리오에 다른 시장 노출을 더해 분산을 보완할 수 있는 후보예요.";
+        return candidateName + "은 현재 포트폴리오에 다른 시장 노출을 더해 분산을 보완할 수 있는 후보예요.";
     }
 
     private List<String> inferThemeKeywords(String text) {

@@ -23,6 +23,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -215,6 +216,7 @@ class NewsServiceTest {
         assertEquals("hankyung_company_1", response.getNewsId());
         assertEquals("삼성전자 반등, 반도체 투자 심리 회복", response.getTitle());
         org.junit.jupiter.api.Assertions.assertTrue(response.getCoreSummary().contains("AI 서버 수요 기대"));
+        assertFalse(response.getSummary().equals(response.getCoreSummary()));
         assertEquals("POSITIVE", response.getSentiment());
         assertEquals("호재", response.getSentimentLabel());
         org.junit.jupiter.api.Assertions.assertTrue(response.getSentimentReason().contains("긍정"));
@@ -224,6 +226,21 @@ class NewsServiceTest {
         assertEquals("005930", response.getRelatedStocks().get(0).getSymbol());
         assertEquals("한국경제", response.getSourceArticles().get(0).getSourceName());
         assertEquals("https://example.com/hankyung_company_1", response.getSourceArticles().get(0).getExternalUrl());
+    }
+
+    @Test
+    void getRealtimeNewsDetail_omitsCoreSummaryWhenItOnlyDuplicatesSummary() {
+        ManagedNewsArticle article = article("news_duplicate_summary", "DOMESTIC_STOCK", false,
+                LocalDateTime.of(2026, 5, 11, 10, 15));
+        article.setTitle("삼성전자 반등");
+        article.setSummary("반도체 투자 심리가 회복되고 있어요.");
+        article.setContent("반도체 투자 심리가 회복되고 있어요.");
+        when(newsRepository.findByNewsKey("news_duplicate_summary")).thenReturn(Optional.of(article));
+
+        RealtimeNewsDetailResponseDTO response = newsService.getRealtimeNewsDetail("news_duplicate_summary");
+
+        assertEquals("반도체 투자 심리가 회복되고 있어요.", response.getSummary());
+        assertNull(response.getCoreSummary());
     }
 
     @Test

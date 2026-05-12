@@ -441,8 +441,20 @@ public class NewsService {
     }
 
     private String buildCoreSummary(NewsArticleView article) {
-        String summary = defaultIfBlank(article.summary(), "시장 흐름에 영향을 줄 수 있는 최신 뉴스입니다.");
-        return article.title() + " 뉴스는 " + summary;
+        String body = normalizeDisplayText(article.body());
+        String summary = normalizeDisplayText(article.summary());
+        if (body.isBlank() || isSameDisplayText(body, summary)) {
+            return null;
+        }
+        return body;
+    }
+
+    private String normalizeDisplayText(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private boolean isSameDisplayText(String left, String right) {
+        return left.replaceAll("\\s+", " ").equals(right.replaceAll("\\s+", " "));
     }
 
     private List<String> buildInvestmentPoints(NewsArticleView article,
