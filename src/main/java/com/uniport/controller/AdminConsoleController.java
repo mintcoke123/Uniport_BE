@@ -24,6 +24,7 @@ import com.uniport.repository.ManagedCommunityPostRepository;
 import com.uniport.repository.ManagedEtfRepository;
 import com.uniport.repository.ManagedGroupInsightRepository;
 import com.uniport.repository.ManagedNewsArticleRepository;
+import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.PointShopOrderRepository;
 import com.uniport.repository.PointShopProductRepository;
 import com.uniport.repository.PointTransactionRepository;
@@ -72,6 +73,7 @@ public class AdminConsoleController {
     private final GifticonInventoryRepository gifticonInventoryRepository;
     private final PointShopOrderRepository pointShopOrderRepository;
     private final FriendInviteRepository friendInviteRepository;
+    private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final FriendRelationRepository friendRelationRepository;
     private final UserRepository userRepository;
     private final CompetitionService competitionService;
@@ -90,6 +92,7 @@ public class AdminConsoleController {
             GifticonInventoryRepository gifticonInventoryRepository,
             PointShopOrderRepository pointShopOrderRepository,
             FriendInviteRepository friendInviteRepository,
+            MatchingRoomMemberRepository matchingRoomMemberRepository,
             FriendRelationRepository friendRelationRepository,
             UserRepository userRepository,
             CompetitionService competitionService,
@@ -107,6 +110,7 @@ public class AdminConsoleController {
         this.gifticonInventoryRepository = gifticonInventoryRepository;
         this.pointShopOrderRepository = pointShopOrderRepository;
         this.friendInviteRepository = friendInviteRepository;
+        this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.friendRelationRepository = friendRelationRepository;
         this.userRepository = userRepository;
         this.competitionService = competitionService;
@@ -322,7 +326,8 @@ public class AdminConsoleController {
         pointShopOrderRepository.deleteByUser_Id(id);
         pointTransactionRepository.deleteByUser_Id(id);
         pointWalletRepository.deleteByUser_Id(id);
-        friendInviteRepository.deleteByInviterUser_IdOrAcceptedByUser_Id(id, id);
+        matchingRoomMemberRepository.deleteAllByUserId(id);
+        friendInviteRepository.deleteAllByUserId(id);
         friendRelationRepository.deleteByRequesterUser_IdOrAddresseeUser_Id(id, id);
         userRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("success", true));

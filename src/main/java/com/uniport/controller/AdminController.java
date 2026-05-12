@@ -393,8 +393,8 @@ public class AdminController {
         // FK 제약: 유저를 참조하는 주문·보유·매칭방멤버를 먼저 삭제
         orderRepository.deleteByUser_Id(userId);
         holdingRepository.deleteByUser_Id(userId);
-        matchingRoomMemberRepository.deleteByUser_Id(userId);
-        friendInviteRepository.deleteByInviterUser_IdOrAcceptedByUser_Id(userId, userId);
+        matchingRoomMemberRepository.deleteAllByUserId(userId);
+        friendInviteRepository.deleteAllByUserId(userId);
         userRepository.deleteById(userId);
         return ResponseEntity.ok(Map.of("success", true, "message", "Deleted"));
     }

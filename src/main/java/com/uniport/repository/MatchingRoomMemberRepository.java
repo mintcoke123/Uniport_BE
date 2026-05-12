@@ -2,6 +2,7 @@ package com.uniport.repository;
 
 import com.uniport.entity.MatchingRoomMember;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -31,5 +32,7 @@ public interface MatchingRoomMemberRepository extends JpaRepository<MatchingRoom
     boolean existsByUserIdAndMatchingRoom_Status(Long userId, String status);
 
     /** 유저 삭제 시 FK 제약을 위해 해당 유저의 매칭방 참가 기록 삭제 */
-    void deleteByUser_Id(Long userId);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM MatchingRoomMember m WHERE m.user.id = :userId")
+    void deleteAllByUserId(@Param("userId") Long userId);
 }
