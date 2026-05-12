@@ -2,6 +2,9 @@ package com.uniport.controller;
 
 import com.uniport.dto.CustomEtfAssetSearchItemDTO;
 import com.uniport.dto.CustomEtfAssetSearchResponseDTO;
+import com.uniport.dto.EtfPortfolioFitRecommendationItemDTO;
+import com.uniport.dto.EtfPortfolioFitRecommendationResponseDTO;
+import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
 import com.uniport.service.EtfDataService;
 import org.junit.jupiter.api.Test;
@@ -16,10 +19,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -93,5 +99,40 @@ class CustomEtfControllerSearchTest {
                 .andExpect(jsonPath("$.items[0].assetId").value("US_AAPL"));
 
         verifyNoInteractions(currentUserResolver);
+    }
+
+    @Test
+    void recommendPortfolioFitStocks_passesAuthenticatedRequestToService() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(customEtfController).build();
+        User user = User.builder().id(1L).build();
+        EtfPortfolioFitRecommendationResponseDTO expected = EtfPortfolioFitRecommendationResponseDTO.builder()
+                .items(List.of(EtfPortfolioFitRecommendationItemDTO.builder()
+                        .recommendationId("FIT_KRX_035420")
+                        .stockId("KRX_035420")
+                        .name("NAVER")
+                        .symbol("035420")
+                        .market("KOSPI")
+                        .fitScore(0.91)
+                        .tags(List.of("시장 연계"))
+                        .build()))
+                .build();
+        when(currentUserResolver.resolveRequired(any(), eq("Bearer token"))).thenReturn(user);
+        when(etfDataService.recommendPortfolioFitStocks(eq(user), any())).thenReturn(expected);
+
+        mockMvc.perform(post("/api/custom-etfs/recommendations/portfolio-fit")
+                        .header("Authorization", "Bearer token")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "customEtfId": "ETF_CUSTOM",
+                                  "limit": 3,
+                                  "market": "ALL"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].recommendationId").value("FIT_KRX_035420"))
+                .andExpect(jsonPath("$.items[0].stockId").value("KRX_035420"));
+
+        verify(etfDataService).recommendPortfolioFitStocks(eq(user), any());
     }
 }

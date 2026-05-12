@@ -6,6 +6,8 @@ import com.uniport.dto.CustomEtfAssetSearchResponseDTO;
 import com.uniport.dto.CustomEtfCreateRequestDTO;
 import com.uniport.dto.CustomEtfItemRequestDTO;
 import com.uniport.dto.CustomEtfMutationResponseDTO;
+import com.uniport.dto.EtfPortfolioFitRecommendationRequestDTO;
+import com.uniport.dto.EtfPortfolioFitRecommendationResponseDTO;
 import com.uniport.dto.EtfAnalysisReportResponseDTO;
 import com.uniport.dto.EtfAnalysisRequestDTO;
 import com.uniport.dto.EtfAnalysisStartResponseDTO;
@@ -896,6 +898,50 @@ class EtfDataServiceTest {
 
         org.mockito.Mockito.verify(historicalPriceProvider)
                 .getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class));
+    }
+
+    @Test
+    void recommendPortfolioFitStocks_excludesCurrentHoldingsAndRanksByPortfolioFit() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("AI 반도체 ETF")
+                .theme("반도체")
+                .holdingsJson("[{\"stockId\":\"KRX_005930\",\"weight\":60},{\"stockId\":\"KRX_000660\",\"weight\":40}]")
+                .build();
+        AssetMaster samsung = asset("KRX_005930", "STOCK", "삼성전자", "005930", "KOSPI", "KRW");
+        AssetMaster hynix = asset("KRX_000660", "STOCK", "SK하이닉스", "000660", "KOSPI", "KRW");
+        AssetMaster naver = asset("KRX_035420", "STOCK", "NAVER", "035420", "KOSPI", "KRW");
+        AssetMaster tesla = asset("US_TSLA", "STOCK", "Tesla", "TSLA", "NASDAQ", "USD");
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_005930")).thenReturn(Optional.of(samsung));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_000660")).thenReturn(Optional.of(hynix));
+        when(assetMasterRepository.searchActive(eq(""), eq("STOCK"), eq(null), any(Pageable.class)))
+                .thenReturn(List.of(tesla, samsung, naver, hynix));
+        when(stockVisualAssetResolver.resolve("KOSPI", "035420", "NAVER", null)).thenReturn(visual("NAVER"));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "TSLA", "Tesla", null)).thenReturn(visual("TSLA"));
+
+        EtfPortfolioFitRecommendationResponseDTO response = etfDataService.recommendPortfolioFitStocks(
+                user,
+                EtfPortfolioFitRecommendationRequestDTO.builder()
+                        .customEtfId("ETF_CUSTOM")
+                        .limit(3)
+                        .market("ALL")
+                        .build()
+        );
+
+        assertEquals(List.of("KRX_035420", "US_TSLA"),
+                response.getItems().stream().map(item -> item.getStockId()).toList());
+        assertEquals("FIT_KRX_035420", response.getItems().get(0).getRecommendationId());
+        assertEquals("NAVER", response.getItems().get(0).getName());
+        assertEquals("035420", response.getItems().get(0).getSymbol());
+        assertEquals(true, response.getItems().get(0).getFitScore() > response.getItems().get(1).getFitScore());
+        assertEquals(true, response.getItems().get(0).getReason().contains("포트폴리오"));
+        assertEquals(true, response.getItems().get(0).getTags().size() <= 3);
+        assertEquals(true, response.getItems().stream().noneMatch(item -> item.getStockId().equals("KRX_005930")));
+        assertEquals(true, response.getItems().stream().noneMatch(item -> item.getStockId().equals("KRX_000660")));
     }
 
     @Test

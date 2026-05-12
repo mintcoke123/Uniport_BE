@@ -12,6 +12,8 @@ import com.uniport.dto.EtfAnalysisApplyRequestDTO;
 import com.uniport.dto.EtfAnalysisApplyResponseDTO;
 import com.uniport.dto.EtfAnalysisRequestDTO;
 import com.uniport.dto.EtfAnalysisStartResponseDTO;
+import com.uniport.dto.EtfPortfolioFitRecommendationRequestDTO;
+import com.uniport.dto.EtfPortfolioFitRecommendationResponseDTO;
 import com.uniport.dto.EtfShareRequestDTO;
 import com.uniport.dto.EtfShareResponseDTO;
 import com.uniport.entity.User;
@@ -99,6 +101,24 @@ public class CustomEtfController {
             @RequestParam(value = "page", required = false) Integer page,
             @RequestParam(value = "size", required = false) Integer size) {
         return ResponseEntity.ok(etfDataService.searchAssets(firstNonBlank(keyword, query, q), assetType, market, page, size));
+    }
+
+    @PostMapping("/recommendations/portfolio-fit")
+    @Operation(summary = "나만의 ETF 포트폴리오 적합 종목 추천", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "추천 성공",
+                    content = @Content(schema = @Schema(implementation = EtfPortfolioFitRecommendationResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<EtfPortfolioFitRecommendationResponseDTO> recommendPortfolioFitStocks(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody(required = false) EtfPortfolioFitRecommendationRequestDTO request) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(etfDataService.recommendPortfolioFitStocks(user, request));
     }
 
     @GetMapping("/{etfId}")

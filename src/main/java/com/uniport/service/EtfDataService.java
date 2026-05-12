@@ -32,6 +32,9 @@ import com.uniport.dto.EtfDiscoveryItemDTO;
 import com.uniport.dto.EtfDiscoveryResponseDTO;
 import com.uniport.dto.EtfDiscoveryTrendPointDTO;
 import com.uniport.dto.EtfFavoriteResponseDTO;
+import com.uniport.dto.EtfPortfolioFitRecommendationItemDTO;
+import com.uniport.dto.EtfPortfolioFitRecommendationRequestDTO;
+import com.uniport.dto.EtfPortfolioFitRecommendationResponseDTO;
 import com.uniport.dto.EtfShareRequestDTO;
 import com.uniport.dto.EtfShareResponseDTO;
 import com.uniport.dto.StockVisualDTO;
@@ -109,6 +112,8 @@ public class EtfDataService {
     private static final int DEFAULT_ASSET_SEARCH_SIZE = 10;
     private static final int MAX_ASSET_SEARCH_SIZE = 30;
     private static final int ASSET_SEARCH_POOL_SIZE = 200;
+    private static final int DEFAULT_RECOMMENDATION_LIMIT = 3;
+    private static final int MAX_RECOMMENDATION_LIMIT = 10;
     private static final int PRICE_FETCH_POOL_SIZE = 2;
     private static final int PRICE_FETCH_TIMEOUT_SECONDS = 8;
     private static final String ASSET_TYPE_STOCK = "STOCK";
@@ -224,6 +229,35 @@ public class EtfDataService {
                 .size(size)
                 .totalCount(all.size())
                 .hasNext(toIndex < all.size())
+                .build();
+    }
+
+    public EtfPortfolioFitRecommendationResponseDTO recommendPortfolioFitStocks(
+            User user,
+            EtfPortfolioFitRecommendationRequestDTO request) {
+        RecommendationContext context = resolveRecommendationContext(user, request);
+        if (context.holdings().isEmpty()) {
+            throw new ApiException("items or customEtfId is required", HttpStatus.BAD_REQUEST);
+        }
+        int limit = recommendationLimit(request != null ? request.getLimit() : null);
+        String market = recommendationMarket(request != null ? request.getMarket() : null);
+        RecommendationProfile profile = buildRecommendationProfile(context);
+        List<String> ownedStockIds = context.holdings().stream()
+                .map(HoldingPayload::stockId)
+                .map(this::canonicalStockId)
+                .toList();
+        List<EtfPortfolioFitRecommendationItemDTO> items = recommendationCandidates(market).stream()
+                .filter(item -> ASSET_TYPE_STOCK.equals(item.assetType()))
+                .filter(item -> !ownedStockIds.contains(canonicalStockId(item.assetId())))
+                .map(item -> toPortfolioFitRecommendation(item, profile))
+                .filter(item -> item.getFitScore() >= 0.50)
+                .sorted(Comparator
+                        .comparing(EtfPortfolioFitRecommendationItemDTO::getFitScore).reversed()
+                        .thenComparing(EtfPortfolioFitRecommendationItemDTO::getName))
+                .limit(limit)
+                .toList();
+        return EtfPortfolioFitRecommendationResponseDTO.builder()
+                .items(items)
                 .build();
     }
 
@@ -477,6 +511,265 @@ public class EtfDataService {
                         ? etf.getTitle() + " can now be published as a community card."
                         : etf.getTitle() + " can now be shared to room " + request.getRoomId() + ".")
                 .build();
+    }
+
+    private RecommendationContext resolveRecommendationContext(User user, EtfPortfolioFitRecommendationRequestDTO request) {
+        if (request == null) {
+            return new RecommendationContext(List.of(), "", "");
+        }
+        if (request.getItems() != null && !request.getItems().isEmpty()) {
+            validateRecommendationItems(request.getItems());
+            return new RecommendationContext(
+                    request.getItems().stream()
+                            .map(item -> new HoldingPayload(item.getStockId(), item.getWeight(), null))
+                            .toList(),
+                    "요청 포트폴리오",
+                    ""
+            );
+        }
+        if (request.getCustomEtfId() != null && !request.getCustomEtfId().isBlank()) {
+            ManagedEtf etf = getRequiredCustomEtf(user, request.getCustomEtfId());
+            return new RecommendationContext(
+                    readHoldings(etf.getHoldingsJson()),
+                    Optional.ofNullable(etf.getTitle()).orElse("나만의 ETF"),
+                    Optional.ofNullable(etf.getTheme()).orElse("")
+            );
+        }
+        if (request.getAnalysisReportId() != null && !request.getAnalysisReportId().isBlank()) {
+            ManagedEtfAnalysisReport report = managedEtfAnalysisReportRepository.findByReportId(request.getAnalysisReportId())
+                    .orElseThrow(() -> new ApiException("ETF analysis report not found", HttpStatus.NOT_FOUND));
+            if (!report.getOwnerUserId().equals(user.getId())) {
+                throw new ApiException("ETF analysis report not found", HttpStatus.NOT_FOUND);
+            }
+            EtfAnalysisReportResponseDTO response = readValue(report.getReportJson(), EtfAnalysisReportResponseDTO.class);
+            List<HoldingPayload> holdings = response.getAllocation() == null || response.getAllocation().getItems() == null
+                    ? List.of()
+                    : response.getAllocation().getItems().stream()
+                    .map(item -> new HoldingPayload(
+                            item.getSecurityId() != null && !item.getSecurityId().isBlank()
+                                    ? item.getSecurityId()
+                                    : resolveStockId(item.getName()),
+                            item.getWeight(),
+                            null))
+                    .toList();
+            return new RecommendationContext(holdings, "분석 리포트", "");
+        }
+        return new RecommendationContext(List.of(), "", "");
+    }
+
+    private void validateRecommendationItems(List<CustomEtfItemRequestDTO> items) {
+        for (CustomEtfItemRequestDTO item : items) {
+            if (item.getStockId() == null || item.getStockId().isBlank()) {
+                throw new ApiException("stockId is required", HttpStatus.BAD_REQUEST);
+            }
+            if (item.getWeight() == null || item.getWeight() < 1 || item.getWeight() > 100) {
+                throw new ApiException("weight must be between 1 and 100", HttpStatus.BAD_REQUEST);
+            }
+        }
+    }
+
+    private int recommendationLimit(Integer limit) {
+        if (limit == null || limit < 1) {
+            return DEFAULT_RECOMMENDATION_LIMIT;
+        }
+        return Math.min(limit, MAX_RECOMMENDATION_LIMIT);
+    }
+
+    private String recommendationMarket(String marketParam) {
+        String market = safeUpper(marketParam);
+        return market.isBlank() || "ALL".equals(market) ? null : market;
+    }
+
+    private List<EtfAssetCatalogItem> recommendationCandidates(String market) {
+        List<AssetMaster> assets = assetMasterRepository.searchActive(
+                "",
+                ASSET_TYPE_STOCK,
+                market,
+                PageRequest.of(0, ASSET_SEARCH_POOL_SIZE)
+        );
+        if (assets == null) {
+            return List.of();
+        }
+        return assets.stream()
+                .map(this::toAssetCatalogItem)
+                .filter(this::isSearchVisibleAsset)
+                .toList();
+    }
+
+    private RecommendationProfile buildRecommendationProfile(RecommendationContext context) {
+        Map<String, Integer> marketWeights = new LinkedHashMap<>();
+        List<String> keywords = new ArrayList<>();
+        if (context.title() != null) {
+            keywords.addAll(inferThemeKeywords(context.title()));
+        }
+        if (context.theme() != null) {
+            keywords.addAll(inferThemeKeywords(context.theme()));
+        }
+        for (HoldingPayload holding : context.holdings()) {
+            StockRef ref = resolveStock(holding.stockId());
+            int weight = holding.weight() != null ? holding.weight() : 0;
+            marketWeights.merge(broadMarket(ref.market()), weight, Integer::sum);
+            keywords.addAll(inferThemeKeywords(ref.name() + " " + ref.symbol() + " " + ref.market()));
+        }
+        String dominantMarket = marketWeights.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("");
+        List<String> distinctKeywords = keywords.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .toList();
+        return new RecommendationProfile(dominantMarket, distinctKeywords, marketWeights.size());
+    }
+
+    private EtfPortfolioFitRecommendationItemDTO toPortfolioFitRecommendation(
+            EtfAssetCatalogItem item,
+            RecommendationProfile profile) {
+        ResolvedStockVisual visual = resolveStockVisual(item.market(), item.symbol(), item.name());
+        boolean selectable = isCustomEtfSelectableAsset(item);
+        String dataStatus = selectable ? searchDataStatus(item) : item.priceSourceStatus();
+        List<String> candidateKeywords = inferThemeKeywords(item.name() + " " + item.symbol() + " " + item.market());
+        boolean sameMarket = broadMarket(item.market()).equals(profile.dominantMarket());
+        boolean themeMatch = candidateKeywords.stream().anyMatch(profile.keywords()::contains);
+        double score = portfolioFitScore(item, profile, sameMarket, themeMatch);
+        List<String> tags = recommendationTags(item, profile, sameMarket, themeMatch, candidateKeywords);
+        return EtfPortfolioFitRecommendationItemDTO.builder()
+                .recommendationId("FIT_" + item.assetId())
+                .stockId(item.assetId())
+                .name(item.name())
+                .symbol(item.symbol())
+                .market(item.market())
+                .fitScore(roundScore(score))
+                .reason(recommendationReason(profile, sameMarket, themeMatch, candidateKeywords))
+                .tags(tags)
+                .backtestEnabled(selectable)
+                .dataStatus(dataStatus)
+                .dataStatusMessage(selectable ? searchDataStatusMessage(dataStatus) : item.lastPriceError())
+                .logoUrl(visual.logoUrl())
+                .visual(visual.visual())
+                .build();
+    }
+
+    private double portfolioFitScore(EtfAssetCatalogItem item,
+                                     RecommendationProfile profile,
+                                     boolean sameMarket,
+                                     boolean themeMatch) {
+        double score = 0.45;
+        if (sameMarket) {
+            score += 0.18;
+        }
+        if (themeMatch) {
+            score += 0.16;
+        }
+        if (!sameMarket && profile.marketCount() <= 1) {
+            score += 0.05;
+        }
+        if (Boolean.TRUE.equals(item.backtestEnabled()) && DATA_STATUS_VERIFIED.equals(item.priceSourceStatus())) {
+            score += 0.10;
+        } else if (Boolean.TRUE.equals(item.backtestEnabled())) {
+            score += 0.06;
+        } else {
+            score += 0.03;
+        }
+        return Math.min(score, 0.98);
+    }
+
+    private List<String> recommendationTags(EtfAssetCatalogItem item,
+                                            RecommendationProfile profile,
+                                            boolean sameMarket,
+                                            boolean themeMatch,
+                                            List<String> candidateKeywords) {
+        List<String> tags = new ArrayList<>();
+        if (themeMatch) {
+            candidateKeywords.stream()
+                    .filter(profile.keywords()::contains)
+                    .findFirst()
+                    .ifPresent(keyword -> tags.add(keyword + " 연계"));
+        }
+        if (sameMarket) {
+            tags.add("시장 연계");
+        } else {
+            tags.add("분산 보완");
+        }
+        if (Boolean.TRUE.equals(item.backtestEnabled())) {
+            tags.add("백테스트 가능");
+        }
+        return tags.stream().distinct().limit(3).toList();
+    }
+
+    private String recommendationReason(RecommendationProfile profile,
+                                        boolean sameMarket,
+                                        boolean themeMatch,
+                                        List<String> candidateKeywords) {
+        if (themeMatch) {
+            String keyword = candidateKeywords.stream()
+                    .filter(profile.keywords()::contains)
+                    .findFirst()
+                    .orElse("핵심 테마");
+            return "현재 포트폴리오의 " + keyword + " 성격과 이어지는 보완 후보예요.";
+        }
+        if (sameMarket && profile.dominantMarket() != null && !profile.dominantMarket().isBlank()) {
+            return "현재 포트폴리오의 " + profile.dominantMarket() + " 중심 구성과 같은 시장에서 보완할 수 있는 후보예요.";
+        }
+        return "현재 포트폴리오에 다른 시장 노출을 더해 분산을 보완할 수 있는 후보예요.";
+    }
+
+    private List<String> inferThemeKeywords(String text) {
+        String value = text == null ? "" : text.toLowerCase(Locale.ROOT);
+        List<String> keywords = new ArrayList<>();
+        if (value.contains("반도체") || value.contains("하이닉스") || value.contains("삼성전자")
+                || value.contains("nvidia") || value.contains("nvda") || value.contains("amd")
+                || value.contains("intel") || value.contains("chip") || value.contains("semiconductor")) {
+            keywords.add("반도체");
+        }
+        if (value.contains("ai") || value.contains("인공지능") || value.contains("llm")) {
+            keywords.add("AI");
+        }
+        if (value.contains("naver") || value.contains("카카오") || value.contains("google")
+                || value.contains("meta") || value.contains("platform") || value.contains("플랫폼")) {
+            keywords.add("플랫폼");
+        }
+        if (value.contains("tesla") || value.contains("전기차") || value.contains("배터리")
+                || value.contains("2차전지") || value.contains("energy") || value.contains("에너지")) {
+            keywords.add("모빌리티");
+        }
+        if (value.contains("금융") || value.contains("bank") || value.contains("jpm")
+                || value.contains("배당") || value.contains("dividend")) {
+            keywords.add("금융");
+        }
+        if (value.contains("헬스") || value.contains("바이오") || value.contains("health")
+                || value.contains("pharma")) {
+            keywords.add("헬스케어");
+        }
+        return keywords;
+    }
+
+    private String broadMarket(String market) {
+        if (isDomesticMarket(market)) {
+            return "KRX";
+        }
+        if (isUsMarket(market)) {
+            return "US";
+        }
+        return market == null ? "" : market.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String canonicalStockId(String stockId) {
+        String normalized = stockId == null ? "" : stockId.trim().toUpperCase(Locale.ROOT);
+        Optional<EtfAssetCatalogItem> catalogItem = findCatalogItem(normalized);
+        if (catalogItem.isPresent()) {
+            return catalogItem.get().assetId();
+        }
+        if (normalized.matches("\\d{6}")) {
+            return "KRX_" + normalized;
+        }
+        return normalized;
+    }
+
+    private double roundScore(double score) {
+        return BigDecimal.valueOf(score)
+                .setScale(2, RoundingMode.HALF_UP)
+                .doubleValue();
     }
 
     private ManagedEtf getRequiredCustomEtf(User user, String etfId) {
@@ -1530,6 +1823,8 @@ public class EtfDataService {
         return name;
     }
 
+    private record RecommendationContext(List<HoldingPayload> holdings, String title, String theme) {}
+    private record RecommendationProfile(String dominantMarket, List<String> keywords, int marketCount) {}
     private record HoldingPayload(String stockId, Integer weight, Double changeRate) {}
     private record StockRef(String name, String symbol, String market, String assetType, String currency) {}
     private record ResolvedStockVisual(String logoUrl, StockVisualDTO visual) {}
