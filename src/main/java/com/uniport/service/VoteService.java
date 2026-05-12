@@ -173,6 +173,7 @@ public class VoteService {
                 .voteChoice("찬성")
                 .build();
         voteParticipantRepository.save(proposerVote);
+        broadcastVoteUpdate(groupId, vote.getId());
         return vote;
     }
 
