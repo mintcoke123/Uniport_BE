@@ -1,14 +1,36 @@
 package com.uniport.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uniport.entity.User;
+import com.uniport.entity.Vote;
+import com.uniport.entity.VoteParticipant;
+import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.VoteParticipantRepository;
+import com.uniport.repository.VoteRepository;
+import com.uniport.websocket.GroupChatBroadcaster;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 투표 통과 조건 (agreeCount / totalMembers) > 0.5 단위 테스트.
  */
 class VoteServiceTest {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
     void isVotePassedByRatio_1인_1찬성_통과() {
@@ -44,5 +66,73 @@ class VoteServiceTest {
     void isVotePassedByRatio_totalMembers_0_미통과() {
         assertFalse(VoteService.isVotePassedByRatio(0, 0));
         assertFalse(VoteService.isVotePassedByRatio(1, 0));
+    }
+
+    @Test
+    void createVote_broadcastsVoteUpdateAfterSavingProposerVote() throws Exception {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        ChatService chatService = mock(ChatService.class);
+        GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                null,
+                null,
+                null,
+                null,
+                null,
+                chatService,
+                broadcaster,
+                null
+        );
+        User proposer = User.builder()
+                .id(7L)
+                .nickname("제안자")
+                .studentId("20260001")
+                .password("pw")
+                .build();
+
+        when(chatService.hasFeedbackMessage(123L)).thenReturn(false);
+        when(voteRepository.findByRoomIdAndStatusOrderByCreatedAtDesc(123L, "ongoing")).thenReturn(List.of());
+        when(matchingRoomMemberRepository.countByMatchingRoomId(123L)).thenReturn(2L);
+        when(voteRepository.save(any(Vote.class))).thenAnswer(invocation -> {
+            Vote vote = invocation.getArgument(0);
+            vote.setId(456L);
+            return vote;
+        });
+        when(voteParticipantRepository.save(any(VoteParticipant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.createVote(
+                123L,
+                proposer,
+                "매수",
+                "삼성전자",
+                "005930",
+                3,
+                BigDecimal.valueOf(70000),
+                "좋아 보여요",
+                VoteService.ORDER_STRATEGY_MARKET,
+                null,
+                null,
+                null
+        );
+
+        InOrder inOrder = inOrder(voteParticipantRepository, broadcaster);
+        inOrder.verify(voteParticipantRepository).save(any(VoteParticipant.class));
+
+        ArgumentCaptor<String> groupIdCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+        inOrder.verify(broadcaster).broadcast(groupIdCaptor.capture(), payloadCaptor.capture());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = OBJECT_MAPPER.readValue(payloadCaptor.getValue(), Map.class);
+        assertEquals("123", groupIdCaptor.getValue());
+        assertEquals("vote_update", payload.get("type"));
+        assertEquals(123L, ((Number) payload.get("groupId")).longValue());
+        assertEquals(456L, ((Number) payload.get("voteId")).longValue());
+        verify(voteParticipantRepository).save(any(VoteParticipant.class));
     }
 }
