@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -21,15 +22,19 @@ public class EtfAiFeedbackService {
     );
     private static final Pattern NUMBER_PATTERN = Pattern.compile("[-+]?\\d[\\d,]*(?:\\.\\d+)?(?:%p|%|원|만원|억원)?");
 
-    private final LlmFeedbackClient llmFeedbackClient;
+    private final List<LlmFeedbackClient> llmFeedbackClients;
 
     public EtfAiFeedbackService() {
-        this(null);
+        this(List.of());
     }
 
     @Autowired
+    public EtfAiFeedbackService(List<LlmFeedbackClient> llmFeedbackClients) {
+        this.llmFeedbackClients = llmFeedbackClients != null ? llmFeedbackClients : List.of();
+    }
+
     public EtfAiFeedbackService(LlmFeedbackClient llmFeedbackClient) {
-        this.llmFeedbackClient = llmFeedbackClient;
+        this(llmFeedbackClient != null ? List.of(llmFeedbackClient) : List.of());
     }
 
     public InsightFacts buildInsightFacts(String portfolioLabel,
@@ -172,18 +177,29 @@ public class EtfAiFeedbackService {
     }
 
     public RuleBasedFeedback buildFeedback(InsightFacts facts) {
-        if (llmFeedbackClient == null) {
-            return buildFallbackFeedback(facts);
+        for (LlmFeedbackClient client : llmFeedbackClients) {
+            Optional<RuleBasedFeedback> generated = client.generate(facts);
+            if (generated.isPresent()) {
+                return validateOrFallback(generated.get(), facts);
+            }
         }
-        return validateOrFallback(llmFeedbackClient.generate(facts).orElse(null), facts);
+        return buildFallbackFeedback(facts);
     }
 
     public String modelName() {
-        return llmFeedbackClient != null ? llmFeedbackClient.modelName() : "none";
+        return llmFeedbackClients.stream()
+                .map(LlmFeedbackClient::modelName)
+                .filter(name -> name != null && !name.isBlank() && !"none".equals(name))
+                .findFirst()
+                .orElse("none");
     }
 
     public String promptVersion() {
-        return llmFeedbackClient != null ? llmFeedbackClient.promptVersion() : "none";
+        return llmFeedbackClients.stream()
+                .map(LlmFeedbackClient::promptVersion)
+                .filter(version -> version != null && !version.isBlank() && !"none".equals(version))
+                .findFirst()
+                .orElse("none");
     }
 
     public RuleBasedFeedback validateOrFallback(RuleBasedFeedback generated, InsightFacts facts) {

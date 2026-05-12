@@ -3,6 +3,7 @@ package com.uniport.service.backtest;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -17,6 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Service
+@Order(20)
 public class OpenAiFeedbackClient implements LlmFeedbackClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

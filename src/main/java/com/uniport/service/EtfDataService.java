@@ -138,6 +138,7 @@ public class EtfDataService {
     private final EtfNewsExposureService etfNewsExposureService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final YahooAssetSearchClient yahooAssetSearchClient;
+    private final PortfolioFitModelClient portfolioFitModelClient;
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
     private final ExecutorService priceFetchExecutor = Executors.newFixedThreadPool(PRICE_FETCH_POOL_SIZE, priceFetchThreadFactory());
 
@@ -153,6 +154,7 @@ public class EtfDataService {
                           EtfNewsExposureService etfNewsExposureService,
                           StockVisualAssetResolver stockVisualAssetResolver,
                           YahooAssetSearchClient yahooAssetSearchClient,
+                          PortfolioFitModelClient portfolioFitModelClient,
                           StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.managedEtfRepository = managedEtfRepository;
         this.managedEtfAnalysisReportRepository = managedEtfAnalysisReportRepository;
@@ -166,6 +168,7 @@ public class EtfDataService {
         this.etfNewsExposureService = etfNewsExposureService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.yahooAssetSearchClient = yahooAssetSearchClient;
+        this.portfolioFitModelClient = portfolioFitModelClient;
         this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
 
@@ -624,7 +627,10 @@ public class EtfDataService {
                 .sorted()
                 .reduce((left, right) -> left + "|" + right)
                 .orElse("");
-        return new RecommendationProfile(dominantMarket, distinctKeywords, marketWeights.size(), fingerprint);
+        String portfolioLabel = context.title() != null && !context.title().isBlank()
+                ? context.title()
+                : "사용자 포트폴리오";
+        return new RecommendationProfile(dominantMarket, distinctKeywords, marketWeights.size(), fingerprint, portfolioLabel);
     }
 
     private EtfPortfolioFitRecommendationItemDTO toPortfolioFitRecommendation(
@@ -636,8 +642,9 @@ public class EtfDataService {
         List<String> candidateKeywords = inferThemeKeywords(item.name() + " " + item.symbol() + " " + item.market());
         boolean sameMarket = broadMarket(item.market()).equals(profile.dominantMarket());
         boolean themeMatch = candidateKeywords.stream().anyMatch(profile.keywords()::contains);
-        double score = portfolioFitScore(item, profile, sameMarket, themeMatch);
-        List<String> tags = recommendationTags(item, profile, sameMarket, themeMatch, candidateKeywords);
+        Optional<PortfolioFitModelScore> modelScore = scorePortfolioFitModel(item, profile, sameMarket, themeMatch, candidateKeywords);
+        double score = portfolioFitScore(item, profile, sameMarket, themeMatch, modelScore);
+        List<String> tags = recommendationTags(item, profile, sameMarket, themeMatch, candidateKeywords, modelScore);
         return EtfPortfolioFitRecommendationItemDTO.builder()
                 .recommendationId("FIT_" + item.assetId())
                 .stockId(item.assetId())
@@ -645,7 +652,7 @@ public class EtfDataService {
                 .symbol(item.symbol())
                 .market(item.market())
                 .fitScore(roundScore(score))
-                .reason(recommendationReason(item, profile, sameMarket, themeMatch, candidateKeywords))
+                .reason(recommendationReason(item, profile, sameMarket, themeMatch, candidateKeywords, modelScore))
                 .tags(tags)
                 .backtestEnabled(selectable)
                 .dataStatus(dataStatus)
@@ -658,7 +665,8 @@ public class EtfDataService {
     private double portfolioFitScore(EtfAssetCatalogItem item,
                                      RecommendationProfile profile,
                                      boolean sameMarket,
-                                     boolean themeMatch) {
+                                     boolean themeMatch,
+                                     Optional<PortfolioFitModelScore> modelScore) {
         double score = 0.45;
         if (sameMarket) {
             score += 0.18;
@@ -676,8 +684,14 @@ public class EtfDataService {
         } else {
             score += 0.03;
         }
+        if (modelScore.isPresent()) {
+            PortfolioFitModelScore model = modelScore.get();
+            double confidence = Math.max(0.0, Math.min(model.confidence(), 1.0));
+            double adjustment = confidence * 0.18;
+            score += model.positive() ? adjustment : -adjustment;
+        }
         score += portfolioSpecificTieBreak(item, profile);
-        return Math.min(score, 0.98);
+        return Math.max(0.0, Math.min(score, 0.98));
     }
 
     private double portfolioSpecificTieBreak(EtfAssetCatalogItem item, RecommendationProfile profile) {
@@ -689,8 +703,10 @@ public class EtfDataService {
                                             RecommendationProfile profile,
                                             boolean sameMarket,
                                             boolean themeMatch,
-                                            List<String> candidateKeywords) {
+                                            List<String> candidateKeywords,
+                                            Optional<PortfolioFitModelScore> modelScore) {
         List<String> tags = new ArrayList<>();
+        modelScore.ifPresent(score -> tags.add(score.positive() ? "BERT 적합" : "BERT 주의"));
         if (themeMatch) {
             candidateKeywords.stream()
                     .filter(profile.keywords()::contains)
@@ -712,10 +728,17 @@ public class EtfDataService {
                                         RecommendationProfile profile,
                                         boolean sameMarket,
                                         boolean themeMatch,
-                                        List<String> candidateKeywords) {
+                                        List<String> candidateKeywords,
+                                        Optional<PortfolioFitModelScore> modelScore) {
         String candidateName = item.name() != null && !item.name().isBlank()
                 ? item.name()
                 : item.symbol();
+        if (modelScore.isPresent() && modelScore.get().positive()) {
+            return candidateName + "은 BERT 모델이 현재 포트폴리오 문맥과 긍정적으로 맞는다고 본 후보예요.";
+        }
+        if (modelScore.isPresent() && !modelScore.get().positive()) {
+            return candidateName + "은 BERT 모델이 후보 문맥을 보수적으로 봤지만, 분산과 데이터 품질 기준에서 함께 검토할 후보예요.";
+        }
         if (themeMatch) {
             String keyword = candidateKeywords.stream()
                     .filter(profile.keywords()::contains)
@@ -727,6 +750,39 @@ public class EtfDataService {
             return candidateName + "은 현재 포트폴리오의 " + profile.dominantMarket() + " 중심 구성과 같은 시장에서 보완할 수 있는 후보예요.";
         }
         return candidateName + "은 현재 포트폴리오에 다른 시장 노출을 더해 분산을 보완할 수 있는 후보예요.";
+    }
+
+    private Optional<PortfolioFitModelScore> scorePortfolioFitModel(EtfAssetCatalogItem item,
+                                                                    RecommendationProfile profile,
+                                                                    boolean sameMarket,
+                                                                    boolean themeMatch,
+                                                                    List<String> candidateKeywords) {
+        if (portfolioFitModelClient == null) {
+            return Optional.empty();
+        }
+        PortfolioFitModelInput input = new PortfolioFitModelInput(
+                profile.portfolioLabel(),
+                profile.keywords(),
+                item.name(),
+                item.symbol(),
+                item.market(),
+                candidateSignals(item, sameMarket, themeMatch, candidateKeywords)
+        );
+        return portfolioFitModelClient.score(input);
+    }
+
+    private List<String> candidateSignals(EtfAssetCatalogItem item,
+                                          boolean sameMarket,
+                                          boolean themeMatch,
+                                          List<String> candidateKeywords) {
+        List<String> signals = new ArrayList<>();
+        signals.add(item.name() + " " + item.symbol() + " " + item.market());
+        signals.add(sameMarket ? "기존 중심 시장과 같은 시장 후보" : "기존 포트폴리오에 다른 시장 노출을 더하는 후보");
+        if (themeMatch) {
+            signals.add("보유 테마와 후보 테마가 연결됨");
+        }
+        signals.addAll(candidateKeywords.stream().map(keyword -> keyword + " 후보").toList());
+        return signals;
     }
 
     private List<String> inferThemeKeywords(String text) {
@@ -1839,7 +1895,7 @@ public class EtfDataService {
     }
 
     private record RecommendationContext(List<HoldingPayload> holdings, String title, String theme) {}
-    private record RecommendationProfile(String dominantMarket, List<String> keywords, int marketCount, String fingerprint) {}
+    private record RecommendationProfile(String dominantMarket, List<String> keywords, int marketCount, String fingerprint, String portfolioLabel) {}
     private record HoldingPayload(String stockId, Integer weight, Double changeRate) {}
     private record StockRef(String name, String symbol, String market, String assetType, String currency) {}
     private record ResolvedStockVisual(String logoUrl, StockVisualDTO visual) {}

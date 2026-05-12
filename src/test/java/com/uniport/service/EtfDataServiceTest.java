@@ -54,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -76,6 +77,7 @@ class EtfDataServiceTest {
     private EtfNewsExposureService etfNewsExposureService;
     private StockVisualAssetResolver stockVisualAssetResolver;
     private YahooAssetSearchClient yahooAssetSearchClient;
+    private PortfolioFitModelClient portfolioFitModelClient;
     private StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
     private EtfDataService etfDataService;
 
@@ -93,6 +95,7 @@ class EtfDataServiceTest {
         etfNewsExposureService = mock(EtfNewsExposureService.class);
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
         yahooAssetSearchClient = mock(YahooAssetSearchClient.class);
+        portfolioFitModelClient = mock(PortfolioFitModelClient.class);
         stockSymbolLogoUrlResolver = new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app");
         when(historicalPriceProvider.getSecurityPriceSeries(any(), any(LocalDate.class), any(LocalDate.class)))
                 .thenAnswer(this::fullCoverageSeries);
@@ -112,6 +115,7 @@ class EtfDataServiceTest {
                 etfNewsExposureService,
                 stockVisualAssetResolver,
                 yahooAssetSearchClient,
+                portfolioFitModelClient,
                 stockSymbolLogoUrlResolver
         );
     }
@@ -985,6 +989,48 @@ class EtfDataServiceTest {
         assertEquals(true, response.getItems().get(0).getFitScore() > response.getItems().get(1).getFitScore());
         assertEquals(true, response.getItems().get(0).getReason().contains("플랫폼"));
         assertEquals(false, response.getItems().get(0).getFitScore().equals(response.getItems().get(1).getFitScore()));
+    }
+
+    @Test
+    void recommendPortfolioFitStocks_usesBertFitModelScoreWhenAvailable() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_PLATFORM_BERT")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("플랫폼 ETF")
+                .theme("플랫폼")
+                .holdingsJson("[{\"stockId\":\"KRX_035420\",\"weight\":100}]")
+                .build();
+        AssetMaster naver = asset("KRX_035420", "STOCK", "NAVER", "035420", "KOSPI", "KRW");
+        AssetMaster hanmi = asset("KRX_042700", "STOCK", "한미반도체", "042700", "KOSPI", "KRW");
+        AssetMaster google = asset("US_GOOGL", "STOCK", "Google", "GOOGL", "NASDAQ", "USD");
+        when(managedEtfRepository.findByEtfCode("ETF_PLATFORM_BERT")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_035420")).thenReturn(Optional.of(naver));
+        when(assetMasterRepository.searchActive(eq(""), eq("STOCK"), eq(null), any(Pageable.class)))
+                .thenReturn(List.of(hanmi, google, naver));
+        when(stockVisualAssetResolver.resolve("KOSPI", "042700", "한미반도체", null)).thenReturn(visual("042700"));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "GOOGL", "Google", null)).thenReturn(visual("GOOGL"));
+        when(portfolioFitModelClient.score(any())).thenAnswer(invocation -> {
+            PortfolioFitModelInput input = invocation.getArgument(0);
+            if ("Google".equals(input.candidateName())) {
+                return Optional.of(new PortfolioFitModelScore(true, 0.94, "FinBERT positive"));
+            }
+            return Optional.of(new PortfolioFitModelScore(false, 0.94, "FinBERT negative"));
+        });
+
+        EtfPortfolioFitRecommendationResponseDTO response = etfDataService.recommendPortfolioFitStocks(
+                user,
+                EtfPortfolioFitRecommendationRequestDTO.builder()
+                        .customEtfId("ETF_PLATFORM_BERT")
+                        .limit(2)
+                        .market("ALL")
+                        .build()
+        );
+
+        assertEquals("US_GOOGL", response.getItems().get(0).getStockId());
+        assertTrue(response.getItems().get(0).getTags().contains("BERT 적합"));
+        assertTrue(response.getItems().get(0).getReason().contains("BERT"));
     }
 
     @Test
