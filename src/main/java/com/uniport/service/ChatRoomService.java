@@ -13,6 +13,7 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
+import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import org.springframework.stereotype.Service;
 
@@ -39,6 +40,7 @@ public class ChatRoomService {
     private final TeamAccountRepository teamAccountRepository;
     private final TeamHoldingRepository teamHoldingRepository;
     private final VoteRepository voteRepository;
+    private final VoteParticipantRepository voteParticipantRepository;
     private final KisApiService kisApiService;
 
     public ChatRoomService(MatchingRoomMemberRepository matchingRoomMemberRepository,
@@ -47,6 +49,7 @@ public class ChatRoomService {
                            TeamAccountRepository teamAccountRepository,
                            TeamHoldingRepository teamHoldingRepository,
                            VoteRepository voteRepository,
+                           VoteParticipantRepository voteParticipantRepository,
                            KisApiService kisApiService) {
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.matchingRoomRepository = matchingRoomRepository;
@@ -54,6 +57,7 @@ public class ChatRoomService {
         this.teamAccountRepository = teamAccountRepository;
         this.teamHoldingRepository = teamHoldingRepository;
         this.voteRepository = voteRepository;
+        this.voteParticipantRepository = voteParticipantRepository;
         this.kisApiService = kisApiService;
     }
 
@@ -331,19 +335,17 @@ public class ChatRoomService {
         long rejectCount = 0L;
         String myVote = null;
 
-        if (vote.getParticipants() != null) {
-            for (var participant : vote.getParticipants()) {
-                String choice = participant.getVoteChoice();
-                if ("찬성".equals(choice)) {
-                    approveCount++;
-                } else if ("보류".equals(choice)) {
-                    holdCount++;
-                } else if ("반대".equals(choice)) {
-                    rejectCount++;
-                }
-                if (currentUser.getId() != null && currentUser.getId().equals(participant.getUserId())) {
-                    myVote = choice;
-                }
+        for (var participant : voteParticipantRepository.findByVote_IdOrderById(vote.getId())) {
+            String choice = participant.getVoteChoice();
+            if ("찬성".equals(choice)) {
+                approveCount++;
+            } else if ("보류".equals(choice)) {
+                holdCount++;
+            } else if ("반대".equals(choice)) {
+                rejectCount++;
+            }
+            if (currentUser.getId() != null && currentUser.getId().equals(participant.getUserId())) {
+                myVote = choice;
             }
         }
 
