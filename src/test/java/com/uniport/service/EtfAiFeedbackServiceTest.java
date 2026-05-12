@@ -78,6 +78,62 @@ class EtfAiFeedbackServiceTest {
     }
 
     @Test
+    void buildFeedback_includesPortfolioContextWhenRiskIsBalanced() {
+        InsightFacts chipFacts = baseFacts()
+                .holdings(List.of(
+                        new BacktestHolding("US_NVDA", "NVIDIA Corp.", BigDecimal.valueOf(20.0), "반도체"),
+                        new BacktestHolding("US_AMD", "AMD", BigDecimal.valueOf(20.0), "반도체")
+                ))
+                .topHoldingName("NVIDIA Corp.")
+                .topHoldingWeightPercent(BigDecimal.valueOf(20.0))
+                .top3WeightPercent(BigDecimal.valueOf(40.0))
+                .dominantSector("반도체")
+                .dominantSectorWeightPercent(BigDecimal.valueOf(40.0))
+                .build();
+        InsightFacts mobilityFacts = baseFacts()
+                .holdings(List.of(
+                        new BacktestHolding("US_TSLA", "Tesla", BigDecimal.valueOf(20.0), "전기차"),
+                        new BacktestHolding("US_GM", "GM", BigDecimal.valueOf(20.0), "전기차")
+                ))
+                .topHoldingName("Tesla")
+                .topHoldingWeightPercent(BigDecimal.valueOf(20.0))
+                .top3WeightPercent(BigDecimal.valueOf(40.0))
+                .dominantSector("전기차")
+                .dominantSectorWeightPercent(BigDecimal.valueOf(40.0))
+                .build();
+
+        RuleBasedFeedback chipFeedback = service.buildFallbackFeedback(chipFacts);
+        RuleBasedFeedback mobilityFeedback = service.buildFallbackFeedback(mobilityFacts);
+
+        assertTrue(chipFeedback.summary().contains("NVIDIA Corp."));
+        assertTrue(chipFeedback.summary().contains("반도체"));
+        assertTrue(mobilityFeedback.summary().contains("Tesla"));
+        assertTrue(mobilityFeedback.summary().contains("전기차"));
+        assertTrue(!chipFeedback.summary().equals(mobilityFeedback.summary()));
+    }
+
+    @Test
+    void buildFeedback_variesHoldingCommentsBySectorContext() {
+        InsightFacts facts = baseFacts()
+                .holdings(List.of(
+                        new BacktestHolding("US_TSLA", "Tesla", BigDecimal.valueOf(20.0), "전기차"),
+                        new BacktestHolding("US_JPM", "JPMorgan", BigDecimal.valueOf(20.0), "금융"),
+                        new BacktestHolding("US_PFE", "Pfizer", BigDecimal.valueOf(20.0), "헬스케어")
+                ))
+                .topHoldingWeightPercent(BigDecimal.valueOf(20.0))
+                .top3WeightPercent(BigDecimal.valueOf(60.0))
+                .dominantSector("혼합")
+                .dominantSectorWeightPercent(BigDecimal.valueOf(60.0))
+                .build();
+
+        RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
+
+        assertTrue(feedback.bullets().get(0).message().contains("전기차"));
+        assertTrue(feedback.bullets().get(1).message().contains("금융"));
+        assertTrue(feedback.bullets().get(2).message().contains("헬스케어"));
+    }
+
+    @Test
     void buildInsightFacts_includesWeightedNewsExposureFacts() {
         BacktestResult result = backtestResult();
         EtfNewsExposure newsExposure = new EtfNewsExposure(

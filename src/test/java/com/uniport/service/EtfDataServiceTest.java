@@ -947,6 +947,47 @@ class EtfDataServiceTest {
     }
 
     @Test
+    void recommendPortfolioFitStocks_prioritizesThemeFitOverSameMarketOnly() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_PLATFORM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("플랫폼 ETF")
+                .theme("플랫폼")
+                .holdingsJson("[{\"stockId\":\"KRX_035420\",\"weight\":55},{\"stockId\":\"KRX_035720\",\"weight\":45}]")
+                .build();
+        AssetMaster naver = asset("KRX_035420", "STOCK", "NAVER", "035420", "KOSPI", "KRW");
+        AssetMaster kakao = asset("KRX_035720", "STOCK", "카카오", "035720", "KOSPI", "KRW");
+        AssetMaster hanmi = asset("KRX_042700", "STOCK", "한미반도체", "042700", "KOSPI", "KRW");
+        AssetMaster google = asset("US_GOOGL", "STOCK", "Google", "GOOGL", "NASDAQ", "USD");
+        AssetMaster meta = asset("US_META", "STOCK", "Meta", "META", "NASDAQ", "USD");
+        when(managedEtfRepository.findByEtfCode("ETF_PLATFORM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_035420")).thenReturn(Optional.of(naver));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_035720")).thenReturn(Optional.of(kakao));
+        when(assetMasterRepository.searchActive(eq(""), eq("STOCK"), eq(null), any(Pageable.class)))
+                .thenReturn(List.of(hanmi, google, meta, naver, kakao));
+        when(stockVisualAssetResolver.resolve("KOSPI", "042700", "한미반도체", null)).thenReturn(visual("042700"));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "GOOGL", "Google", null)).thenReturn(visual("GOOGL"));
+        when(stockVisualAssetResolver.resolve("NASDAQ", "META", "Meta", null)).thenReturn(visual("META"));
+
+        EtfPortfolioFitRecommendationResponseDTO response = etfDataService.recommendPortfolioFitStocks(
+                user,
+                EtfPortfolioFitRecommendationRequestDTO.builder()
+                        .customEtfId("ETF_PLATFORM")
+                        .limit(2)
+                        .market("ALL")
+                        .build()
+        );
+
+        assertEquals(List.of("US_GOOGL", "US_META"),
+                response.getItems().stream().map(item -> item.getStockId()).sorted().toList());
+        assertEquals(true, response.getItems().get(0).getFitScore() > response.getItems().get(1).getFitScore());
+        assertEquals(true, response.getItems().get(0).getReason().contains("플랫폼"));
+        assertEquals(false, response.getItems().get(0).getFitScore().equals(response.getItems().get(1).getFitScore()));
+    }
+
+    @Test
     void analyze_usesRequestedPeriodForBacktestWindow() {
         User user = User.builder().id(1L).build();
         ManagedEtf etf = ManagedEtf.builder()

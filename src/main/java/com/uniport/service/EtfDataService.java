@@ -619,7 +619,12 @@ public class EtfDataService {
                 .filter(value -> value != null && !value.isBlank())
                 .distinct()
                 .toList();
-        return new RecommendationProfile(dominantMarket, distinctKeywords, marketWeights.size());
+        String fingerprint = context.holdings().stream()
+                .map(holding -> canonicalStockId(holding.stockId()) + ":" + (holding.weight() != null ? holding.weight() : 0))
+                .sorted()
+                .reduce((left, right) -> left + "|" + right)
+                .orElse("");
+        return new RecommendationProfile(dominantMarket, distinctKeywords, marketWeights.size(), fingerprint);
     }
 
     private EtfPortfolioFitRecommendationItemDTO toPortfolioFitRecommendation(
@@ -659,7 +664,7 @@ public class EtfDataService {
             score += 0.18;
         }
         if (themeMatch) {
-            score += 0.16;
+            score += 0.24;
         }
         if (!sameMarket && profile.marketCount() <= 1) {
             score += 0.05;
@@ -671,7 +676,13 @@ public class EtfDataService {
         } else {
             score += 0.03;
         }
+        score += portfolioSpecificTieBreak(item, profile);
         return Math.min(score, 0.98);
+    }
+
+    private double portfolioSpecificTieBreak(EtfAssetCatalogItem item, RecommendationProfile profile) {
+        String seed = profile.fingerprint() + "|" + item.assetId();
+        return Math.floorMod(seed.hashCode(), 10) / 100.0;
     }
 
     private List<String> recommendationTags(EtfAssetCatalogItem item,
@@ -1828,7 +1839,7 @@ public class EtfDataService {
     }
 
     private record RecommendationContext(List<HoldingPayload> holdings, String title, String theme) {}
-    private record RecommendationProfile(String dominantMarket, List<String> keywords, int marketCount) {}
+    private record RecommendationProfile(String dominantMarket, List<String> keywords, int marketCount, String fingerprint) {}
     private record HoldingPayload(String stockId, Integer weight, Double changeRate) {}
     private record StockRef(String name, String symbol, String market, String assetType, String currency) {}
     private record ResolvedStockVisual(String logoUrl, StockVisualDTO visual) {}

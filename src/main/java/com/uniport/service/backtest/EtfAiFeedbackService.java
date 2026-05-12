@@ -146,23 +146,27 @@ public class EtfAiFeedbackService {
         } else if (facts.excessReturnPercent() != null && facts.excessReturnPercent().compareTo(BigDecimal.valueOf(-1)) <= 0) {
             summary = "백테스트 기준 포트폴리오 수익률은 " + formatPercent(facts.totalReturnPercent())
                     + "였지만 " + facts.benchmarkName() + "보다 "
-                    + formatPercentPoint(facts.excessReturnPercent().abs()) + " 낮았습니다. 비중 조정이나 종목 분산을 다시 확인해보는 편이 좋아요.";
+                    + formatPercentPoint(facts.excessReturnPercent().abs()) + " 낮았습니다. "
+                    + portfolioContextPhrase(facts) + " 비중 조정이나 종목 분산을 다시 확인해보는 편이 좋아요.";
             tone = "CAUTION";
         } else if (facts.volatilityPercent().compareTo(BigDecimal.valueOf(20)) >= 0
                 || facts.maxDrawdownPercent().compareTo(BigDecimal.valueOf(-20)) <= 0) {
             summary = "수익 기회는 있었지만 가격 변동도 큰 구성이에요. "
                     + facts.periodLabel() + " 기준 수익률은 " + formatPercent(facts.totalReturnPercent())
-                    + "였고, 가장 큰 하락 구간에서는 " + formatPercent(facts.maxDrawdownPercent()) + "까지 내려갔습니다.";
+                    + "였고, 가장 큰 하락 구간에서는 " + formatPercent(facts.maxDrawdownPercent())
+                    + "까지 내려갔습니다. " + portfolioContextPhrase(facts);
             tone = "CAUTION";
         } else if (facts.excessReturnPercent() != null) {
             summary = "백테스트 기준 " + facts.periodLabel() + " 동안 원금 대비 "
                     + formatPercent(facts.totalReturnPercent()) + "의 수익 구간이 관찰됐어요. "
                     + facts.benchmarkName() + "보다 " + formatPercentPoint(facts.excessReturnPercent())
-                    + " 높았고, 최대 낙폭은 " + formatPercent(facts.maxDrawdownPercent()) + "였습니다.";
+                    + " 높았고, 최대 낙폭은 " + formatPercent(facts.maxDrawdownPercent())
+                    + "였습니다. " + portfolioContextPhrase(facts);
         } else {
             summary = "백테스트 기준 " + facts.periodLabel() + " 동안 원금 대비 "
                     + formatPercent(facts.totalReturnPercent()) + "의 수익 구간이 관찰됐어요. "
-                    + "벤치마크 데이터는 아직 연결되지 않아 포트폴리오 자체의 변동성과 낙폭을 중심으로 확인해주세요.";
+                    + "벤치마크 데이터는 아직 연결되지 않아 포트폴리오 자체의 변동성과 낙폭을 중심으로 확인해주세요. "
+                    + portfolioContextPhrase(facts);
         }
         return new RuleBasedFeedback("AI 리스크 진단", summary, bullets, tone, facts.disclaimer(), true);
     }
@@ -234,19 +238,46 @@ public class EtfAiFeedbackService {
         if (weight.compareTo(BigDecimal.valueOf(40)) >= 0) {
             return new FeedbackBullet(
                     "RISK",
-                    name + " " + formatPercent(weight) + ": 단일 종목 영향이 큽니다. 이 종목 하락 시 전체 ETF 변동성이 커질 수 있습니다."
+                    name + " " + formatPercent(weight) + ": "
+                            + sectorLabel(holding) + " 노출의 핵심 비중입니다. 이 종목 하락 시 전체 ETF 변동성이 커질 수 있습니다."
             );
         }
         if (weight.compareTo(BigDecimal.valueOf(25)) >= 0) {
             return new FeedbackBullet(
                     "INFO",
-                    name + " " + formatPercent(weight) + ": 핵심 비중입니다. 실적, 제품 사이클, 업종 뉴스가 ETF 흐름에 크게 반영됩니다."
+                    name + " " + formatPercent(weight) + ": "
+                            + sectorLabel(holding) + " 흐름을 대표하는 핵심 비중입니다. 실적, 제품 사이클, 업종 뉴스가 ETF 흐름에 크게 반영됩니다."
             );
         }
         return new FeedbackBullet(
                 "STRENGTH",
-                name + " " + formatPercent(weight) + ": 보조 비중으로 포트폴리오 분산에 기여합니다."
+                name + " " + formatPercent(weight) + ": "
+                        + sectorLabel(holding) + " 노출을 보조하며 포트폴리오 분산에 기여합니다."
         );
+    }
+
+    private String portfolioContextPhrase(InsightFacts facts) {
+        List<String> parts = new ArrayList<>();
+        if (facts.topHoldingName() != null && !facts.topHoldingName().isBlank()
+                && facts.topHoldingWeightPercent() != null) {
+            parts.add("최대 비중은 " + facts.topHoldingName() + " "
+                    + formatPercent(facts.topHoldingWeightPercent()) + "입니다");
+        }
+        if (facts.dominantSector() != null && !facts.dominantSector().isBlank()
+                && facts.dominantSectorWeightPercent() != null) {
+            parts.add(facts.dominantSector() + " 비중은 "
+                    + formatPercent(facts.dominantSectorWeightPercent()) + "입니다");
+        }
+        if (parts.isEmpty()) {
+            return "보유 종목별 비중을 함께 확인해주세요.";
+        }
+        return String.join(", ", parts) + ".";
+    }
+
+    private String sectorLabel(BacktestHolding holding) {
+        return holding.sector() != null && !holding.sector().isBlank()
+                ? holding.sector()
+                : "해당 종목";
     }
 
     private List<BacktestHolding> sortedHoldings(List<BacktestHolding> holdings) {
