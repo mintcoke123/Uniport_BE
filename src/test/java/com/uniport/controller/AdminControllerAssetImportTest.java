@@ -1,6 +1,7 @@
 package com.uniport.controller;
 
 import com.uniport.entity.User;
+import com.uniport.repository.FriendInviteRepository;
 import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
@@ -58,6 +59,7 @@ class AdminControllerAssetImportTest {
         return new AdminController(
                 authService,
                 mock(UserRepository.class),
+                mock(FriendInviteRepository.class),
                 mock(OrderRepository.class),
                 mock(HoldingRepository.class),
                 mock(MatchingRoomRepository.class),

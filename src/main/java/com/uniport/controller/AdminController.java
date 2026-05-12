@@ -4,6 +4,7 @@ import com.uniport.entity.Competition;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.repository.FriendInviteRepository;
 import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
@@ -48,6 +49,7 @@ public class AdminController {
 
     private final AuthService authService;
     private final UserRepository userRepository;
+    private final FriendInviteRepository friendInviteRepository;
     private final OrderRepository orderRepository;
     private final HoldingRepository holdingRepository;
     private final MatchingRoomRepository matchingRoomRepository;
@@ -62,6 +64,7 @@ public class AdminController {
     private final AssetMasterImportService assetMasterImportService;
 
     public AdminController(AuthService authService, UserRepository userRepository,
+                           FriendInviteRepository friendInviteRepository,
                            OrderRepository orderRepository, HoldingRepository holdingRepository,
                            MatchingRoomRepository matchingRoomRepository,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
@@ -71,6 +74,7 @@ public class AdminController {
                            AssetMasterImportService assetMasterImportService) {
         this.authService = authService;
         this.userRepository = userRepository;
+        this.friendInviteRepository = friendInviteRepository;
         this.orderRepository = orderRepository;
         this.holdingRepository = holdingRepository;
         this.matchingRoomRepository = matchingRoomRepository;
@@ -390,6 +394,7 @@ public class AdminController {
         orderRepository.deleteByUser_Id(userId);
         holdingRepository.deleteByUser_Id(userId);
         matchingRoomMemberRepository.deleteByUser_Id(userId);
+        friendInviteRepository.deleteByInviterUser_IdOrAcceptedByUser_Id(userId, userId);
         userRepository.deleteById(userId);
         return ResponseEntity.ok(Map.of("success", true, "message", "Deleted"));
     }

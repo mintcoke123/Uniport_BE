@@ -8,4 +8,5 @@ import java.util.Optional;
 public interface FriendInviteRepository extends JpaRepository<FriendInvite, Long> {
     Optional<FriendInvite> findByInviteCode(String inviteCode);
     boolean existsByInviteCode(String inviteCode);
+    void deleteByInviterUser_IdOrAcceptedByUser_Id(Long inviterUserId, Long acceptedByUserId);
 }

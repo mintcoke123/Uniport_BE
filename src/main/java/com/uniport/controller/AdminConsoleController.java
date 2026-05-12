@@ -16,6 +16,7 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.dto.EducationCatalogResponseDTO;
 import com.uniport.dto.EducationDayContentResponseDTO;
+import com.uniport.repository.FriendInviteRepository;
 import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.GifticonInventoryRepository;
 import com.uniport.repository.ManagedCommunityCommentRepository;
@@ -70,6 +71,7 @@ public class AdminConsoleController {
     private final PointShopProductRepository pointShopProductRepository;
     private final GifticonInventoryRepository gifticonInventoryRepository;
     private final PointShopOrderRepository pointShopOrderRepository;
+    private final FriendInviteRepository friendInviteRepository;
     private final FriendRelationRepository friendRelationRepository;
     private final UserRepository userRepository;
     private final CompetitionService competitionService;
@@ -87,6 +89,7 @@ public class AdminConsoleController {
             PointShopProductRepository pointShopProductRepository,
             GifticonInventoryRepository gifticonInventoryRepository,
             PointShopOrderRepository pointShopOrderRepository,
+            FriendInviteRepository friendInviteRepository,
             FriendRelationRepository friendRelationRepository,
             UserRepository userRepository,
             CompetitionService competitionService,
@@ -103,6 +106,7 @@ public class AdminConsoleController {
         this.pointShopProductRepository = pointShopProductRepository;
         this.gifticonInventoryRepository = gifticonInventoryRepository;
         this.pointShopOrderRepository = pointShopOrderRepository;
+        this.friendInviteRepository = friendInviteRepository;
         this.friendRelationRepository = friendRelationRepository;
         this.userRepository = userRepository;
         this.competitionService = competitionService;
@@ -318,6 +322,7 @@ public class AdminConsoleController {
         pointShopOrderRepository.deleteByUser_Id(id);
         pointTransactionRepository.deleteByUser_Id(id);
         pointWalletRepository.deleteByUser_Id(id);
+        friendInviteRepository.deleteByInviterUser_IdOrAcceptedByUser_Id(id, id);
         friendRelationRepository.deleteByRequesterUser_IdOrAddresseeUser_Id(id, id);
         userRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("success", true));
