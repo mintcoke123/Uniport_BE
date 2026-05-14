@@ -1,18 +1,15 @@
 package com.uniport.controller;
 
 import com.uniport.entity.User;
-import com.uniport.repository.FriendInviteRepository;
-import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
-import com.uniport.repository.OrderRepository;
-import com.uniport.repository.UserPushTokenRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
+import com.uniport.service.UserDeletionReferenceCleanupService;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
 import com.uniport.service.importer.AssetMasterImportService;
@@ -58,19 +55,16 @@ class AdminControllerAssetImportTest {
     }
 
     @Test
-    void deleteUser_cleansPushTokensBeforeDeletingUser() {
+    void deleteUser_cleansReferencesBeforeDeletingUser() {
         AuthService authService = mock(AuthService.class);
         UserRepository userRepository = mock(UserRepository.class);
-        UserPushTokenRepository userPushTokenRepository = mock(UserPushTokenRepository.class);
+        UserDeletionReferenceCleanupService cleanupService = mock(UserDeletionReferenceCleanupService.class);
         AdminController controller = new AdminController(
                 authService,
                 userRepository,
-                mock(FriendInviteRepository.class),
-                mock(OrderRepository.class),
-                mock(HoldingRepository.class),
                 mock(MatchingRoomRepository.class),
                 mock(MatchingRoomMemberRepository.class),
-                userPushTokenRepository,
+                cleanupService,
                 mock(MatchingRoomService.class),
                 mock(CompetitionService.class),
                 mock(RankingService.class),
@@ -87,8 +81,8 @@ class AdminControllerAssetImportTest {
 
         controller.deleteUser("Bearer admin", 467L);
 
-        InOrder order = inOrder(userPushTokenRepository, userRepository);
-        order.verify(userPushTokenRepository).deleteByUser_Id(467L);
+        InOrder order = inOrder(cleanupService, userRepository);
+        order.verify(cleanupService).cleanupUserReferences(467L);
         order.verify(userRepository).deleteById(467L);
     }
 
@@ -97,12 +91,9 @@ class AdminControllerAssetImportTest {
         return new AdminController(
                 authService,
                 mock(UserRepository.class),
-                mock(FriendInviteRepository.class),
-                mock(OrderRepository.class),
-                mock(HoldingRepository.class),
                 mock(MatchingRoomRepository.class),
                 mock(MatchingRoomMemberRepository.class),
-                mock(UserPushTokenRepository.class),
+                mock(UserDeletionReferenceCleanupService.class),
                 mock(MatchingRoomService.class),
                 mock(CompetitionService.class),
                 mock(RankingService.class),

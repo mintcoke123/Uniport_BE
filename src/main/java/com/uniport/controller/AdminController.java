@@ -4,18 +4,15 @@ import com.uniport.entity.Competition;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
-import com.uniport.repository.FriendInviteRepository;
-import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
-import com.uniport.repository.OrderRepository;
-import com.uniport.repository.UserPushTokenRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
+import com.uniport.service.UserDeletionReferenceCleanupService;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
 import com.uniport.service.importer.AssetMasterImportService;
@@ -50,12 +47,9 @@ public class AdminController {
 
     private final AuthService authService;
     private final UserRepository userRepository;
-    private final FriendInviteRepository friendInviteRepository;
-    private final OrderRepository orderRepository;
-    private final HoldingRepository holdingRepository;
     private final MatchingRoomRepository matchingRoomRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
-    private final UserPushTokenRepository userPushTokenRepository;
+    private final UserDeletionReferenceCleanupService cleanupService;
     private final MatchingRoomService matchingRoomService;
     private final CompetitionService competitionService;
     private final RankingService rankingService;
@@ -66,23 +60,18 @@ public class AdminController {
     private final AssetMasterImportService assetMasterImportService;
 
     public AdminController(AuthService authService, UserRepository userRepository,
-                           FriendInviteRepository friendInviteRepository,
-                           OrderRepository orderRepository, HoldingRepository holdingRepository,
                            MatchingRoomRepository matchingRoomRepository,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
-                           UserPushTokenRepository userPushTokenRepository,
+                           UserDeletionReferenceCleanupService cleanupService,
                            MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService, VoteService voteService,
                            PriceBroadcaster priceBroadcaster,
                            GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase,
                            AssetMasterImportService assetMasterImportService) {
         this.authService = authService;
         this.userRepository = userRepository;
-        this.friendInviteRepository = friendInviteRepository;
-        this.orderRepository = orderRepository;
-        this.holdingRepository = holdingRepository;
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
-        this.userPushTokenRepository = userPushTokenRepository;
+        this.cleanupService = cleanupService;
         this.matchingRoomService = matchingRoomService;
         this.competitionService = competitionService;
         this.rankingService = rankingService;
@@ -394,12 +383,7 @@ public class AdminController {
         if ("admin".equalsIgnoreCase(target.getRole())) {
             throw new ApiException("관리자 계정은 삭제할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
-        // FK 제약: 유저를 참조하는 주문·보유·매칭방멤버를 먼저 삭제
-        orderRepository.deleteByUser_Id(userId);
-        holdingRepository.deleteByUser_Id(userId);
-        matchingRoomMemberRepository.deleteAllByUserId(userId);
-        friendInviteRepository.deleteAllByUserId(userId);
-        userPushTokenRepository.deleteByUser_Id(userId);
+        cleanupService.cleanupUserReferences(userId);
         userRepository.deleteById(userId);
         return ResponseEntity.ok(Map.of("success", true, "message", "Deleted"));
     }

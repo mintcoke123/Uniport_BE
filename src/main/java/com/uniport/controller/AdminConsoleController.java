@@ -16,7 +16,6 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.dto.EducationCatalogResponseDTO;
 import com.uniport.dto.EducationDayContentResponseDTO;
-import com.uniport.repository.FriendInviteRepository;
 import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.GifticonInventoryRepository;
 import com.uniport.repository.ManagedCommunityCommentRepository;
@@ -29,11 +28,11 @@ import com.uniport.repository.PointShopOrderRepository;
 import com.uniport.repository.PointShopProductRepository;
 import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
-import com.uniport.repository.UserPushTokenRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.EducationContentService;
 import com.uniport.service.MatchingRoomService;
+import com.uniport.service.UserDeletionReferenceCleanupService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,10 +72,9 @@ public class AdminConsoleController {
     private final PointShopProductRepository pointShopProductRepository;
     private final GifticonInventoryRepository gifticonInventoryRepository;
     private final PointShopOrderRepository pointShopOrderRepository;
-    private final FriendInviteRepository friendInviteRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final FriendRelationRepository friendRelationRepository;
-    private final UserPushTokenRepository userPushTokenRepository;
+    private final UserDeletionReferenceCleanupService cleanupService;
     private final UserRepository userRepository;
     private final CompetitionService competitionService;
     private final EducationContentService educationContentService;
@@ -93,10 +91,9 @@ public class AdminConsoleController {
             PointShopProductRepository pointShopProductRepository,
             GifticonInventoryRepository gifticonInventoryRepository,
             PointShopOrderRepository pointShopOrderRepository,
-            FriendInviteRepository friendInviteRepository,
             MatchingRoomMemberRepository matchingRoomMemberRepository,
             FriendRelationRepository friendRelationRepository,
-            UserPushTokenRepository userPushTokenRepository,
+            UserDeletionReferenceCleanupService cleanupService,
             UserRepository userRepository,
             CompetitionService competitionService,
             EducationContentService educationContentService,
@@ -112,10 +109,9 @@ public class AdminConsoleController {
         this.pointShopProductRepository = pointShopProductRepository;
         this.gifticonInventoryRepository = gifticonInventoryRepository;
         this.pointShopOrderRepository = pointShopOrderRepository;
-        this.friendInviteRepository = friendInviteRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.friendRelationRepository = friendRelationRepository;
-        this.userPushTokenRepository = userPushTokenRepository;
+        this.cleanupService = cleanupService;
         this.userRepository = userRepository;
         this.competitionService = competitionService;
         this.educationContentService = educationContentService;
@@ -327,13 +323,7 @@ public class AdminConsoleController {
     @Transactional
     @DeleteMapping("/users/{id}")
     public ResponseEntity<Map<String, Object>> deleteUserByAdminConsole(@PathVariable Long id) {
-        pointShopOrderRepository.deleteByUser_Id(id);
-        pointTransactionRepository.deleteByUser_Id(id);
-        pointWalletRepository.deleteByUser_Id(id);
-        matchingRoomMemberRepository.deleteAllByUserId(id);
-        friendInviteRepository.deleteAllByUserId(id);
-        friendRelationRepository.deleteByRequesterUser_IdOrAddresseeUser_Id(id, id);
-        userPushTokenRepository.deleteByUser_Id(id);
+        cleanupService.cleanupUserReferences(id);
         userRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("success", true));
     }
