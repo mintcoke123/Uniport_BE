@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verify;
 
 @SpringBootTest(properties = {
@@ -49,6 +50,36 @@ class PointSocialDataServicePushNotificationTest {
                         .build()
         );
 
+        verify(pushNotificationService).sendFriendRequestCreated(response.getRequestId(), requester, target);
+    }
+
+    @Test
+    void requestFriend_allowsNewRequestAfterPreviousRejection() {
+        User requester = persistUser("20266005", "rejected-requester");
+        User target = persistUser("20266006", "rejected-target");
+        FriendRelation relation = FriendRelation.builder()
+                .requesterUser(requester)
+                .addresseeUser(target)
+                .status("REJECTED")
+                .build();
+        entityManager.persist(relation);
+        entityManager.flush();
+        entityManager.clear();
+
+        FriendRequestResponseDTO response = pointSocialDataService.requestFriend(
+                requester,
+                FriendRequestCreateDTO.builder()
+                        .targetUserId("USER_" + target.getId())
+                        .build()
+        );
+
+        FriendRelation updated = friendRelationRepository.findById(relation.getId()).orElseThrow();
+        assertEquals("REQ_" + relation.getId(), response.getRequestId());
+        assertEquals("USER_" + target.getId(), response.getTargetUserId());
+        assertEquals("REQUESTED", response.getStatus());
+        assertEquals(requester.getId(), updated.getRequesterUser().getId());
+        assertEquals(target.getId(), updated.getAddresseeUser().getId());
+        assertEquals("REQUESTED", updated.getStatus());
         verify(pushNotificationService).sendFriendRequestCreated(response.getRequestId(), requester, target);
     }
 

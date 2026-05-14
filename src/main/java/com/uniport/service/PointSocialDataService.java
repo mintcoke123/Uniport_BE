@@ -396,15 +396,27 @@ public class PointSocialDataService {
         }
         User target = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new ApiException("friend user not found", HttpStatus.NOT_FOUND));
-        friendRelationRepository.findBetweenUsers(user.getId(), targetUserId)
-                .ifPresent(relation -> {
-                    throw new ApiException("friend request already exists", HttpStatus.CONFLICT);
-                });
-        FriendRelation relation = friendRelationRepository.save(FriendRelation.builder()
-                .requesterUser(user)
-                .addresseeUser(target)
-                .status("REQUESTED")
-                .build());
+        Optional<FriendRelation> existingRelation = friendRelationRepository.findBetweenUsers(user.getId(), targetUserId);
+        FriendRelation relation;
+        if (existingRelation.isPresent()) {
+            relation = existingRelation.get();
+            if (!"REJECTED".equalsIgnoreCase(relation.getStatus())) {
+                throw new ApiException("friend request already exists", HttpStatus.CONFLICT);
+            }
+            LocalDateTime now = LocalDateTime.now();
+            relation.setRequesterUser(user);
+            relation.setAddresseeUser(target);
+            relation.setStatus("REQUESTED");
+            relation.setCreatedAt(now);
+            relation.setUpdatedAt(now);
+            relation = friendRelationRepository.save(relation);
+        } else {
+            relation = friendRelationRepository.save(FriendRelation.builder()
+                    .requesterUser(user)
+                    .addresseeUser(target)
+                    .status("REQUESTED")
+                    .build());
+        }
         String requestId = "REQ_" + relation.getId();
         pushNotificationService.sendFriendRequestCreated(requestId, user, target);
         return FriendRequestResponseDTO.builder()
