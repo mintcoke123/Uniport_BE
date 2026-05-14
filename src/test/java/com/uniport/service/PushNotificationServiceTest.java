@@ -4,6 +4,8 @@ import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.User;
 import com.uniport.entity.UserPushToken;
 import com.uniport.entity.Vote;
+import com.uniport.dto.PushTestRequestDTO;
+import com.uniport.dto.PushTestResponseDTO;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -83,6 +85,41 @@ class PushNotificationServiceTest {
                 "https://uniportbe-production.up.railway.app/matching-room?inviteCode=abc123&roomId=123",
                 message.getData().get("deeplink")
         );
+    }
+
+    @Test
+    void sendTestPushSendsToCurrentUsersDeliverableTokensAndReturnsSummary() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(7L, List.of(pushToken("token-active"), pushToken("token-invalid")));
+        FakePushMessageSender sender = new FakePushMessageSender("token-invalid");
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        User currentUser = User.builder().id(7L).nickname("push-user").build();
+        PushTestRequestDTO request = PushTestRequestDTO.builder()
+                .title("Uniport 테스트 알림")
+                .body("백엔드에서 보낸 테스트 푸시입니다.")
+                .deeplink("https://uniportbe-production.up.railway.app/matching-room?roomId=10")
+                .build();
+
+        PushTestResponseDTO response = service.sendTestPush(currentUser, request);
+
+        assertEquals(2, response.getAttempted());
+        assertEquals(1, response.getSuccess());
+        assertEquals(1, response.getFailed());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("token-active", message.getToken());
+        assertEquals("Uniport 테스트 알림", message.getTitle());
+        assertEquals("백엔드에서 보낸 테스트 푸시입니다.", message.getBody());
+        assertEquals("test_push", message.getData().get("type"));
+        assertEquals("push-test", message.getData().get("entityId"));
+        assertEquals(
+                "https://uniportbe-production.up.railway.app/matching-room?roomId=10",
+                message.getData().get("deeplink")
+        );
+        assertEquals(List.of("token-invalid"), pushTokenService.invalidTokens);
     }
 
     private static UserPushToken pushToken(String value) {

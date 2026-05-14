@@ -3,9 +3,11 @@ package com.uniport.controller;
 import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.PushTokenRegisterRequestDTO;
 import com.uniport.dto.PushTokenResponseDTO;
+import com.uniport.dto.PushTestResponseDTO;
 import com.uniport.dto.PushTokenUnregisterRequestDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
+import com.uniport.service.PushNotificationService;
 import com.uniport.service.PushTokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -85,5 +87,40 @@ class PushTokenControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(pushTokenService).unregisterToken(eq(currentUser), any(PushTokenUnregisterRequestDTO.class));
+    }
+
+    @Test
+    void sendTestPushReturnsDeliverySummaryAndDelegatesToService() throws Exception {
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
+        CurrentUserResolver currentUserResolver = mock(CurrentUserResolver.class);
+        User currentUser = User.builder().id(7L).nickname("push-user").build();
+        when(currentUserResolver.resolveRequired(nullable(FirebaseAuthenticatedUser.class), eq("Bearer test-token")))
+                .thenReturn(currentUser);
+        when(pushNotificationService.sendTestPush(eq(currentUser), any()))
+                .thenReturn(PushTestResponseDTO.builder()
+                        .attempted(2)
+                        .success(1)
+                        .failed(1)
+                        .build());
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(new PushTestController(pushNotificationService, currentUserResolver))
+                .build();
+
+        mockMvc.perform(post("/api/users/me/push-test")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Uniport 테스트 알림",
+                                  "body": "백엔드에서 보낸 테스트 푸시입니다.",
+                                  "deeplink": "https://uniportbe-production.up.railway.app/matching-room?roomId=10"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attempted").value(2))
+                .andExpect(jsonPath("$.success").value(1))
+                .andExpect(jsonPath("$.failed").value(1));
+
+        verify(pushNotificationService).sendTestPush(eq(currentUser), any());
     }
 }

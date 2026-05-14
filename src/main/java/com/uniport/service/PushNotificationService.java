@@ -1,5 +1,7 @@
 package com.uniport.service;
 
+import com.uniport.dto.PushTestRequestDTO;
+import com.uniport.dto.PushTestResponseDTO;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.User;
 import com.uniport.entity.UserPushToken;
@@ -73,7 +75,30 @@ public class PushNotificationService {
         );
     }
 
-    private void sendToUsers(List<Long> userIds, String title, String body, Map<String, String> data) {
+    public PushTestResponseDTO sendTestPush(User user, PushTestRequestDTO request) {
+        if (user == null || user.getId() == null) {
+            return deliverySummary(0, 0, 0);
+        }
+        String title = valueOrDefault(request != null ? request.getTitle() : null, "Uniport 테스트 알림");
+        String body = valueOrDefault(request != null ? request.getBody() : null, "백엔드에서 보낸 테스트 푸시입니다.");
+        String deeplink = valueOrDefault(request != null ? request.getDeeplink() : null, publicBaseUrl);
+        DeliverySummary summary = sendToUsers(
+                List.of(user.getId()),
+                title,
+                body,
+                Map.of(
+                        "type", "test_push",
+                        "deeplink", deeplink,
+                        "entityId", "push-test"
+                )
+        );
+        return deliverySummary(summary.attempted, summary.success, summary.failed);
+    }
+
+    private DeliverySummary sendToUsers(List<Long> userIds, String title, String body, Map<String, String> data) {
+        int attempted = 0;
+        int success = 0;
+        int failed = 0;
         Set<Long> distinctUserIds = new LinkedHashSet<>(userIds);
         for (Long userId : distinctUserIds) {
             if (userId == null) {
@@ -85,11 +110,18 @@ public class PushNotificationService {
                     continue;
                 }
                 PushSendResult result = pushMessageSender.send(new PushMessage(token.getToken(), title, body, data));
+                attempted++;
+                if (result.isSuccess()) {
+                    success++;
+                } else {
+                    failed++;
+                }
                 if (result.isInvalidToken()) {
                     pushTokenService.markTokenInvalid(token.getToken());
                 }
             }
         }
+        return new DeliverySummary(attempted, success, failed);
     }
 
     private static String trimTrailingSlash(String value) {
@@ -105,5 +137,25 @@ public class PushNotificationService {
 
     private static String valueOrDefault(String value, String fallback) {
         return value != null && !value.isBlank() ? value.trim() : fallback;
+    }
+
+    private static PushTestResponseDTO deliverySummary(int attempted, int success, int failed) {
+        return PushTestResponseDTO.builder()
+                .attempted(attempted)
+                .success(success)
+                .failed(failed)
+                .build();
+    }
+
+    private static class DeliverySummary {
+        private final int attempted;
+        private final int success;
+        private final int failed;
+
+        private DeliverySummary(int attempted, int success, int failed) {
+            this.attempted = attempted;
+            this.success = success;
+            this.failed = failed;
+        }
     }
 }
