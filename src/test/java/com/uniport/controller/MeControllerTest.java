@@ -4,6 +4,7 @@ import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.AuthUserDTO;
 import com.uniport.dto.MyInvestmentResponseDTO;
 import com.uniport.entity.User;
+import com.uniport.service.CurrentUserDeletionService;
 import com.uniport.service.CurrentUserResolver;
 import com.uniport.service.MeService;
 import com.uniport.service.MatchingRoomService;
@@ -37,6 +38,9 @@ class MeControllerTest {
 
     @Mock
     private RankingService rankingService;
+
+    @Mock
+    private CurrentUserDeletionService currentUserDeletionService;
 
     @InjectMocks
     private MeController meController;
@@ -87,5 +91,20 @@ class MeControllerTest {
 
         assertEquals(expected, response.getBody());
         verify(meService).getMyInvestment(user);
+    }
+
+    @Test
+    void deleteMe_resolvesCurrentUserAndDeletesAccount() {
+        User user = User.builder().id(7L).nickname("withdrawal-user").build();
+        FirebaseAuthenticatedUser principal = new FirebaseAuthenticatedUser(user, "firebase-uid", null);
+
+        when(currentUserResolver.resolveNullable(principal, "Bearer token")).thenReturn(user);
+
+        ResponseEntity<Map<String, Object>> response = meController.deleteMe(principal, "Bearer token");
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals(true, response.getBody().get("success"));
+        verify(currentUserResolver).resolveNullable(principal, "Bearer token");
+        verify(currentUserDeletionService).deleteCurrentUser(user);
     }
 }

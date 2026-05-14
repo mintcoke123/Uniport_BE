@@ -4,12 +4,16 @@ import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.AuthUserDTO;
 import com.uniport.dto.MyInvestmentResponseDTO;
 import com.uniport.entity.User;
+import com.uniport.exception.ApiException;
+import com.uniport.service.CurrentUserDeletionService;
 import com.uniport.service.CurrentUserResolver;
 import com.uniport.service.MeService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,15 +30,18 @@ public class MeController {
     private final CurrentUserResolver currentUserResolver;
     private final MatchingRoomService matchingRoomService;
     private final RankingService rankingService;
+    private final CurrentUserDeletionService currentUserDeletionService;
 
     public MeController(MeService meService,
                         CurrentUserResolver currentUserResolver,
                         MatchingRoomService matchingRoomService,
-                        RankingService rankingService) {
+                        RankingService rankingService,
+                        CurrentUserDeletionService currentUserDeletionService) {
         this.meService = meService;
         this.currentUserResolver = currentUserResolver;
         this.matchingRoomService = matchingRoomService;
         this.rankingService = rankingService;
+        this.currentUserDeletionService = currentUserDeletionService;
     }
 
     @GetMapping
@@ -70,5 +77,17 @@ public class MeController {
             return ResponseEntity.ok(List.of());
         }
         return ResponseEntity.ok(matchingRoomService.listRoomsJoinedBy(user));
+    }
+
+    @DeleteMapping
+    public ResponseEntity<Map<String, Object>> deleteMe(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveNullable(principal, authorization);
+        if (user == null) {
+            throw new ApiException("Authentication is required", HttpStatus.UNAUTHORIZED);
+        }
+        currentUserDeletionService.deleteCurrentUser(user);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Deleted"));
     }
 }
