@@ -6,6 +6,7 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
+import com.uniport.service.PushNotificationService;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -13,6 +14,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -36,16 +38,19 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final MatchingRoomRepository matchingRoomRepository;
     private final GroupChatBroadcaster groupChatBroadcaster;
+    private final PushNotificationService pushNotificationService;
 
     public ChatWebSocketHandler(ChatService chatService, AuthService authService,
                                 MatchingRoomMemberRepository matchingRoomMemberRepository,
                                 MatchingRoomRepository matchingRoomRepository,
-                                GroupChatBroadcaster groupChatBroadcaster) {
+                                GroupChatBroadcaster groupChatBroadcaster,
+                                PushNotificationService pushNotificationService) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.matchingRoomRepository = matchingRoomRepository;
         this.groupChatBroadcaster = groupChatBroadcaster;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @Override
@@ -101,6 +106,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 broadcast.put("timestamp", saved.getCreatedAt().toString());
                 broadcast.put("tradeData", null);
                 groupChatBroadcaster.broadcast(groupId, toJson(broadcast));
+                User sender = User.builder().id(userId).nickname(nickname != null ? nickname : "").build();
+                pushNotificationService.sendChatMessageCreated(roomIdLong, sender, msg, roomMemberUserIds(roomIdLong));
                 return;
             }
         }
@@ -116,6 +123,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Matcher m = p.matcher(s);
         if (!m.find()) return null;
         return m.group(1) != null ? m.group(1) : m.group(2);
+    }
+
+    private List<Long> roomMemberUserIds(Long roomId) {
+        return matchingRoomMemberRepository.findByMatchingRoomIdWithUser(roomId).stream()
+                .map(member -> member.getUser())
+                .filter(user -> user != null && user.getId() != null)
+                .map(User::getId)
+                .distinct()
+                .toList();
     }
 
     private static String toJson(Map<String, Object> map) {

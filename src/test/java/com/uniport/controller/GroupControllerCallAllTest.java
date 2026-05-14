@@ -81,6 +81,39 @@ class GroupControllerCallAllTest {
     }
 
     @Test
+    void postChatMessageSendsPushToRoomMembers() throws Exception {
+        Fixtures fixtures = new Fixtures();
+        User user = User.builder()
+                .studentId("20265001")
+                .password("password")
+                .nickname("유니포트")
+                .build();
+        user.setId(1L);
+        ChatMessage saved = ChatMessage.of(260L, 1L, "유니포트", "안녕하세요");
+        saved.setId(124L);
+
+        when(fixtures.authService.getUserFromTokenOrNull("Bearer test-token")).thenReturn(user);
+        when(fixtures.matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(260L, 1L)).thenReturn(true);
+        when(fixtures.matchingRoomMemberRepository.findByMatchingRoomIdWithUser(260L)).thenReturn(List.of(
+                MatchingRoomMember.builder().user(user).build(),
+                MatchingRoomMember.builder().user(User.builder().id(2L).nickname("팀원").build()).build()
+        ));
+        when(fixtures.chatService.saveMessage(260L, 1L, "유니포트", "안녕하세요")).thenReturn(saved);
+
+        fixtures.mockMvc.perform(post("/api/groups/260/chat/messages")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType("application/json")
+                        .content("{\"message\":\"안녕하세요\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.messageId").value(124));
+
+        verify(fixtures.matchingRoomService).assertTeamRoom(260L);
+        verify(fixtures.chatService).saveMessage(260L, 1L, "유니포트", "안녕하세요");
+        verify(fixtures.pushNotificationService).sendChatMessageCreated(260L, user, "안녕하세요", List.of(1L, 2L));
+    }
+
+    @Test
     void postCallAllReturnsUnauthorizedWhenUserIsMissing() throws Exception {
         Fixtures fixtures = new Fixtures();
         when(fixtures.authService.getUserFromTokenOrNull("")).thenReturn(null);

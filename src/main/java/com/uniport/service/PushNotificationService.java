@@ -99,6 +99,31 @@ public class PushNotificationService {
         );
     }
 
+    public void sendChatMessageCreated(Long roomId, User sender, String message, List<Long> roomMemberUserIds) {
+        if (roomId == null || roomMemberUserIds == null || roomMemberUserIds.isEmpty()) {
+            return;
+        }
+        Long senderId = sender != null ? sender.getId() : null;
+        String senderName = sender != null ? valueOrDefault(sender.getNickname(), "팀원") : "팀원";
+        String messagePreview = valueOrDefault(message, "새 메시지");
+        List<Long> recipientUserIds = roomMemberUserIds.stream()
+                .filter(Objects::nonNull)
+                .filter(userId -> senderId == null || !senderId.equals(userId))
+                .toList();
+        sendToUsers(
+                recipientUserIds,
+                "새 채팅이 도착했어요",
+                senderName + ": " + truncate(messagePreview, 80),
+                Map.of(
+                        "type", "chat_message_created",
+                        "deeplink", matchingRoomLink(roomId),
+                        "entityId", String.valueOf(roomId),
+                        "roomId", String.valueOf(roomId),
+                        "senderId", senderId != null ? String.valueOf(senderId) : ""
+                )
+        );
+    }
+
     public void sendFriendRequestCreated(String requestId, User requester, User addressee) {
         if (requestId == null || requestId.isBlank() || requester == null || addressee == null || addressee.getId() == null) {
             return;
@@ -268,6 +293,13 @@ public class PushNotificationService {
 
     private String matchingRoomLink(Long roomId) {
         return publicBaseUrl + "/matching-room?roomId=" + roomId;
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength - 3) + "...";
     }
 
     private static PushTestResponseDTO deliverySummary(int attempted, int success, int failed) {

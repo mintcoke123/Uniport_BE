@@ -117,6 +117,36 @@ class PushNotificationServiceTest {
     }
 
     @Test
+    void sendChatMessageCreatedSendsMessagePayloadToRoomMembersExceptSender() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(8L, List.of(pushToken("member-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        User messageSender = User.builder().id(7L).nickname("보낸사람").build();
+
+        service.sendChatMessageCreated(260L, messageSender, "안녕하세요. 오늘 회의합니다.", List.of(7L, 8L));
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("member-token", message.getToken());
+        assertEquals("새 채팅이 도착했어요", message.getTitle());
+        assertTrue(message.getBody().contains("보낸사람"));
+        assertTrue(message.getBody().contains("안녕하세요"));
+        assertEquals("chat_message_created", message.getData().get("type"));
+        assertEquals("260", message.getData().get("entityId"));
+        assertEquals("260", message.getData().get("roomId"));
+        assertEquals("7", message.getData().get("senderId"));
+        assertEquals(
+                "https://uniportbe-production.up.railway.app/matching-room?roomId=260",
+                message.getData().get("deeplink")
+        );
+    }
+
+    @Test
     void sendFriendRequestCreatedSendsRequestPayloadToAddressee() {
         FakePushTokenService pushTokenService = new FakePushTokenService();
         pushTokenService.tokensByUserId.put(8L, List.of(pushToken("friend-request-token")));

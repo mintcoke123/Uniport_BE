@@ -268,6 +268,7 @@ public class GroupController {
         }
         String message = body != null && body.containsKey("message") ? String.valueOf(body.get("message")) : "";
         var saved = chatService.saveMessage(groupId, user.getId(), user.getNickname(), message);
+        pushNotificationService.sendChatMessageCreated(groupId, user, message, roomMemberUserIds(groupId));
         return ResponseEntity.ok(Map.of("success", true, "messageId", saved.getId()));
     }
 

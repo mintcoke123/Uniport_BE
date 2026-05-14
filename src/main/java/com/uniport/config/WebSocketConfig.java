@@ -4,6 +4,7 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
+import com.uniport.service.PushNotificationService;
 import com.uniport.websocket.ChatWebSocketHandler;
 import com.uniport.websocket.GroupChatBroadcaster;
 import com.uniport.websocket.PriceBroadcaster;
@@ -29,18 +30,21 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final MatchingRoomRepository matchingRoomRepository;
     private final PriceBroadcaster priceBroadcaster;
     private final GroupChatBroadcaster groupChatBroadcaster;
+    private final PushNotificationService pushNotificationService;
 
     public WebSocketConfig(ChatService chatService, AuthService authService,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
                            MatchingRoomRepository matchingRoomRepository,
                            PriceBroadcaster priceBroadcaster,
-                           GroupChatBroadcaster groupChatBroadcaster) {
+                           GroupChatBroadcaster groupChatBroadcaster,
+                           PushNotificationService pushNotificationService) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.matchingRoomRepository = matchingRoomRepository;
         this.priceBroadcaster = priceBroadcaster;
         this.groupChatBroadcaster = groupChatBroadcaster;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @Bean
@@ -50,7 +54,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Bean
     public ChatWebSocketHandler chatWebSocketHandler() {
-        return new ChatWebSocketHandler(chatService, authService, matchingRoomMemberRepository, matchingRoomRepository, groupChatBroadcaster);
+        return new ChatWebSocketHandler(chatService, authService, matchingRoomMemberRepository, matchingRoomRepository, groupChatBroadcaster, pushNotificationService);
     }
 
     @Bean
