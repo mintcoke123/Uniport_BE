@@ -31,6 +31,7 @@ public class CurrentUserDeletionService {
     private final PointWalletRepository pointWalletRepository;
     private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
     private final LearningUserStateRepository learningUserStateRepository;
+    private final FirebaseAuthenticationService firebaseAuthenticationService;
 
     public CurrentUserDeletionService(
             UserRepository userRepository,
@@ -43,7 +44,8 @@ public class CurrentUserDeletionService {
             PointTransactionRepository pointTransactionRepository,
             PointWalletRepository pointWalletRepository,
             UserMyPagePreferenceRepository userMyPagePreferenceRepository,
-            LearningUserStateRepository learningUserStateRepository) {
+            LearningUserStateRepository learningUserStateRepository,
+            FirebaseAuthenticationService firebaseAuthenticationService) {
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
         this.holdingRepository = holdingRepository;
@@ -55,6 +57,7 @@ public class CurrentUserDeletionService {
         this.pointWalletRepository = pointWalletRepository;
         this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
         this.learningUserStateRepository = learningUserStateRepository;
+        this.firebaseAuthenticationService = firebaseAuthenticationService;
     }
 
     @Transactional
@@ -64,6 +67,7 @@ public class CurrentUserDeletionService {
         }
 
         Long userId = user.getId();
+        String firebaseUid = user.getFirebaseUid();
         pointShopOrderRepository.deleteByUser_Id(userId);
         pointTransactionRepository.deleteByUser_Id(userId);
         pointWalletRepository.deleteByUser_Id(userId);
@@ -75,5 +79,8 @@ public class CurrentUserDeletionService {
         userMyPagePreferenceRepository.deleteById(userId);
         learningUserStateRepository.deleteById(userId);
         userRepository.delete(user);
+        if (firebaseUid != null && !firebaseUid.isBlank()) {
+            firebaseAuthenticationService.deleteFirebaseUser(firebaseUid);
+        }
     }
 }

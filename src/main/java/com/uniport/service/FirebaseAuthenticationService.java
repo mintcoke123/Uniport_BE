@@ -63,6 +63,28 @@ public class FirebaseAuthenticationService {
         return new FirebaseAuthenticatedUser(user, firebaseToken.getUid(), firebaseToken.getEmail());
     }
 
+    public void deleteFirebaseUser(String firebaseUid) {
+        String uid = trim(firebaseUid);
+        if (uid.isBlank()) {
+            return;
+        }
+
+        try {
+            FirebaseAuth.getInstance(getOrInitializeFirebaseApp()).deleteUser(uid);
+            log.info("[firebase-auth] Firebase user deleted: uid={}", uid);
+        } catch (FirebaseAuthException ex) {
+            if (ex.getAuthErrorCode() == AuthErrorCode.USER_NOT_FOUND) {
+                log.info("[firebase-auth] Firebase user already absent: uid={}", uid);
+                return;
+            }
+            log.warn("[firebase-auth] Firebase user deletion failed: uid={}, code={}", uid, ex.getAuthErrorCode());
+            throw new ApiException("Firebase account deletion failed", HttpStatus.INTERNAL_SERVER_ERROR,
+                    "FIREBASE_ACCOUNT_DELETE_FAILED");
+        } catch (IOException ex) {
+            throw new ApiException("Firebase credentials initialization failed", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     private User resolveUser(FirebaseToken firebaseToken) {
         String uid = trim(firebaseToken.getUid());
         return userRepository.findByFirebaseUid(uid)

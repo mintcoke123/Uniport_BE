@@ -20,6 +20,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class CurrentUserDeletionServiceTest {
@@ -57,12 +59,15 @@ class CurrentUserDeletionServiceTest {
     @Mock
     private LearningUserStateRepository learningUserStateRepository;
 
+    @Mock
+    private FirebaseAuthenticationService firebaseAuthenticationService;
+
     @InjectMocks
     private CurrentUserDeletionService currentUserDeletionService;
 
     @Test
     void deleteCurrentUser_cleansFriendInvitesBeforeDeletingUser() {
-        User user = User.builder().id(12L).build();
+        User user = User.builder().id(12L).firebaseUid("firebase-uid-12").build();
 
         currentUserDeletionService.deleteCurrentUser(user);
 
@@ -77,7 +82,8 @@ class CurrentUserDeletionServiceTest {
                 friendRelationRepository,
                 userMyPagePreferenceRepository,
                 learningUserStateRepository,
-                userRepository
+                userRepository,
+                firebaseAuthenticationService
         );
         order.verify(pointShopOrderRepository).deleteByUser_Id(12L);
         order.verify(pointTransactionRepository).deleteByUser_Id(12L);
@@ -90,5 +96,17 @@ class CurrentUserDeletionServiceTest {
         order.verify(userMyPagePreferenceRepository).deleteById(12L);
         order.verify(learningUserStateRepository).deleteById(12L);
         order.verify(userRepository).delete(user);
+        order.verify(firebaseAuthenticationService).deleteFirebaseUser("firebase-uid-12");
+    }
+
+    @Test
+    void deleteCurrentUser_skipsFirebaseDeleteWhenFirebaseUidIsBlank() {
+        User user = User.builder().id(12L).firebaseUid(" ").build();
+
+        currentUserDeletionService.deleteCurrentUser(user);
+
+        verify(firebaseAuthenticationService, never()).deleteFirebaseUser(null);
+        verify(firebaseAuthenticationService, never()).deleteFirebaseUser("");
+        verify(firebaseAuthenticationService, never()).deleteFirebaseUser(" ");
     }
 }
