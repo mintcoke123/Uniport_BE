@@ -6,6 +6,7 @@ import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.OrderRepository;
+import com.uniport.repository.UserPushTokenRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
@@ -18,12 +19,14 @@ import com.uniport.service.importer.AssetMasterImportService;
 import com.uniport.service.importer.ImportResult;
 import com.uniport.websocket.PriceBroadcaster;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,6 +57,41 @@ class AdminControllerAssetImportTest {
         assertEquals(3, ((Map<?, ?>) body.get("total")).get("skipped"));
     }
 
+    @Test
+    void deleteUser_cleansPushTokensBeforeDeletingUser() {
+        AuthService authService = mock(AuthService.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        UserPushTokenRepository userPushTokenRepository = mock(UserPushTokenRepository.class);
+        AdminController controller = new AdminController(
+                authService,
+                userRepository,
+                mock(FriendInviteRepository.class),
+                mock(OrderRepository.class),
+                mock(HoldingRepository.class),
+                mock(MatchingRoomRepository.class),
+                mock(MatchingRoomMemberRepository.class),
+                userPushTokenRepository,
+                mock(MatchingRoomService.class),
+                mock(CompetitionService.class),
+                mock(RankingService.class),
+                mock(ChatService.class),
+                mock(VoteService.class),
+                mock(PriceBroadcaster.class),
+                mock(GenerateGroupInvestmentFeedbackReportUseCase.class),
+                mock(AssetMasterImportService.class)
+        );
+        when(authService.getUserFromToken("Bearer admin"))
+                .thenReturn(User.builder().id(1L).role("admin").build());
+        when(userRepository.findById(467L))
+                .thenReturn(java.util.Optional.of(User.builder().id(467L).role("user").build()));
+
+        controller.deleteUser("Bearer admin", 467L);
+
+        InOrder order = inOrder(userPushTokenRepository, userRepository);
+        order.verify(userPushTokenRepository).deleteByUser_Id(467L);
+        order.verify(userRepository).deleteById(467L);
+    }
+
     private AdminController newController(AuthService authService,
                                           AssetMasterImportService importService) {
         return new AdminController(
@@ -64,6 +102,7 @@ class AdminControllerAssetImportTest {
                 mock(HoldingRepository.class),
                 mock(MatchingRoomRepository.class),
                 mock(MatchingRoomMemberRepository.class),
+                mock(UserPushTokenRepository.class),
                 mock(MatchingRoomService.class),
                 mock(CompetitionService.class),
                 mock(RankingService.class),

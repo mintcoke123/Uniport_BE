@@ -9,6 +9,7 @@ import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.OrderRepository;
+import com.uniport.repository.UserPushTokenRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
@@ -54,6 +55,7 @@ public class AdminController {
     private final HoldingRepository holdingRepository;
     private final MatchingRoomRepository matchingRoomRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
+    private final UserPushTokenRepository userPushTokenRepository;
     private final MatchingRoomService matchingRoomService;
     private final CompetitionService competitionService;
     private final RankingService rankingService;
@@ -68,6 +70,7 @@ public class AdminController {
                            OrderRepository orderRepository, HoldingRepository holdingRepository,
                            MatchingRoomRepository matchingRoomRepository,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
+                           UserPushTokenRepository userPushTokenRepository,
                            MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService, VoteService voteService,
                            PriceBroadcaster priceBroadcaster,
                            GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase,
@@ -79,6 +82,7 @@ public class AdminController {
         this.holdingRepository = holdingRepository;
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
+        this.userPushTokenRepository = userPushTokenRepository;
         this.matchingRoomService = matchingRoomService;
         this.competitionService = competitionService;
         this.rankingService = rankingService;
@@ -395,6 +399,7 @@ public class AdminController {
         holdingRepository.deleteByUser_Id(userId);
         matchingRoomMemberRepository.deleteAllByUserId(userId);
         friendInviteRepository.deleteAllByUserId(userId);
+        userPushTokenRepository.deleteByUser_Id(userId);
         userRepository.deleteById(userId);
         return ResponseEntity.ok(Map.of("success", true, "message", "Deleted"));
     }
