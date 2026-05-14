@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.entity.User;
 import com.uniport.entity.Vote;
 import com.uniport.entity.VoteParticipant;
+import com.uniport.entity.MatchingRoomMember;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
@@ -75,6 +76,7 @@ class VoteServiceTest {
         MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
         ChatService chatService = mock(ChatService.class);
         GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
         VoteService service = new VoteService(
                 voteRepository,
                 voteParticipantRepository,
@@ -86,7 +88,8 @@ class VoteServiceTest {
                 null,
                 chatService,
                 broadcaster,
-                null
+                null,
+                pushNotificationService
         );
         User proposer = User.builder()
                 .id(7L)
@@ -98,6 +101,10 @@ class VoteServiceTest {
         when(chatService.hasFeedbackMessage(123L)).thenReturn(false);
         when(voteRepository.findByRoomIdAndStatusOrderByCreatedAtDesc(123L, "ongoing")).thenReturn(List.of());
         when(matchingRoomMemberRepository.countByMatchingRoomId(123L)).thenReturn(2L);
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(123L)).thenReturn(List.of(
+                MatchingRoomMember.builder().user(proposer).build(),
+                MatchingRoomMember.builder().user(User.builder().id(8L).nickname("팀원").build()).build()
+        ));
         when(voteRepository.save(any(Vote.class))).thenAnswer(invocation -> {
             Vote vote = invocation.getArgument(0);
             vote.setId(456L);
@@ -134,5 +141,6 @@ class VoteServiceTest {
         assertEquals(123L, ((Number) payload.get("groupId")).longValue());
         assertEquals(456L, ((Number) payload.get("voteId")).longValue());
         verify(voteParticipantRepository).save(any(VoteParticipant.class));
+        verify(pushNotificationService).sendVoteCreated(any(Long.class), any(Vote.class), any(List.class));
     }
 }

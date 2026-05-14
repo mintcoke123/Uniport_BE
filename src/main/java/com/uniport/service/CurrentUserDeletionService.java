@@ -12,6 +12,7 @@ import com.uniport.repository.PointShopOrderRepository;
 import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
 import com.uniport.repository.UserMyPagePreferenceRepository;
+import com.uniport.repository.UserPushTokenRepository;
 import com.uniport.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class CurrentUserDeletionService {
     private final PointTransactionRepository pointTransactionRepository;
     private final PointWalletRepository pointWalletRepository;
     private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
+    private final UserPushTokenRepository userPushTokenRepository;
     private final LearningUserStateRepository learningUserStateRepository;
     private final FirebaseAuthenticationService firebaseAuthenticationService;
 
@@ -44,6 +46,7 @@ public class CurrentUserDeletionService {
             PointTransactionRepository pointTransactionRepository,
             PointWalletRepository pointWalletRepository,
             UserMyPagePreferenceRepository userMyPagePreferenceRepository,
+            UserPushTokenRepository userPushTokenRepository,
             LearningUserStateRepository learningUserStateRepository,
             FirebaseAuthenticationService firebaseAuthenticationService) {
         this.userRepository = userRepository;
@@ -56,6 +59,7 @@ public class CurrentUserDeletionService {
         this.pointTransactionRepository = pointTransactionRepository;
         this.pointWalletRepository = pointWalletRepository;
         this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
+        this.userPushTokenRepository = userPushTokenRepository;
         this.learningUserStateRepository = learningUserStateRepository;
         this.firebaseAuthenticationService = firebaseAuthenticationService;
     }
@@ -76,6 +80,7 @@ public class CurrentUserDeletionService {
         matchingRoomMemberRepository.deleteAllByUserId(userId);
         friendInviteRepository.deleteAllByUserId(userId);
         friendRelationRepository.deleteByRequesterUser_IdOrAddresseeUser_Id(userId, userId);
+        userPushTokenRepository.deleteByUser_Id(userId);
         userMyPagePreferenceRepository.deleteById(userId);
         learningUserStateRepository.deleteById(userId);
         userRepository.delete(user);

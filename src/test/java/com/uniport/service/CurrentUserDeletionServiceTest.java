@@ -11,6 +11,7 @@ import com.uniport.repository.PointShopOrderRepository;
 import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
 import com.uniport.repository.UserMyPagePreferenceRepository;
+import com.uniport.repository.UserPushTokenRepository;
 import com.uniport.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,6 +58,9 @@ class CurrentUserDeletionServiceTest {
     private UserMyPagePreferenceRepository userMyPagePreferenceRepository;
 
     @Mock
+    private UserPushTokenRepository userPushTokenRepository;
+
+    @Mock
     private LearningUserStateRepository learningUserStateRepository;
 
     @Mock
@@ -80,6 +84,7 @@ class CurrentUserDeletionServiceTest {
                 matchingRoomMemberRepository,
                 friendInviteRepository,
                 friendRelationRepository,
+                userPushTokenRepository,
                 userMyPagePreferenceRepository,
                 learningUserStateRepository,
                 userRepository,
@@ -93,6 +98,7 @@ class CurrentUserDeletionServiceTest {
         order.verify(matchingRoomMemberRepository).deleteAllByUserId(12L);
         order.verify(friendInviteRepository).deleteAllByUserId(12L);
         order.verify(friendRelationRepository).deleteByRequesterUser_IdOrAddresseeUser_Id(12L, 12L);
+        order.verify(userPushTokenRepository).deleteByUser_Id(12L);
         order.verify(userMyPagePreferenceRepository).deleteById(12L);
         order.verify(learningUserStateRepository).deleteById(12L);
         order.verify(userRepository).delete(user);

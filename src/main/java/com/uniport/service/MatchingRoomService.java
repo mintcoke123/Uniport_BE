@@ -38,16 +38,19 @@ public class MatchingRoomService {
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final UserRepository userRepository;
     private final FriendRelationRepository friendRelationRepository;
+    private final PushNotificationService pushNotificationService;
     private final Map<Long, List<Long>> pendingInviteUserIdsByRoomId = new ConcurrentHashMap<>();
 
     public MatchingRoomService(MatchingRoomRepository matchingRoomRepository,
                                MatchingRoomMemberRepository matchingRoomMemberRepository,
                                UserRepository userRepository,
-                               FriendRelationRepository friendRelationRepository) {
+                               FriendRelationRepository friendRelationRepository,
+                               PushNotificationService pushNotificationService) {
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.userRepository = userRepository;
         this.friendRelationRepository = friendRelationRepository;
+        this.pushNotificationService = pushNotificationService;
     }
 
     public void assertTeamRoom(Long groupId) {
@@ -494,6 +497,7 @@ public class MatchingRoomService {
         room.setMemberCount((int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId()));
         matchingRoomRepository.save(room);
         pendingInviteUserIdsByRoomId.remove(room.getId());
+        pushNotificationService.sendMatchingRoomInvite(room, usersToAdd, host);
     }
 
     private User findRoomHost(MatchingRoom room) {

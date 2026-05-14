@@ -5,6 +5,7 @@ import com.uniport.dto.StockPriceDTO;
 import com.uniport.entity.Order;
 import com.uniport.entity.OrderType;
 import com.uniport.entity.OrderStatus;
+import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.entity.Vote;
 import com.uniport.entity.VoteParticipant;
@@ -61,6 +62,7 @@ public class VoteService {
     private final ChatService chatService;
     private final GroupChatBroadcaster groupChatBroadcaster;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final PushNotificationService pushNotificationService;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public VoteService(VoteRepository voteRepository,
@@ -73,7 +75,8 @@ public class VoteService {
                        KisApiService kisApiService,
                        ChatService chatService,
                        GroupChatBroadcaster groupChatBroadcaster,
-                       StockVisualAssetResolver stockVisualAssetResolver) {
+                       StockVisualAssetResolver stockVisualAssetResolver,
+                       PushNotificationService pushNotificationService) {
         this.voteRepository = voteRepository;
         this.voteParticipantRepository = voteParticipantRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
@@ -85,6 +88,7 @@ public class VoteService {
         this.chatService = chatService;
         this.groupChatBroadcaster = groupChatBroadcaster;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @Transactional
@@ -174,7 +178,23 @@ public class VoteService {
                 .build();
         voteParticipantRepository.save(proposerVote);
         broadcastVoteUpdate(groupId, vote.getId());
+        sendVoteCreatedPush(groupId, vote, proposer);
         return vote;
+    }
+
+    private void sendVoteCreatedPush(Long groupId, Vote vote, User proposer) {
+        if (pushNotificationService == null || groupId == null || vote == null) {
+            return;
+        }
+        Long proposerId = proposer != null ? proposer.getId() : null;
+        List<Long> recipientUserIds = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(groupId).stream()
+                .map(MatchingRoomMember::getUser)
+                .filter(user -> user != null && user.getId() != null)
+                .map(User::getId)
+                .filter(userId -> proposerId == null || !proposerId.equals(userId))
+                .distinct()
+                .toList();
+        pushNotificationService.sendVoteCreated(groupId, vote, recipientUserIds);
     }
 
     public List<Map<String, Object>> getVotesByRoomId(Long groupId) {

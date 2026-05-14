@@ -9,9 +9,11 @@ import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -21,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:matchingroomservicetest;DB_CLOSE_DELAY=-1;MODE=PostgreSQL",
@@ -43,6 +47,9 @@ class MatchingRoomServiceTest {
     @Autowired
     private EntityManager entityManager;
 
+    @MockitoBean
+    private PushNotificationService pushNotificationService;
+
     @Test
     void quickMatchFriendMode_confirmsInviteesAsMembersImmediately() {
         User host = persistUser("20263001", "matching-host");
@@ -62,6 +69,10 @@ class MatchingRoomServiceTest {
         assertConfirmedMember(members, friend.getId(), "MEMBER");
         assertFalse(members.stream().anyMatch(member -> "INVITED".equals(member.get("status"))));
         assertEquals(2, matchingRoomMemberRepository.count());
+
+        ArgumentCaptor<List<User>> inviteesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(pushNotificationService).sendMatchingRoomInvite(any(MatchingRoom.class), inviteesCaptor.capture(), any(User.class));
+        assertEquals(List.of(friend.getId()), inviteesCaptor.getValue().stream().map(User::getId).toList());
     }
 
     @Test
