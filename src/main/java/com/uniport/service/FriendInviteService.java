@@ -33,17 +33,20 @@ public class FriendInviteService {
     private final UserRepository userRepository;
     private final String inviteBaseUrl;
     private final long expirationDays;
+    private final PushNotificationService pushNotificationService;
 
     public FriendInviteService(FriendInviteRepository friendInviteRepository,
                                FriendRelationRepository friendRelationRepository,
                                UserRepository userRepository,
                                @Value("${app.friend-invite.base-url:https://uniportbe-production.up.railway.app}") String inviteBaseUrl,
-                               @Value("${app.friend-invite.expiration-days:7}") long expirationDays) {
+                               @Value("${app.friend-invite.expiration-days:7}") long expirationDays,
+                               PushNotificationService pushNotificationService) {
         this.friendInviteRepository = friendInviteRepository;
         this.friendRelationRepository = friendRelationRepository;
         this.userRepository = userRepository;
         this.inviteBaseUrl = trimTrailingSlash(inviteBaseUrl);
         this.expirationDays = expirationDays;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @Transactional
@@ -109,6 +112,7 @@ public class FriendInviteService {
         invite.setAcceptedByUser(accepter);
         invite.setAcceptedAt(LocalDateTime.now());
         friendInviteRepository.save(invite);
+        pushNotificationService.sendFriendInviteAccepted(invite.getInviteCode(), inviter, accepter);
 
         return FriendInviteAcceptResponseDTO.builder()
                 .friendUserId("USER_" + inviter.getId())

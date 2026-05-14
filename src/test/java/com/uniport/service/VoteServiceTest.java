@@ -6,16 +6,20 @@ import com.uniport.entity.Vote;
 import com.uniport.entity.VoteParticipant;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.UserRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
+import com.uniport.service.kisws.PriceCache;
 import com.uniport.websocket.GroupChatBroadcaster;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -142,5 +146,150 @@ class VoteServiceTest {
         assertEquals(456L, ((Number) payload.get("voteId")).longValue());
         verify(voteParticipantRepository).save(any(VoteParticipant.class));
         verify(pushNotificationService).sendVoteCreated(any(Long.class), any(Vote.class), any(List.class));
+    }
+
+    @Test
+    void submitVoteSendsVoteClosedPushWhenMajorityRejectsVote() {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        ChatService chatService = mock(ChatService.class);
+        GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                null,
+                null,
+                null,
+                null,
+                null,
+                chatService,
+                broadcaster,
+                null,
+                pushNotificationService
+        );
+        Vote vote = Vote.builder()
+                .id(456L)
+                .roomId(123L)
+                .proposerId(7L)
+                .type("매수")
+                .stockName("삼성전자")
+                .totalMembers(2)
+                .status("ongoing")
+                .build();
+        User voter = User.builder().id(8L).nickname("반대자").build();
+        when(chatService.hasFeedbackMessage(123L)).thenReturn(false);
+        when(voteRepository.findById(456L)).thenReturn(Optional.of(vote));
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(123L, 8L)).thenReturn(true);
+        when(voteParticipantRepository.findByVote_IdAndUserId(456L, 8L)).thenReturn(Optional.empty());
+        when(voteParticipantRepository.findByVote_IdOrderById(456L)).thenReturn(List.of(
+                VoteParticipant.builder().vote(vote).userId(7L).voteChoice("반대").build(),
+                VoteParticipant.builder().vote(vote).userId(8L).voteChoice("반대").build()
+        ));
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(123L)).thenReturn(List.of(
+                MatchingRoomMember.builder().user(User.builder().id(7L).build()).build(),
+                MatchingRoomMember.builder().user(voter).build()
+        ));
+
+        service.submitVote(123L, 456L, voter, "반대");
+
+        verify(pushNotificationService).sendVoteClosed(123L, vote, List.of(7L, 8L));
+    }
+
+    @Test
+    void processExpiredOngoingVotesSendsVoteClosedPush() {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        ChatService chatService = mock(ChatService.class);
+        GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                null,
+                null,
+                null,
+                null,
+                null,
+                chatService,
+                broadcaster,
+                null,
+                pushNotificationService
+        );
+        Vote vote = Vote.builder()
+                .id(456L)
+                .roomId(123L)
+                .type("매수")
+                .stockName("삼성전자")
+                .status("ongoing")
+                .expiresAt(Instant.now().minusSeconds(1))
+                .build();
+        when(voteRepository.findByStatus("ongoing")).thenReturn(List.of(vote));
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(123L)).thenReturn(List.of(
+                MatchingRoomMember.builder().user(User.builder().id(7L).build()).build(),
+                MatchingRoomMember.builder().user(User.builder().id(8L).build()).build()
+        ));
+
+        service.processExpiredOngoingVotes();
+
+        verify(pushNotificationService).sendVoteClosed(123L, vote, List.of(7L, 8L));
+    }
+
+    @Test
+    void processPendingVotesSendsTradeExecutedPushWhenConditionExecutes() {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        TradeService tradeService = mock(TradeService.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        PriceCache priceCache = mock(PriceCache.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatService chatService = mock(ChatService.class);
+        GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                null,
+                tradeService,
+                userRepository,
+                priceCache,
+                kisApiService,
+                chatService,
+                broadcaster,
+                null,
+                pushNotificationService
+        );
+        Vote vote = Vote.builder()
+                .id(456L)
+                .roomId(123L)
+                .proposerId(7L)
+                .type("매수")
+                .stockName("삼성전자")
+                .stockCode("005930")
+                .quantity(3)
+                .proposedPrice(BigDecimal.valueOf(70000))
+                .orderStrategy(VoteService.ORDER_STRATEGY_MARKET)
+                .status(VoteService.STATUS_PENDING)
+                .executionExpiresAt(Instant.now().plusSeconds(60))
+                .build();
+        User proposer = User.builder().id(7L).nickname("제안자").build();
+        when(voteRepository.findByStatus(VoteService.STATUS_PENDING)).thenReturn(List.of(vote));
+        when(voteRepository.findByIdForUpdate(456L)).thenReturn(Optional.of(vote));
+        when(userRepository.findById(7L)).thenReturn(Optional.of(proposer));
+        when(priceCache.get("005930")).thenReturn(Optional.empty());
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(123L)).thenReturn(List.of(
+                MatchingRoomMember.builder().user(proposer).build(),
+                MatchingRoomMember.builder().user(User.builder().id(8L).build()).build()
+        ));
+
+        service.processPendingVotes();
+
+        verify(pushNotificationService).sendTradeExecuted(123L, vote, List.of(7L, 8L));
     }
 }

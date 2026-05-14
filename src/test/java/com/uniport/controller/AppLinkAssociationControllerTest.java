@@ -55,7 +55,8 @@ class AppLinkAssociationControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(content().string(containsString("\"appID\": \"LU9899WD2P.com.crazyenough.uniport\"")))
                 .andExpect(content().string(containsString("\"/matching-room*\"")))
-                .andExpect(content().string(containsString("\"/friend-invite*\"")));
+                .andExpect(content().string(containsString("\"/friend-invite*\"")))
+                .andExpect(content().string(containsString("\"/friends/requests*\"")));
 
         mockMvc.perform(get("/apple-app-site-association")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token"))

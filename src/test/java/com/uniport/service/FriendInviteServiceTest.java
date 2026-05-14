@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verify;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:friendinviteservicetest;DB_CLOSE_DELAY=-1;MODE=PostgreSQL",
@@ -48,6 +50,9 @@ class FriendInviteServiceTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @MockitoBean
+    private PushNotificationService pushNotificationService;
 
     @Test
     void createInvite_returnsActiveInviteWithShareUrlAndExpiration() {
@@ -102,6 +107,7 @@ class FriendInviteServiceTest {
         assertEquals("ACCEPTED", acceptedInvite.getStatus());
         assertEquals(accepter.getId(), acceptedInvite.getAcceptedByUser().getId());
         assertNotNull(acceptedInvite.getAcceptedAt());
+        verify(pushNotificationService).sendFriendInviteAccepted("ACCEPT123", inviter, accepter);
     }
 
     @Test

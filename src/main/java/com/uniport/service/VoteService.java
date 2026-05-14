@@ -408,6 +408,7 @@ public class VoteService {
 
         Vote updated = voteRepository.findById(voteId).orElse(vote);
         broadcastVoteUpdate(groupId, voteId);
+        sendVoteClosedPushIfNeeded(groupId, updated);
         Map<String, Object> voteSummary = new HashMap<>();
         voteSummary.put("id", voteId);
         voteSummary.put("vote", v);
@@ -446,6 +447,7 @@ public class VoteService {
         vote.setStatus(STATUS_CANCELLED);
         voteRepository.save(vote);
         broadcastVoteUpdate(groupId, voteId);
+        sendVoteClosedPush(groupId, vote);
         Map<String, Object> voteSummary = new HashMap<>();
         voteSummary.put("id", voteId);
         voteSummary.put("status", STATUS_CANCELLED);
@@ -576,6 +578,7 @@ public class VoteService {
         try {
             chatService.saveExecutionMessage(vote.getRoomId(), vote.getProposerId(), nickname, vote.getType(), vote.getStockName(), vote.getQuantity(), execPrice);
         } catch (Exception ignored) { /* 채팅 저장 실패해도 체결은 완료 */ }
+        sendTradeExecutedPush(vote.getRoomId(), vote);
     }
 
     private static BigDecimal fallbackPrice(Vote vote) {
@@ -592,6 +595,7 @@ public class VoteService {
             if (v.getExpiresAt() != null && !v.getExpiresAt().isAfter(now)) {
                 v.setStatus(STATUS_EXPIRED);
                 voteRepository.save(v);
+                sendVoteClosedPush(v.getRoomId(), v);
             }
         }
     }
@@ -606,6 +610,7 @@ public class VoteService {
             if (v.getExecutionExpiresAt() != null && !v.getExecutionExpiresAt().isAfter(now)) {
                 v.setStatus(STATUS_EXPIRED);
                 voteRepository.save(v);
+                sendVoteClosedPush(v.getRoomId(), v);
                 continue;
             }
             BigDecimal currentPrice = resolveCurrentPrice(v.getStockCode(), v.getProposedPrice());
@@ -624,6 +629,42 @@ public class VoteService {
                 throw e;
             }
         }
+    }
+
+    private void sendVoteClosedPushIfNeeded(Long groupId, Vote vote) {
+        if (vote == null || vote.getStatus() == null) {
+            return;
+        }
+        if ("ongoing".equals(vote.getStatus()) || STATUS_EXECUTED.equals(vote.getStatus()) || STATUS_EXECUTING.equals(vote.getStatus())) {
+            return;
+        }
+        sendVoteClosedPush(groupId, vote);
+    }
+
+    private void sendVoteClosedPush(Long groupId, Vote vote) {
+        if (pushNotificationService == null || groupId == null || vote == null) {
+            return;
+        }
+        pushNotificationService.sendVoteClosed(groupId, vote, roomMemberUserIds(groupId));
+    }
+
+    private void sendTradeExecutedPush(Long groupId, Vote vote) {
+        if (pushNotificationService == null || groupId == null || vote == null) {
+            return;
+        }
+        pushNotificationService.sendTradeExecuted(groupId, vote, roomMemberUserIds(groupId));
+    }
+
+    private List<Long> roomMemberUserIds(Long groupId) {
+        if (groupId == null) {
+            return List.of();
+        }
+        return matchingRoomMemberRepository.findByMatchingRoomIdWithUser(groupId).stream()
+                .map(MatchingRoomMember::getUser)
+                .filter(user -> user != null && user.getId() != null)
+                .map(User::getId)
+                .distinct()
+                .toList();
     }
 
 }

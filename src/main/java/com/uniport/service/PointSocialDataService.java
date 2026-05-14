@@ -100,6 +100,7 @@ public class PointSocialDataService {
     private final HoldingRepository holdingRepository;
     private final OrderRepository orderRepository;
     private final LearningUserStateRepository learningUserStateRepository;
+    private final PushNotificationService pushNotificationService;
 
     public PointSocialDataService(PointWalletRepository pointWalletRepository,
                                   PointTransactionRepository pointTransactionRepository,
@@ -111,7 +112,8 @@ public class PointSocialDataService {
                                   UserMyPagePreferenceRepository userMyPagePreferenceRepository,
                                   HoldingRepository holdingRepository,
                                   OrderRepository orderRepository,
-                                  LearningUserStateRepository learningUserStateRepository) {
+                                  LearningUserStateRepository learningUserStateRepository,
+                                  PushNotificationService pushNotificationService) {
         this.pointWalletRepository = pointWalletRepository;
         this.pointTransactionRepository = pointTransactionRepository;
         this.pointShopProductRepository = pointShopProductRepository;
@@ -123,6 +125,7 @@ public class PointSocialDataService {
         this.holdingRepository = holdingRepository;
         this.orderRepository = orderRepository;
         this.learningUserStateRepository = learningUserStateRepository;
+        this.pushNotificationService = pushNotificationService;
     }
 
     public MyPageResponseDTO getMyPage(User user) {
@@ -402,8 +405,10 @@ public class PointSocialDataService {
                 .addresseeUser(target)
                 .status("REQUESTED")
                 .build());
+        String requestId = "REQ_" + relation.getId();
+        pushNotificationService.sendFriendRequestCreated(requestId, user, target);
         return FriendRequestResponseDTO.builder()
-                .requestId("REQ_" + relation.getId())
+                .requestId(requestId)
                 .targetUserId("USER_" + target.getId())
                 .status(relation.getStatus())
                 .createdAt(relation.getCreatedAt().atOffset(ZoneOffset.UTC).toString())
@@ -434,8 +439,15 @@ public class PointSocialDataService {
 
         relation.setStatus("ACCEPT".equals(action) ? "ACCEPTED" : "REJECTED");
         FriendRelation saved = friendRelationRepository.save(relation);
+        String responseRequestId = "REQ_" + saved.getId();
+        pushNotificationService.sendFriendRequestDecision(
+                responseRequestId,
+                saved.getRequesterUser(),
+                saved.getAddresseeUser(),
+                saved.getStatus()
+        );
         return FriendRequestResponseDTO.builder()
-                .requestId("REQ_" + saved.getId())
+                .requestId(responseRequestId)
                 .targetUserId("USER_" + saved.getRequesterUser().getId())
                 .status(saved.getStatus())
                 .createdAt(saved.getCreatedAt().atOffset(ZoneOffset.UTC).toString())

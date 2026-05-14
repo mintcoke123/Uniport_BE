@@ -88,6 +88,176 @@ class PushNotificationServiceTest {
     }
 
     @Test
+    void sendChatMentionAllSendsMentionPayloadToRoomMembersExceptCaller() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(8L, List.of(pushToken("member-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        User caller = User.builder().id(7L).nickname("호출자").build();
+
+        service.sendChatMentionAll(260L, caller, List.of(7L, 8L));
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("member-token", message.getToken());
+        assertEquals("채팅방에서 호출했어요", message.getTitle());
+        assertTrue(message.getBody().contains("호출자"));
+        assertEquals("chat_mention_all", message.getData().get("type"));
+        assertEquals("260", message.getData().get("entityId"));
+        assertEquals("260", message.getData().get("roomId"));
+        assertEquals("7", message.getData().get("callerId"));
+        assertEquals(
+                "https://uniportbe-production.up.railway.app/matching-room?roomId=260",
+                message.getData().get("deeplink")
+        );
+    }
+
+    @Test
+    void sendFriendRequestCreatedSendsRequestPayloadToAddressee() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(8L, List.of(pushToken("friend-request-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        User requester = User.builder().id(7L).nickname("요청자").build();
+        User addressee = User.builder().id(8L).nickname("수신자").build();
+
+        service.sendFriendRequestCreated("REQ_55", requester, addressee);
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("friend-request-token", message.getToken());
+        assertEquals("친구 요청이 도착했어요", message.getTitle());
+        assertTrue(message.getBody().contains("요청자"));
+        assertEquals("friend_request_created", message.getData().get("type"));
+        assertEquals("REQ_55", message.getData().get("entityId"));
+        assertEquals("7", message.getData().get("requesterId"));
+        assertEquals("8", message.getData().get("addresseeId"));
+    }
+
+    @Test
+    void sendFriendRequestDecisionSendsDecisionPayloadToRequester() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(7L, List.of(pushToken("decision-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        User requester = User.builder().id(7L).nickname("요청자").build();
+        User decider = User.builder().id(8L).nickname("수락자").build();
+
+        service.sendFriendRequestDecision("REQ_55", requester, decider, "ACCEPTED");
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("decision-token", message.getToken());
+        assertEquals("친구 요청이 수락됐어요", message.getTitle());
+        assertTrue(message.getBody().contains("수락자"));
+        assertEquals("friend_request_accepted", message.getData().get("type"));
+        assertEquals("REQ_55", message.getData().get("entityId"));
+        assertEquals("ACCEPTED", message.getData().get("status"));
+    }
+
+    @Test
+    void sendFriendInviteAcceptedSendsInvitePayloadToInviter() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(7L, List.of(pushToken("invite-accepted-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        User inviter = User.builder().id(7L).nickname("초대한사람").build();
+        User accepter = User.builder().id(8L).nickname("수락한사람").build();
+
+        service.sendFriendInviteAccepted("INVITE123", inviter, accepter);
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("invite-accepted-token", message.getToken());
+        assertEquals("친구 초대가 수락됐어요", message.getTitle());
+        assertTrue(message.getBody().contains("수락한사람"));
+        assertEquals("friend_invite_accepted", message.getData().get("type"));
+        assertEquals("INVITE123", message.getData().get("entityId"));
+        assertEquals(
+                "https://uniportbe-production.up.railway.app/friend-invite?inviteCode=INVITE123",
+                message.getData().get("deeplink")
+        );
+    }
+
+    @Test
+    void sendVoteClosedSendsVoteStatusPayloadToRecipients() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(7L, List.of(pushToken("vote-closed-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        Vote vote = Vote.builder()
+                .id(456L)
+                .roomId(260L)
+                .type("매수")
+                .stockName("삼성전자")
+                .status("rejected")
+                .build();
+
+        service.sendVoteClosed(260L, vote, List.of(7L));
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("vote-closed-token", message.getToken());
+        assertEquals("투표가 마감됐어요", message.getTitle());
+        assertTrue(message.getBody().contains("삼성전자"));
+        assertEquals("vote_closed", message.getData().get("type"));
+        assertEquals("456", message.getData().get("entityId"));
+        assertEquals("260", message.getData().get("roomId"));
+        assertEquals("456", message.getData().get("voteId"));
+        assertEquals("rejected", message.getData().get("status"));
+    }
+
+    @Test
+    void sendTradeExecutedSendsExecutionPayloadToRoomMembers() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(7L, List.of(pushToken("execution-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        Vote vote = Vote.builder()
+                .id(456L)
+                .roomId(260L)
+                .type("매수")
+                .stockName("삼성전자")
+                .build();
+
+        service.sendTradeExecuted(260L, vote, List.of(7L));
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("execution-token", message.getToken());
+        assertEquals("체결이 완료됐어요", message.getTitle());
+        assertTrue(message.getBody().contains("삼성전자"));
+        assertEquals("trade_executed", message.getData().get("type"));
+        assertEquals("456", message.getData().get("entityId"));
+        assertEquals("260", message.getData().get("roomId"));
+        assertEquals("456", message.getData().get("voteId"));
+    }
+
+    @Test
     void sendTestPushSendsToCurrentUsersDeliverableTokensAndReturnsSummary() {
         FakePushTokenService pushTokenService = new FakePushTokenService();
         pushTokenService.tokensByUserId.put(7L, List.of(pushToken("token-active"), pushToken("token-invalid")));

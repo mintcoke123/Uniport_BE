@@ -12,6 +12,7 @@ import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import com.uniport.service.KisApiService;
 import com.uniport.service.MatchingRoomService;
+import com.uniport.service.PushNotificationService;
 import com.uniport.service.StockVisualAssetResolver;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
@@ -57,6 +58,7 @@ public class GroupController {
     private final MatchingRoomService matchingRoomService;
     private final GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final PushNotificationService pushNotificationService;
 
     public GroupController(ChatService chatService, AuthService authService,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
@@ -68,7 +70,8 @@ public class GroupController {
                            KisWsSubscriptionManager kisWsSubscriptionManager,
                            MatchingRoomService matchingRoomService,
                            GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase,
-                           StockVisualAssetResolver stockVisualAssetResolver) {
+                           StockVisualAssetResolver stockVisualAssetResolver,
+                           PushNotificationService pushNotificationService) {
         this.chatService = chatService;
         this.authService = authService;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
@@ -81,6 +84,7 @@ public class GroupController {
         this.matchingRoomService = matchingRoomService;
         this.feedbackReportUseCase = feedbackReportUseCase;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @GetMapping("/{groupId}")
@@ -281,6 +285,7 @@ public class GroupController {
             return ResponseEntity.status(403).body(Map.of("success", false, "message", "해당 채팅방에 대한 접근 권한이 없습니다."));
         }
         var saved = chatService.saveMentionAllMessage(groupId, user.getId(), user.getNickname());
+        pushNotificationService.sendChatMentionAll(groupId, user, roomMemberUserIds(groupId));
         return ResponseEntity.ok(Map.of("success", true, "message", chatService.toResponseMap(saved)));
     }
 
@@ -390,5 +395,14 @@ public class GroupController {
             ));
         }
         return result;
+    }
+
+    private List<Long> roomMemberUserIds(Long groupId) {
+        return matchingRoomMemberRepository.findByMatchingRoomIdWithUser(groupId).stream()
+                .map(MatchingRoomMember::getUser)
+                .filter(member -> member != null && member.getId() != null)
+                .map(User::getId)
+                .distinct()
+                .toList();
     }
 }

@@ -75,6 +75,133 @@ public class PushNotificationService {
         );
     }
 
+    public void sendChatMentionAll(Long roomId, User caller, List<Long> roomMemberUserIds) {
+        if (roomId == null || roomMemberUserIds == null || roomMemberUserIds.isEmpty()) {
+            return;
+        }
+        Long callerId = caller != null ? caller.getId() : null;
+        String callerName = caller != null ? valueOrDefault(caller.getNickname(), "팀원") : "팀원";
+        List<Long> recipientUserIds = roomMemberUserIds.stream()
+                .filter(Objects::nonNull)
+                .filter(userId -> callerId == null || !callerId.equals(userId))
+                .toList();
+        sendToUsers(
+                recipientUserIds,
+                "채팅방에서 호출했어요",
+                callerName + "님이 팀원을 호출했어요.",
+                Map.of(
+                        "type", "chat_mention_all",
+                        "deeplink", matchingRoomLink(roomId),
+                        "entityId", String.valueOf(roomId),
+                        "roomId", String.valueOf(roomId),
+                        "callerId", callerId != null ? String.valueOf(callerId) : ""
+                )
+        );
+    }
+
+    public void sendFriendRequestCreated(String requestId, User requester, User addressee) {
+        if (requestId == null || requestId.isBlank() || requester == null || addressee == null || addressee.getId() == null) {
+            return;
+        }
+        String requesterName = valueOrDefault(requester.getNickname(), "친구");
+        sendToUsers(
+                List.of(addressee.getId()),
+                "친구 요청이 도착했어요",
+                requesterName + "님이 친구 요청을 보냈어요.",
+                Map.of(
+                        "type", "friend_request_created",
+                        "deeplink", publicBaseUrl + "/friends/requests?requestId=" + requestId,
+                        "entityId", requestId,
+                        "requestId", requestId,
+                        "requesterId", requester.getId() != null ? String.valueOf(requester.getId()) : "",
+                        "addresseeId", String.valueOf(addressee.getId())
+                )
+        );
+    }
+
+    public void sendFriendRequestDecision(String requestId, User requester, User decider, String status) {
+        if (requestId == null || requestId.isBlank() || requester == null || requester.getId() == null || decider == null) {
+            return;
+        }
+        String normalizedStatus = valueOrDefault(status, "ACCEPTED").toUpperCase();
+        boolean accepted = "ACCEPTED".equals(normalizedStatus);
+        String deciderName = valueOrDefault(decider.getNickname(), "친구");
+        sendToUsers(
+                List.of(requester.getId()),
+                accepted ? "친구 요청이 수락됐어요" : "친구 요청이 처리됐어요",
+                accepted ? deciderName + "님과 친구가 됐어요." : deciderName + "님이 친구 요청을 처리했어요.",
+                Map.of(
+                        "type", accepted ? "friend_request_accepted" : "friend_request_rejected",
+                        "deeplink", publicBaseUrl + "/friends/requests?requestId=" + requestId,
+                        "entityId", requestId,
+                        "requestId", requestId,
+                        "status", normalizedStatus,
+                        "deciderId", decider.getId() != null ? String.valueOf(decider.getId()) : ""
+                )
+        );
+    }
+
+    public void sendFriendInviteAccepted(String inviteCode, User inviter, User accepter) {
+        if (inviteCode == null || inviteCode.isBlank() || inviter == null || inviter.getId() == null || accepter == null) {
+            return;
+        }
+        String accepterName = valueOrDefault(accepter.getNickname(), "친구");
+        sendToUsers(
+                List.of(inviter.getId()),
+                "친구 초대가 수락됐어요",
+                accepterName + "님이 친구 초대를 수락했어요.",
+                Map.of(
+                        "type", "friend_invite_accepted",
+                        "deeplink", publicBaseUrl + "/friend-invite?inviteCode=" + inviteCode,
+                        "entityId", inviteCode,
+                        "inviteCode", inviteCode,
+                        "accepterId", accepter.getId() != null ? String.valueOf(accepter.getId()) : ""
+                )
+        );
+    }
+
+    public void sendVoteClosed(Long roomId, Vote vote, List<Long> recipientUserIds) {
+        if (roomId == null || vote == null || vote.getId() == null || recipientUserIds == null || recipientUserIds.isEmpty()) {
+            return;
+        }
+        String stockName = valueOrDefault(vote.getStockName(), "종목");
+        String type = valueOrDefault(vote.getType(), "거래");
+        String status = valueOrDefault(vote.getStatus(), "closed");
+        sendToUsers(
+                recipientUserIds,
+                "투표가 마감됐어요",
+                stockName + " " + type + " 투표 결과를 확인해 주세요.",
+                Map.of(
+                        "type", "vote_closed",
+                        "deeplink", matchingRoomLink(roomId),
+                        "entityId", String.valueOf(vote.getId()),
+                        "roomId", String.valueOf(roomId),
+                        "voteId", String.valueOf(vote.getId()),
+                        "status", status
+                )
+        );
+    }
+
+    public void sendTradeExecuted(Long roomId, Vote vote, List<Long> recipientUserIds) {
+        if (roomId == null || vote == null || vote.getId() == null || recipientUserIds == null || recipientUserIds.isEmpty()) {
+            return;
+        }
+        String stockName = valueOrDefault(vote.getStockName(), "종목");
+        String type = valueOrDefault(vote.getType(), "거래");
+        sendToUsers(
+                recipientUserIds,
+                "체결이 완료됐어요",
+                stockName + " " + type + " 체결이 완료됐어요.",
+                Map.of(
+                        "type", "trade_executed",
+                        "deeplink", matchingRoomLink(roomId),
+                        "entityId", String.valueOf(vote.getId()),
+                        "roomId", String.valueOf(roomId),
+                        "voteId", String.valueOf(vote.getId())
+                )
+        );
+    }
+
     public PushTestResponseDTO sendTestPush(User user, PushTestRequestDTO request) {
         if (user == null || user.getId() == null) {
             return deliverySummary(0, 0, 0);
@@ -137,6 +264,10 @@ public class PushNotificationService {
 
     private static String valueOrDefault(String value, String fallback) {
         return value != null && !value.isBlank() ? value.trim() : fallback;
+    }
+
+    private String matchingRoomLink(Long roomId) {
+        return publicBaseUrl + "/matching-room?roomId=" + roomId;
     }
 
     private static PushTestResponseDTO deliverySummary(int attempted, int success, int failed) {

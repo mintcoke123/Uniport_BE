@@ -1,6 +1,7 @@
 package com.uniport.controller;
 
 import com.uniport.entity.ChatMessage;
+import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
@@ -10,6 +11,7 @@ import com.uniport.service.AuthService;
 import com.uniport.service.ChatService;
 import com.uniport.service.KisApiService;
 import com.uniport.service.MatchingRoomService;
+import com.uniport.service.PushNotificationService;
 import com.uniport.service.StockVisualAssetResolver;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -45,6 +48,10 @@ class GroupControllerCallAllTest {
 
         when(fixtures.authService.getUserFromTokenOrNull("Bearer test-token")).thenReturn(user);
         when(fixtures.matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(260L, 1L)).thenReturn(true);
+        when(fixtures.matchingRoomMemberRepository.findByMatchingRoomIdWithUser(260L)).thenReturn(List.of(
+                MatchingRoomMember.builder().user(user).build(),
+                MatchingRoomMember.builder().user(User.builder().id(2L).nickname("팀원").build()).build()
+        ));
         when(fixtures.chatService.saveMentionAllMessage(260L, 1L, "유니포트")).thenReturn(saved);
         Map<String, Object> responseMessage = new HashMap<>();
         responseMessage.put("id", 123L);
@@ -70,6 +77,7 @@ class GroupControllerCallAllTest {
 
         verify(fixtures.matchingRoomService).assertTeamRoomForCallAll(260L);
         verify(fixtures.chatService).saveMentionAllMessage(260L, 1L, "유니포트");
+        verify(fixtures.pushNotificationService).sendChatMentionAll(260L, user, List.of(1L, 2L));
     }
 
     @Test
@@ -116,6 +124,7 @@ class GroupControllerCallAllTest {
         private final MatchingRoomService matchingRoomService = mock(MatchingRoomService.class);
         private final GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase = mock(GenerateGroupInvestmentFeedbackReportUseCase.class);
         private final StockVisualAssetResolver stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        private final PushNotificationService pushNotificationService = mock(PushNotificationService.class);
         private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new GroupController(
                 chatService,
                 authService,
@@ -128,7 +137,8 @@ class GroupControllerCallAllTest {
                 kisWsSubscriptionManager,
                 matchingRoomService,
                 feedbackReportUseCase,
-                stockVisualAssetResolver
+                stockVisualAssetResolver,
+                pushNotificationService
         )).build();
     }
 }

@@ -34,7 +34,8 @@ public class AppLinkAssociationController {
                     "appID": "LU9899WD2P.com.crazyenough.uniport",
                     "paths": [
                       "/matching-room*",
-                      "/friend-invite*"
+                      "/friend-invite*",
+                      "/friends/requests*"
                     ]
                   }
                 ]
