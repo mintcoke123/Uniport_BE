@@ -52,6 +52,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/favicon.ico",
+                                "/support",
+                                "/support.html",
                                 "/education-assets/**",
                                 "/.well-known/assetlinks.json",
                                 "/.well-known/apple-app-site-association",
