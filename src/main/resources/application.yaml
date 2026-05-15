@@ -95,7 +95,7 @@ finbert:
 stock:
   master:
     import:
-      enabled: ${STOCK_MASTER_IMPORT_ENABLED:true}
+      enabled: ${STOCK_MASTER_IMPORT_ENABLED:false}
       cron: ${STOCK_MASTER_IMPORT_CRON:0 30 7 * * *}
       zone: ${STOCK_MASTER_IMPORT_ZONE:Asia/Seoul}
 
@@ -103,7 +103,7 @@ asset:
   master:
     us:
       import:
-        enabled: ${US_ASSET_MASTER_IMPORT_ENABLED:true}
+        enabled: ${US_ASSET_MASTER_IMPORT_ENABLED:false}
         cron: ${US_ASSET_MASTER_IMPORT_CRON:0 45 7 * * *}
         zone: ${US_ASSET_MASTER_IMPORT_ZONE:Asia/Seoul}
         nasdaq-listed-url: ${US_ASSET_MASTER_NASDAQ_LISTED_URL:https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt}
