@@ -4,6 +4,7 @@ import com.uniport.dto.InvestorSentimentDTO;
 import com.uniport.dto.StockDetailDTO;
 import com.uniport.dto.StockPriceDTO;
 import com.uniport.dto.StockVisualDTO;
+import com.uniport.entity.ManagedNewsArticle;
 import com.uniport.entity.StockMaster;
 import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.StockMasterRepository;
@@ -13,11 +14,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +31,7 @@ class StockServiceTest {
     private ManagedStockNewsService managedStockNewsService;
     private CommunityService communityService;
     private StockVisualAssetResolver stockVisualAssetResolver;
+    private WiseReportCompanyIntroductionClient companyIntroductionClient;
     private StockService stockService;
 
     @BeforeEach
@@ -37,6 +41,8 @@ class StockServiceTest {
         managedStockNewsService = mock(ManagedStockNewsService.class);
         communityService = mock(CommunityService.class);
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        companyIntroductionClient = mock(WiseReportCompanyIntroductionClient.class);
+        when(companyIntroductionClient.fetchCompanyIntroduction(anyString())).thenReturn(Optional.empty());
         stockService = new StockService(
                 kisApiService,
                 mock(HoldingRepository.class),
@@ -46,7 +52,8 @@ class StockServiceTest {
                 managedStockNewsService,
                 communityService,
                 stockVisualAssetResolver,
-                new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app")
+                new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app"),
+                companyIntroductionClient
         );
     }
 
@@ -143,12 +150,116 @@ class StockServiceTest {
         assertNull(response.getMarketData().getHighPrice());
     }
 
+    @Test
+    void getStockDetail_usesFirstAvailableCompanyIntroduction() {
+        StockPriceDTO price = StockPriceDTO.builder()
+                .stockCode("005930")
+                .stockName("삼성전자")
+                .currentPrice(new BigDecimal("70000"))
+                .changeAmount(new BigDecimal("1000"))
+                .changeRate(new BigDecimal("1.45"))
+                .volume(1000L)
+                .build();
+        StockMaster master = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+        ManagedNewsArticle firstArticle = article(1L, "첫 번째 기사");
+        ManagedNewsArticle secondArticle = article(2L, "두 번째 기사");
+        when(kisApiService.getStockQuote("005930")).thenReturn(price);
+        when(stockMasterRepository.findById("005930")).thenReturn(Optional.of(master));
+        when(managedStockNewsService.getNewsForStock("005930", "삼성전자", 3))
+                .thenReturn(List.of(firstArticle, secondArticle));
+        when(managedStockNewsService.extractFinancialData(firstArticle)).thenReturn(List.of());
+        when(managedStockNewsService.extractCompanyDescription(firstArticle)).thenReturn("");
+        when(managedStockNewsService.extractCompanyDescription(secondArticle))
+                .thenReturn("삼성전자는 반도체와 모바일 기기를 중심으로 글로벌 시장에서 사업을 전개하는 기업입니다.");
+        when(communityService.getInvestorSentiment("005930")).thenReturn(InvestorSentimentDTO.builder().build());
+        when(communityService.getDiscussionCount("005930")).thenReturn(0);
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
+
+        StockDetailDTO response = stockService.getStockDetail(5930L, null);
+
+        assertEquals(
+                "삼성전자는 반도체와 모바일 기기를 중심으로 글로벌 시장에서 사업을 전개하는 기업입니다.",
+                response.getCompanyInfo()
+        );
+    }
+
+    @Test
+    void getStockDetail_doesNotFabricateCompanyIntroductionWhenMissing() {
+        StockPriceDTO price = StockPriceDTO.builder()
+                .stockCode("005930")
+                .stockName("삼성전자")
+                .currentPrice(new BigDecimal("70000"))
+                .changeAmount(new BigDecimal("1000"))
+                .changeRate(new BigDecimal("1.45"))
+                .volume(1000L)
+                .build();
+        StockMaster master = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+        when(kisApiService.getStockQuote("005930")).thenReturn(price);
+        when(stockMasterRepository.findById("005930")).thenReturn(Optional.of(master));
+        when(managedStockNewsService.getNewsForStock("005930", "삼성전자", 3)).thenReturn(List.of());
+        when(communityService.getInvestorSentiment("005930")).thenReturn(InvestorSentimentDTO.builder().build());
+        when(communityService.getDiscussionCount("005930")).thenReturn(0);
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
+
+        StockDetailDTO response = stockService.getStockDetail(5930L, null);
+
+        assertEquals("", response.getCompanyInfo());
+    }
+
+    @Test
+    void getStockDetail_usesWiseReportCompanyIntroductionWhenManagedDataMissing() {
+        StockPriceDTO price = StockPriceDTO.builder()
+                .stockCode("005930")
+                .stockName("삼성전자")
+                .currentPrice(new BigDecimal("70000"))
+                .changeAmount(new BigDecimal("1000"))
+                .changeRate(new BigDecimal("1.45"))
+                .volume(1000L)
+                .build();
+        StockMaster master = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+        String introduction = "동사는 1969년 설립된 글로벌 전자 기업으로 DX, DS 두 부문과 SDC, Harman으로 구성되어 있음.";
+        when(kisApiService.getStockQuote("005930")).thenReturn(price);
+        when(stockMasterRepository.findById("005930")).thenReturn(Optional.of(master));
+        when(managedStockNewsService.getNewsForStock("005930", "삼성전자", 3)).thenReturn(List.of());
+        when(companyIntroductionClient.fetchCompanyIntroduction("005930")).thenReturn(Optional.of(introduction));
+        when(communityService.getInvestorSentiment("005930")).thenReturn(InvestorSentimentDTO.builder().build());
+        when(communityService.getDiscussionCount("005930")).thenReturn(0);
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
+
+        StockDetailDTO response = stockService.getStockDetail(5930L, null);
+
+        assertEquals(introduction, response.getCompanyInfo());
+    }
+
     private StockVisualDTO visual(String text) {
         return StockVisualDTO.builder()
                 .type("FALLBACK_SYMBOL")
                 .text(text)
                 .bgColor("#EEF2FF")
                 .textColor("#4F46E5")
+                .build();
+    }
+
+    private ManagedNewsArticle article(Long id, String title) {
+        return ManagedNewsArticle.builder()
+                .id(id)
+                .newsKey("news_" + id)
+                .title(title)
+                .sourceLabel("Uniport")
+                .summary("요약")
+                .publishedAt(LocalDateTime.of(2026, 5, 16, 9, 0))
                 .build();
     }
 }

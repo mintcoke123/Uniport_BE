@@ -50,6 +50,11 @@ naver:
     cache-ttl-seconds: ${NAVER_NEWS_CACHE_TTL_SECONDS:300}
     display-per-query: ${NAVER_NEWS_DISPLAY_PER_QUERY:10}
 
+wisereport:
+  company-introduction:
+    enabled: ${WISEREPORT_COMPANY_INTRODUCTION_ENABLED:true}
+    base-url: ${WISEREPORT_COMPANY_INTRODUCTION_BASE_URL:https://navercomp.wisereport.co.kr}
+
 # 시드/어드민: 프로덕션에서 테스트 유저 시드 비활성화, 어드민·준관리자 비밀번호 강한 값으로 설정
 uniport:
   admin:

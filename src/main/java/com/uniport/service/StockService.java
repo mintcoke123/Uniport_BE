@@ -40,6 +40,7 @@ public class StockService {
     private final CommunityService communityService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
+    private final WiseReportCompanyIntroductionClient companyIntroductionClient;
 
     public StockService(KisApiService kisApiService,
                         HoldingRepository holdingRepository,
@@ -49,7 +50,8 @@ public class StockService {
                         ManagedStockNewsService managedStockNewsService,
                         CommunityService communityService,
                         StockVisualAssetResolver stockVisualAssetResolver,
-                        StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
+                        StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver,
+                        WiseReportCompanyIntroductionClient companyIntroductionClient) {
         this.kisApiService = kisApiService;
         this.holdingRepository = holdingRepository;
         this.teamHoldingRepository = teamHoldingRepository;
@@ -59,6 +61,7 @@ public class StockService {
         this.communityService = communityService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
+        this.companyIntroductionClient = companyIntroductionClient;
     }
 
     private static Long parseTeamId(User user) {
@@ -133,16 +136,10 @@ public class StockService {
                 .toList();
 
         String companyInfo = relatedArticles.stream()
-                .findFirst()
                 .map(managedStockNewsService::extractCompanyDescription)
                 .filter(text -> text != null && !text.isBlank())
-                .orElseGet(() -> stockMasterRepository.findById(code)
-                        .map(master -> {
-                            String masterMarket = master.getMarket() != null ? master.getMarket().trim() : "";
-                            String name = master.getNameKr() != null ? master.getNameKr().trim() : displayName;
-                            return masterMarket.isBlank() ? name : name + " (" + masterMarket + ")";
-                        })
-                        .orElse(displayName));
+                .findFirst()
+                .orElseGet(() -> companyIntroductionClient.fetchCompanyIntroduction(code).orElse(""));
 
         InvestorSentimentDTO investorSentiment = communityService.getInvestorSentiment(code);
         int discussionCount = communityService.getDiscussionCount(code);
