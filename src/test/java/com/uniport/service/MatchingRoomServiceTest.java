@@ -1,6 +1,7 @@
 package com.uniport.service;
 
 import com.uniport.entity.FriendRelation;
+import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
@@ -214,6 +215,23 @@ class MatchingRoomServiceTest {
     }
 
     @Test
+    void getRoomDetail_usesLearningProgressLevelForMembers() {
+        User host = persistUser("20263023", "level-host");
+        User friend = persistUser("20263024", "level-friend");
+        persistAcceptedFriend(host, friend);
+        persistLearningState(host, 900);
+        persistLearningState(friend, 1_500);
+        entityManager.flush();
+
+        Map<String, Object> response = matchingRoomService.quickMatch("FRIEND", "KR", List.of(friend.getId()), host);
+
+        Map<String, Object> detail = map(response.get("detail"));
+        List<Map<String, Object>> members = list(detail.get("members"));
+        assertEquals(4, memberByUserId(members, host.getId()).get("level"));
+        assertEquals(6, memberByUserId(members, friend.getId()).get("level"));
+    }
+
+    @Test
     void quickMatchRandomMode_autoStartsWhenThirdMemberJoins() {
         User firstUser = persistUser("20263019", "random-full-first");
         User secondUser = persistUser("20263020", "random-full-second");
@@ -298,6 +316,19 @@ class MatchingRoomServiceTest {
         return user;
     }
 
+    private void persistLearningState(User user, int exp) {
+        entityManager.persist(LearningUserStateEntity.builder()
+                .userId(user.getId())
+                .level(LearningProgressPolicy.fromExp(exp).level())
+                .point(0)
+                .exp(exp)
+                .streakDays(0)
+                .currentDayByCourseJson("{}")
+                .completedDaysByCourseJson("{}")
+                .submittedStepIdsJson("[]")
+                .build());
+    }
+
     private void persistAcceptedFriend(User requester, User addressee) {
         FriendRelation relation = FriendRelation.builder()
                 .requesterUser(requester)
@@ -314,6 +345,13 @@ class MatchingRoomServiceTest {
                 .orElseThrow();
         assertEquals("CONFIRMED", member.get("status"));
         assertEquals(role, member.get("role"));
+    }
+
+    private Map<String, Object> memberByUserId(List<Map<String, Object>> members, Long userId) {
+        return members.stream()
+                .filter(candidate -> String.valueOf(userId).equals(String.valueOf(candidate.get("userId"))))
+                .findFirst()
+                .orElseThrow();
     }
 
     private MatchingRoom findRoom(String roomId) {

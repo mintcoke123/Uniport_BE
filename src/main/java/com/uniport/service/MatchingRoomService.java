@@ -5,6 +5,7 @@ import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.FriendRelationRepository;
+import com.uniport.repository.LearningUserStateRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.UserRepository;
@@ -42,6 +43,7 @@ public class MatchingRoomService {
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final UserRepository userRepository;
     private final FriendRelationRepository friendRelationRepository;
+    private final LearningUserStateRepository learningUserStateRepository;
     private final PushNotificationService pushNotificationService;
     private final Map<Long, List<Long>> pendingInviteUserIdsByRoomId = new ConcurrentHashMap<>();
 
@@ -49,11 +51,13 @@ public class MatchingRoomService {
                                MatchingRoomMemberRepository matchingRoomMemberRepository,
                                UserRepository userRepository,
                                FriendRelationRepository friendRelationRepository,
+                               LearningUserStateRepository learningUserStateRepository,
                                PushNotificationService pushNotificationService) {
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.userRepository = userRepository;
         this.friendRelationRepository = friendRelationRepository;
+        this.learningUserStateRepository = learningUserStateRepository;
         this.pushNotificationService = pushNotificationService;
     }
 
@@ -624,7 +628,7 @@ public class MatchingRoomService {
                             "id", uid,
                             "userId", uid,
                             "nickname", user.getNickname() != null ? user.getNickname() : "",
-                            "level", 15,
+                            "level", resolveUserLevel(user),
                             "investmentProfileLabel", user.getInvestmentProfileResult() != null && !user.getInvestmentProfileResult().isBlank()
                                     ? user.getInvestmentProfileResult()
                                     : "균형잡힌 판다형"
@@ -673,7 +677,7 @@ public class MatchingRoomService {
             members.add(Map.of(
                     "userId", user.getId(),
                     "nickname", user.getNickname() != null ? user.getNickname() : "",
-                    "level", 15,
+                    "level", resolveUserLevel(user),
                     "investmentProfileLabel", user.getInvestmentProfileResult() != null && !user.getInvestmentProfileResult().isBlank()
                             ? user.getInvestmentProfileResult()
                             : "균형잡힌 판다형",
@@ -689,7 +693,7 @@ public class MatchingRoomService {
             userRepository.findById(invitedUserId).ifPresent(invitedUser -> members.add(Map.of(
                     "userId", invitedUser.getId(),
                     "nickname", invitedUser.getNickname() != null ? invitedUser.getNickname() : "",
-                    "level", 15,
+                    "level", resolveUserLevel(invitedUser),
                     "investmentProfileLabel", invitedUser.getInvestmentProfileResult() != null && !invitedUser.getInvestmentProfileResult().isBlank()
                             ? invitedUser.getInvestmentProfileResult()
                             : "균형잡힌 판다형",
@@ -707,7 +711,7 @@ public class MatchingRoomService {
             members.add(Map.of(
                     "userId", "",
                     "nickname", randomMatch ? "지금 찾고 있어요" : "아직 비어 있어요",
-                    "level", 15,
+                    "level", 0,
                     "investmentProfileLabel", randomMatch ? "관심사 기반 주식" : "친구를 직접 초대해 주세요",
                     "profileImageUrl", "",
                     "role", "EMPTY",
@@ -717,6 +721,22 @@ public class MatchingRoomService {
             ));
         }
         return members;
+    }
+
+    private int resolveUserLevel(User user) {
+        if (user == null || user.getId() == null) {
+            return 1;
+        }
+        return learningUserStateRepository.findById(user.getId())
+                .map(state -> {
+                    int totalExp = state.getExp() != null ? safeInt(state.getExp()) : safeInt(state.getPoint());
+                    return LearningProgressPolicy.fromExp(totalExp).level();
+                })
+                .orElse(1);
+    }
+
+    private static int safeInt(Integer value) {
+        return value != null ? value : 0;
     }
 
     private String resolveMatchingStatus(MatchingRoom room,
