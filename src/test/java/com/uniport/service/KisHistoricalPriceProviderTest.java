@@ -162,19 +162,24 @@ class KisHistoricalPriceProviderTest {
     }
 
     @Test
-    void getBenchmarkSeries_mapsSp500AndNasdaqToTradableEtfProxies() {
-        FxRateProvider fxRateProvider = (currency, date) -> BigDecimal.valueOf(1300);
+    void getBenchmarkSeries_mapsSupportedBenchmarksToExpectedSources() {
+        FxRateProvider fxRateProvider = (currency, date) ->
+                "KRW".equals(currency) ? BigDecimal.ONE : BigDecimal.valueOf(1300);
         KisHistoricalPriceProvider provider = new KisHistoricalPriceProvider(kisApiService, fxRateProvider);
         when(kisApiService.getOverseasStockDailyChartPrice(eq("AMS"), eq("SPY"), eq("20250131"), eq("0"), eq("1")))
                 .thenReturn(List.of(chart("20250102", "500")));
         when(kisApiService.getOverseasStockDailyChartPrice(eq("NAS"), eq("QQQ"), eq("20250131"), eq("0"), eq("1")))
                 .thenReturn(List.of(chart("20250102", "400")));
+        when(kisApiService.getIndexChartPrice(eq("KOSPI"), eq("20250102"), eq("20250131"), eq("D")))
+                .thenReturn(List.of(chart("20250102", "2500")));
 
         List<BacktestPricePoint> sp500 = provider.getBenchmarkSeries("SP500", LocalDate.parse("2025-01-02"), LocalDate.parse("2025-01-31"));
         List<BacktestPricePoint> nasdaq = provider.getBenchmarkSeries("NASDAQ", LocalDate.parse("2025-01-02"), LocalDate.parse("2025-01-31"));
+        List<BacktestPricePoint> kospi = provider.getBenchmarkSeries("KOSPI", LocalDate.parse("2025-01-02"), LocalDate.parse("2025-01-31"));
 
         assertEquals(0, BigDecimal.valueOf(650000).compareTo(sp500.get(0).adjustedCloseKrw()));
         assertEquals(0, BigDecimal.valueOf(520000).compareTo(nasdaq.get(0).adjustedCloseKrw()));
+        assertEquals(0, BigDecimal.valueOf(2500).compareTo(kospi.get(0).adjustedCloseKrw()));
     }
 
     @Test

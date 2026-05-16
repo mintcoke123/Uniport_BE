@@ -26,6 +26,7 @@ import com.uniport.repository.ManagedEtfAnalysisReportRepository;
 import com.uniport.repository.ManagedEtfFavoriteRepository;
 import com.uniport.repository.ManagedEtfRepository;
 import com.uniport.repository.StockMasterRepository;
+import com.uniport.service.backtest.BacktestRequest;
 import com.uniport.service.backtest.BacktestPricePoint;
 import com.uniport.service.backtest.BacktestResult;
 import com.uniport.service.backtest.EtfAiFeedbackService;
@@ -763,6 +764,60 @@ class EtfDataServiceTest {
                 .anyMatch(value -> value.contains("transaction fee") && value.contains("slippage")));
         assertEquals(true, report.getMetadata().getLimitations().stream()
                 .anyMatch(value -> value.contains("dividend") && value.contains("split")));
+    }
+
+    @Test
+    void analyze_usesSelectedNasdaqBenchmarkForBacktestAndSavedReport() throws Exception {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("분석 ETF")
+                .theme("테크")
+                .holdingsJson("[{\"stockId\":\"US_AAPL\",\"weight\":100}]")
+                .build();
+        AssetMaster apple = asset("US_AAPL", "STOCK", "Apple Inc.", "AAPL", "NASDAQ", "USD");
+        List<BacktestPricePoint> nasdaqSeries = List.of(
+                point("2025-01-02", "100"),
+                point("2025-01-03", "108")
+        );
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_AAPL")).thenReturn(Optional.of(apple));
+        when(historicalPriceProvider.getSecurityPriceSeries(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(point("2025-01-02", "100"), point("2025-01-03", "112")));
+        when(historicalPriceProvider.getBenchmarkSeries(eq("NASDAQ"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(nasdaqSeries);
+        BacktestResult result = backtestResult();
+        when(etfBacktestEngine.run(any())).thenReturn(result);
+        InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("NASDAQ"), eq(result), any(), any()))
+                .thenReturn(facts);
+        when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "NASDAQ 기준 백테스트 요약입니다.",
+                List.of(),
+                "BALANCED",
+                "과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.",
+                true
+        ));
+        ArgumentCaptor<BacktestRequest> backtestRequestCaptor = ArgumentCaptor.forClass(BacktestRequest.class);
+        ArgumentCaptor<ManagedEtfAnalysisReport> reportCaptor = ArgumentCaptor.forClass(ManagedEtfAnalysisReport.class);
+
+        etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("1Y").benchmark("NASDAQ").build());
+
+        verify(historicalPriceProvider).getBenchmarkSeries(eq("NASDAQ"), any(LocalDate.class), any(LocalDate.class));
+        verify(etfBacktestEngine).run(backtestRequestCaptor.capture());
+        BacktestRequest backtestRequest = backtestRequestCaptor.getValue();
+        assertEquals("NASDAQ", backtestRequest.getBenchmarkName());
+        assertEquals(nasdaqSeries, backtestRequest.getBenchmarkSeries());
+        verify(managedEtfAnalysisReportRepository).save(reportCaptor.capture());
+        EtfAnalysisReportResponseDTO report = new ObjectMapper()
+                .readValue(reportCaptor.getValue().getReportJson(), EtfAnalysisReportResponseDTO.class);
+        assertEquals("NASDAQ", report.getBenchmark());
+        assertEquals(7.0, report.getHighlights().getBenchmarkReturn());
+        assertEquals(3.0, report.getHighlights().getBenchmarkExcessReturn());
     }
 
     @Test
