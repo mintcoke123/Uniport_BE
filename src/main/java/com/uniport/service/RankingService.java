@@ -91,15 +91,26 @@ public class RankingService {
     }
 
     public Map<String, Object> getMyGroupRanking(User user) {
-        return getMyGroupRanking(user, getAllGroupsRanking());
+        Long teamId = resolveUserTeamId(user);
+        if (teamId == null) {
+            return null;
+        }
+        return getMyGroupRanking(teamId, getAllGroupsRanking());
     }
 
     public Map<String, Object> getMyGroupRanking(User user, List<Map<String, Object>> all) {
-        Long teamId = parseTeamId(user);
-        if (teamId == null && user != null) {
-            teamId = findStartedRoomIdByMember(user.getId());
-        }
+        Long teamId = resolveUserTeamId(user);
         if (teamId == null) {
+            return null;
+        }
+        return getMyGroupRanking(teamId, all);
+    }
+
+    private Map<String, Object> getMyGroupRanking(Long teamId, List<Map<String, Object>> all) {
+        if (teamId == null) {
+            return null;
+        }
+        if (all == null || all.isEmpty()) {
             return null;
         }
 
@@ -112,6 +123,14 @@ public class RankingService {
             }
         }
         return null;
+    }
+
+    private Long resolveUserTeamId(User user) {
+        Long teamId = parseTeamId(user);
+        if (teamId == null && user != null) {
+            teamId = findStartedRoomIdByMember(user.getId());
+        }
+        return teamId;
     }
 
     private List<Map<String, Object>> buildGroupRankings(boolean allowNetworkPriceFetch) {
