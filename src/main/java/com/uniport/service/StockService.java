@@ -7,6 +7,7 @@ import com.uniport.dto.MyHoldingDTO;
 import com.uniport.dto.NewsItemDTO;
 import com.uniport.dto.StockDetailDTO;
 import com.uniport.dto.StockPriceDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.Holding;
 import com.uniport.entity.ManagedNewsArticle;
 import com.uniport.entity.TeamHolding;
@@ -38,6 +39,7 @@ public class StockService {
     private final ManagedStockNewsService managedStockNewsService;
     private final CommunityService communityService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
 
     public StockService(KisApiService kisApiService,
                         HoldingRepository holdingRepository,
@@ -46,7 +48,8 @@ public class StockService {
                         StockMasterRepository stockMasterRepository,
                         ManagedStockNewsService managedStockNewsService,
                         CommunityService communityService,
-                        StockVisualAssetResolver stockVisualAssetResolver) {
+                        StockVisualAssetResolver stockVisualAssetResolver,
+                        StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.kisApiService = kisApiService;
         this.holdingRepository = holdingRepository;
         this.teamHoldingRepository = teamHoldingRepository;
@@ -55,6 +58,7 @@ public class StockService {
         this.managedStockNewsService = managedStockNewsService;
         this.communityService = communityService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
 
     private static Long parseTeamId(User user) {
@@ -104,7 +108,8 @@ public class StockService {
         StockPriceDTO price = getStockPrice(code);
         String displayName = resolveDisplayName(code, price.getStockName());
         String market = resolveMarket(code, price.getMarket());
-        String logoUrl = null;
+        StockVisualDTO visual = stockVisualAssetResolver.resolve(market, code, displayName, null);
+        String logoUrl = stockSymbolLogoUrlResolver.resolve(market, code, visual);
         MyHoldingDTO myHolding = resolveMyHolding(user, code, price);
 
         BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
@@ -154,7 +159,7 @@ public class StockService {
                 .code(code)
                 .market(market)
                 .logoUrl(logoUrl)
-                .visual(stockVisualAssetResolver.resolve(market, code, displayName, logoUrl))
+                .visual(visual)
                 .currentPrice(currentPrice)
                 .change(price.getChangeAmount() != null ? price.getChangeAmount() : BigDecimal.ZERO)
                 .changeRate(price.getChangeRate() != null ? price.getChangeRate() : BigDecimal.ZERO)

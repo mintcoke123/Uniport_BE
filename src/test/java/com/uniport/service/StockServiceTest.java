@@ -44,7 +44,8 @@ class StockServiceTest {
                 stockMasterRepository,
                 managedStockNewsService,
                 communityService,
-                stockVisualAssetResolver
+                stockVisualAssetResolver,
+                new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app")
         );
     }
 

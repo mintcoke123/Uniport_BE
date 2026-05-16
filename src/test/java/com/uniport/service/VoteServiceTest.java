@@ -93,6 +93,7 @@ class VoteServiceTest {
                 chatService,
                 broadcaster,
                 null,
+                null,
                 pushNotificationService
         );
         User proposer = User.builder()
@@ -168,6 +169,7 @@ class VoteServiceTest {
                 chatService,
                 broadcaster,
                 null,
+                null,
                 pushNotificationService
         );
         Vote vote = Vote.builder()
@@ -218,6 +220,7 @@ class VoteServiceTest {
                 chatService,
                 broadcaster,
                 null,
+                null,
                 pushNotificationService
         );
         Vote vote = Vote.builder()
@@ -262,6 +265,7 @@ class VoteServiceTest {
                 kisApiService,
                 chatService,
                 broadcaster,
+                null,
                 null,
                 pushNotificationService
         );

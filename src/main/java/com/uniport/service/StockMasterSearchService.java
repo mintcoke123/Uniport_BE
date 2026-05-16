@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import com.uniport.dto.StockSearchItemDTO;
 import com.uniport.dto.StockSearchResponseDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.StockMaster;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.StockMasterRepository;
@@ -21,11 +22,14 @@ public class StockMasterSearchService {
 
     private final StockMasterRepository stockMasterRepository;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
 
     public StockMasterSearchService(StockMasterRepository stockMasterRepository,
-                                    StockVisualAssetResolver stockVisualAssetResolver) {
+                                    StockVisualAssetResolver stockVisualAssetResolver,
+                                    StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.stockMasterRepository = stockMasterRepository;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
 
     public StockSearchResponseDTO search(String keywordParam,
@@ -107,14 +111,15 @@ public class StockMasterSearchService {
 
         String market = stockMaster.getMarket() != null ? stockMaster.getMarket() : "";
         String name = stockMaster.getNameKr() != null ? stockMaster.getNameKr() : "";
-        String logoUrl = null;
+        StockVisualDTO visual = stockVisualAssetResolver.resolve(market, code, name, null);
+        String logoUrl = stockSymbolLogoUrlResolver.resolve(market, code, visual);
         return StockSearchItemDTO.builder()
                 .stockId(buildStockId(market, code))
                 .name(name)
                 .symbol(code)
                 .market(market)
                 .logoUrl(logoUrl)
-                .visual(stockVisualAssetResolver.resolve(market, code, name, logoUrl))
+                .visual(visual)
                 .build();
     }
 

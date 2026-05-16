@@ -12,6 +12,7 @@ import com.uniport.service.ChatService;
 import com.uniport.service.KisApiService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.PushNotificationService;
+import com.uniport.service.StockSymbolLogoUrlResolver;
 import com.uniport.service.StockVisualAssetResolver;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
@@ -157,6 +158,8 @@ class GroupControllerCallAllTest {
         private final MatchingRoomService matchingRoomService = mock(MatchingRoomService.class);
         private final GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase = mock(GenerateGroupInvestmentFeedbackReportUseCase.class);
         private final StockVisualAssetResolver stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver =
+                new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app");
         private final PushNotificationService pushNotificationService = mock(PushNotificationService.class);
         private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new GroupController(
                 chatService,
@@ -171,6 +174,7 @@ class GroupControllerCallAllTest {
                 matchingRoomService,
                 feedbackReportUseCase,
                 stockVisualAssetResolver,
+                stockSymbolLogoUrlResolver,
                 pushNotificationService
         )).build();
     }

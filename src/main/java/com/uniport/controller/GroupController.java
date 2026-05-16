@@ -1,5 +1,6 @@
 package com.uniport.controller;
 
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.TeamAccount;
 import com.uniport.entity.TeamHolding;
@@ -13,6 +14,7 @@ import com.uniport.service.ChatService;
 import com.uniport.service.KisApiService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.PushNotificationService;
+import com.uniport.service.StockSymbolLogoUrlResolver;
 import com.uniport.service.StockVisualAssetResolver;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
@@ -58,6 +60,7 @@ public class GroupController {
     private final MatchingRoomService matchingRoomService;
     private final GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
     private final PushNotificationService pushNotificationService;
 
     public GroupController(ChatService chatService, AuthService authService,
@@ -71,6 +74,7 @@ public class GroupController {
                            MatchingRoomService matchingRoomService,
                            GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase,
                            StockVisualAssetResolver stockVisualAssetResolver,
+                           StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver,
                            PushNotificationService pushNotificationService) {
         this.chatService = chatService;
         this.authService = authService;
@@ -84,6 +88,7 @@ public class GroupController {
         this.matchingRoomService = matchingRoomService;
         this.feedbackReportUseCase = feedbackReportUseCase;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
         this.pushNotificationService = pushNotificationService;
     }
 
@@ -127,9 +132,10 @@ public class GroupController {
             item.put("id", h.getId());
             item.put("stockCode", h.getStockCode());
             item.put("stockName", stockName);
-            String logoUrl = null;
+            StockVisualDTO visual = stockVisualAssetResolver.resolve("KRX", h.getStockCode(), stockName, null);
+            String logoUrl = stockSymbolLogoUrlResolver.resolve("KRX", h.getStockCode(), visual);
             item.put("logoUrl", logoUrl);
-            item.put("visual", stockVisualAssetResolver.resolve("KRX", h.getStockCode(), stockName, logoUrl));
+            item.put("visual", visual);
             item.put("quantity", h.getQuantity());
             item.put("averagePrice", h.getAveragePurchasePrice());
             item.put("currentPrice", currentPrice);
@@ -184,11 +190,13 @@ public class GroupController {
                 }
             } catch (Exception ignored) {
             }
+            StockVisualDTO visual = stockVisualAssetResolver.resolve("KRX", h.getStockCode(), stockName, null);
+            String logoUrl = stockSymbolLogoUrlResolver.resolve("KRX", h.getStockCode(), visual);
             result.add(Map.<String, Object>of(
                     "stockCode", h.getStockCode(),
                     "stockName", stockName,
-                    "logoUrl", null,
-                    "visual", stockVisualAssetResolver.resolve("KRX", h.getStockCode(), stockName, null),
+                    "logoUrl", logoUrl,
+                    "visual", visual,
                     "quantity", h.getQuantity(),
                     "averagePurchasePrice", h.getAveragePurchasePrice(),
                     "currentPrice", currentPrice,

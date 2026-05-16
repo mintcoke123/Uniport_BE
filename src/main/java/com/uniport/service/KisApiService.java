@@ -4,6 +4,7 @@ import com.uniport.dto.IndexChartPriceItemDTO;
 import com.uniport.dto.MarketIndexDTO;
 import com.uniport.dto.OrderResponseDTO;
 import com.uniport.dto.StockPriceDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.OrderStatus;
 import com.uniport.entity.OrderType;
 import com.uniport.exception.ApiException;
@@ -95,6 +96,7 @@ public class KisApiService {
     private final PriceCache priceCache;
     private final KeyPool keyPool;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
     /** HTTP 현재가 조회 결과 캐시(종목코드 -> (DTO, 만료시각)). 시장가 고정 구간에서 동일 가격 재사용. */
     private final ConcurrentHashMap<String, CachedHttpPriceEntry> httpPriceCache = new ConcurrentHashMap<>();
 
@@ -123,12 +125,14 @@ public class KisApiService {
                          @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
                          PriceCache priceCache,
                          @Lazy KeyPool keyPool,
-                         StockVisualAssetResolver stockVisualAssetResolver) {
+                         StockVisualAssetResolver stockVisualAssetResolver,
+                         StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.restTemplate = restTemplate;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.priceCache = priceCache;
         this.keyPool = keyPool;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
 
     private String getBaseUrl() {
@@ -559,13 +563,14 @@ public class KisApiService {
     private StockPriceDTO mapPriceSnapshotToStockPriceDTO(String stockCode, PriceSnapshot sn) {
         String stockName = "종목_" + stockCode;
         String market = "KRX";
-        String logoUrl = null;
+        StockVisualDTO visual = stockVisualAssetResolver.resolve(market, stockCode, stockName, null);
+        String logoUrl = stockSymbolLogoUrlResolver.resolve(market, stockCode, visual);
         return StockPriceDTO.builder()
                 .stockCode(stockCode)
                 .stockName(stockName)
                 .market(market)
                 .logoUrl(logoUrl)
-                .visual(stockVisualAssetResolver.resolve(market, stockCode, stockName, logoUrl))
+                .visual(visual)
                 .currentPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
                 .changeAmount(sn.getChange() != null ? sn.getChange() : BigDecimal.ZERO)
                 .changeRate(sn.getChangeRate() != null ? sn.getChangeRate() : BigDecimal.ZERO)
@@ -592,13 +597,14 @@ public class KisApiService {
             volume = 0L;
         }
         String market = "KRX";
-        String logoUrl = null;
+        StockVisualDTO visual = stockVisualAssetResolver.resolve(market, stockCode, stockName, null);
+        String logoUrl = stockSymbolLogoUrlResolver.resolve(market, stockCode, visual);
         return StockPriceDTO.builder()
                 .stockCode(stockCode)
                 .stockName(stockName)
                 .market(market)
                 .logoUrl(logoUrl)
-                .visual(stockVisualAssetResolver.resolve(market, stockCode, stockName, logoUrl))
+                .visual(visual)
                 .currentPrice(currentPrice)
                 .changeAmount(changeAmount)
                 .changeRate(changeRate)
@@ -889,13 +895,14 @@ public class KisApiService {
 
     private OrderResponseDTO placeOrderStub(String stockCode, int quantity, BigDecimal price, OrderType type) {
         String market = "KRX";
-        String logoUrl = null;
+        StockVisualDTO visual = stockVisualAssetResolver.resolve(market, stockCode, null, null);
+        String logoUrl = stockSymbolLogoUrlResolver.resolve(market, stockCode, visual);
         return OrderResponseDTO.builder()
                 .orderId(null)
                 .stockCode(stockCode)
                 .market(market)
                 .logoUrl(logoUrl)
-                .visual(stockVisualAssetResolver.resolve(market, stockCode, null, logoUrl))
+                .visual(visual)
                 .quantity(quantity)
                 .price(price)
                 .orderType(type)

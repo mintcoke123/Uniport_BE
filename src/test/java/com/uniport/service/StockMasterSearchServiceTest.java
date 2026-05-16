@@ -37,7 +37,11 @@ class StockMasterSearchServiceTest {
 
     @BeforeEach
     void setUp() {
-        stockMasterSearchService = new StockMasterSearchService(stockMasterRepository, stockVisualAssetResolver);
+        stockMasterSearchService = new StockMasterSearchService(
+                stockMasterRepository,
+                stockVisualAssetResolver,
+                new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app")
+        );
     }
 
     @Test

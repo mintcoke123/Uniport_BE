@@ -27,7 +27,8 @@ class MarketServiceTest {
         marketService = new MarketService(
                 kisApiService,
                 mock(KisWsSubscriptionManager.class),
-                stockVisualAssetResolver
+                stockVisualAssetResolver,
+                new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app")
         );
     }
 

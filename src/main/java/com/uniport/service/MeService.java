@@ -6,6 +6,7 @@ import com.uniport.dto.InvestmentDataDTO;
 import com.uniport.dto.MyInvestmentResponseDTO;
 import com.uniport.dto.StockHoldingItemDTO;
 import com.uniport.dto.StockPriceDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.Holding;
 import com.uniport.entity.User;
 import com.uniport.repository.HoldingRepository;
@@ -26,17 +27,20 @@ public class MeService {
     private final MatchingRoomService matchingRoomService;
     private final CompetitionService competitionService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
 
     public MeService(HoldingRepository holdingRepository,
                      StockService stockService,
                      MatchingRoomService matchingRoomService,
                      CompetitionService competitionService,
-                     StockVisualAssetResolver stockVisualAssetResolver) {
+                     StockVisualAssetResolver stockVisualAssetResolver,
+                     StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.holdingRepository = holdingRepository;
         this.stockService = stockService;
         this.matchingRoomService = matchingRoomService;
         this.competitionService = competitionService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
 
     public AuthUserDTO getProfile(User user) {
@@ -120,6 +124,7 @@ public class MeService {
         String stockName = "Stock_" + holding.getStockCode();
         String market = "KRX";
         String logoUrl = null;
+        StockVisualDTO visual = null;
         try {
             StockPriceDTO price = stockService.getStockPrice(holding.getStockCode());
             currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
@@ -129,7 +134,15 @@ public class MeService {
             if (price.getMarket() != null && !price.getMarket().isBlank()) {
                 market = price.getMarket();
             }
+            visual = price.getVisual();
+            logoUrl = price.getLogoUrl();
         } catch (Exception ignored) {
+        }
+        if (visual == null) {
+            visual = stockVisualAssetResolver.resolve(market, holding.getStockCode(), stockName, null);
+        }
+        if (logoUrl == null || logoUrl.isBlank()) {
+            logoUrl = stockSymbolLogoUrlResolver.resolve(market, holding.getStockCode(), visual);
         }
 
         BigDecimal averagePrice = holding.getAveragePurchasePrice() != null
@@ -149,7 +162,7 @@ public class MeService {
                 .name(stockName)
                 .market(market)
                 .logoUrl(logoUrl)
-                .visual(stockVisualAssetResolver.resolve(market, holding.getStockCode(), stockName, logoUrl))
+                .visual(visual)
                 .quantity(holding.getQuantity())
                 .currentValue(currentValue)
                 .profitLoss(profitLoss)

@@ -11,6 +11,7 @@ import com.uniport.dto.HomeInvestmentSummaryDTO;
 import com.uniport.dto.HomeMyGroupRankingDTO;
 import com.uniport.dto.MockInvestingSummaryResponseDTO;
 import com.uniport.dto.MyInvestmentResponseDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.dto.TopGroupInsightDTO;
 import com.uniport.entity.ManagedGroupInsight;
 import com.uniport.entity.User;
@@ -40,6 +41,7 @@ public class HomeDataService {
     private final CompetitionParticipationService competitionParticipationService;
     private final ManagedGroupInsightRepository managedGroupInsightRepository;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
 
     public HomeDataService(MatchingRoomService matchingRoomService,
                            MeService meService,
@@ -47,7 +49,8 @@ public class HomeDataService {
                            CompetitionService competitionService,
                            CompetitionParticipationService competitionParticipationService,
                            ManagedGroupInsightRepository managedGroupInsightRepository,
-                           StockVisualAssetResolver stockVisualAssetResolver) {
+                           StockVisualAssetResolver stockVisualAssetResolver,
+                           StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.matchingRoomService = matchingRoomService;
         this.meService = meService;
         this.rankingService = rankingService;
@@ -55,6 +58,7 @@ public class HomeDataService {
         this.competitionParticipationService = competitionParticipationService;
         this.managedGroupInsightRepository = managedGroupInsightRepository;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
 
     public MockInvestingSummaryResponseDTO getSummary(User user) {
@@ -212,13 +216,14 @@ public class HomeDataService {
                         String stockCode = stringValue(row.get("stockCode"));
                         String stockName = stringValue(row.get("stockName"));
                         String market = marketFor(stockCode);
-                        String logoUrl = null;
+                        StockVisualDTO visual = stockVisualAssetResolver.resolve(market, stockCode, stockName, null);
+                        String logoUrl = stockSymbolLogoUrlResolver.resolve(market, stockCode, visual);
                         return GroupInsightConsensusDTO.builder()
                                 .stockCode(stockCode)
                                 .stockName(stockName)
                                 .market(market)
                                 .logoUrl(logoUrl)
-                                .visual(stockVisualAssetResolver.resolve(market, stockCode, stockName, logoUrl))
+                                .visual(visual)
                                 .confidenceRate(row.get("confidenceRate") instanceof Number n ? n.intValue() : 0)
                                 .dailyReturnRate(row.get("dailyReturnRate") instanceof Number n ? BigDecimal.valueOf(n.doubleValue()) : BigDecimal.ZERO)
                                 .signal(stringValue(row.get("signal")))

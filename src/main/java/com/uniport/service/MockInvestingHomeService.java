@@ -9,6 +9,7 @@ import com.uniport.dto.HomeInvestmentSummaryDTO;
 import com.uniport.dto.HomeMyGroupRankingDTO;
 import com.uniport.dto.MockInvestingSummaryResponseDTO;
 import com.uniport.dto.MyInvestmentResponseDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.dto.TopGroupInsightDTO;
 import com.uniport.entity.User;
 import org.springframework.stereotype.Service;
@@ -27,19 +28,22 @@ public class MockInvestingHomeService {
     private final CompetitionService competitionService;
     private final CompetitionParticipationService competitionParticipationService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
 
     public MockInvestingHomeService(MatchingRoomService matchingRoomService,
                                     MeService meService,
                                     RankingService rankingService,
                                     CompetitionService competitionService,
                                     CompetitionParticipationService competitionParticipationService,
-                                    StockVisualAssetResolver stockVisualAssetResolver) {
+                                    StockVisualAssetResolver stockVisualAssetResolver,
+                                    StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.matchingRoomService = matchingRoomService;
         this.meService = meService;
         this.rankingService = rankingService;
         this.competitionService = competitionService;
         this.competitionParticipationService = competitionParticipationService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
 
     public MockInvestingSummaryResponseDTO getSummary(User user) {
@@ -80,6 +84,10 @@ public class MockInvestingHomeService {
         BigDecimal topGroupRate = topGroup != null && topGroup.get("profitRate") instanceof BigDecimal
                 ? ((BigDecimal) topGroup.get("profitRate")).multiply(BigDecimal.valueOf(100))
                 : null;
+        StockVisualDTO nvidiaVisual = stockVisualAssetResolver.resolve("US", "NVDA", "엔비디아", null);
+        String nvidiaLogoUrl = stockSymbolLogoUrlResolver.resolve("US", "NVDA", nvidiaVisual);
+        StockVisualDTO teslaVisual = stockVisualAssetResolver.resolve("US", "TSLA", "테슬라", null);
+        String teslaLogoUrl = stockSymbolLogoUrlResolver.resolve("US", "TSLA", teslaVisual);
 
         return GroupInsightsResponseDTO.builder()
                 .topConsensus(List.of(
@@ -87,8 +95,8 @@ public class MockInvestingHomeService {
                                 .stockCode("NVDA")
                                 .stockName("엔비디아")
                                 .market("US")
-                                .logoUrl(null)
-                                .visual(stockVisualAssetResolver.resolve("US", "NVDA", "엔비디아", null))
+                                .logoUrl(nvidiaLogoUrl)
+                                .visual(nvidiaVisual)
                                 .confidenceRate(92)
                                 .dailyReturnRate(new BigDecimal("12.5"))
                                 .signal("BUY")
@@ -97,8 +105,8 @@ public class MockInvestingHomeService {
                                 .stockCode("TSLA")
                                 .stockName("테슬라")
                                 .market("US")
-                                .logoUrl(null)
-                                .visual(stockVisualAssetResolver.resolve("US", "TSLA", "테슬라", null))
+                                .logoUrl(teslaLogoUrl)
+                                .visual(teslaVisual)
                                 .confidenceRate(74)
                                 .dailyReturnRate(new BigDecimal("4.1"))
                                 .signal("SELL")

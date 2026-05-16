@@ -4,6 +4,7 @@ import com.uniport.dto.OrderResponseDTO;
 import com.uniport.dto.PlaceOrderRequestDTO;
 import com.uniport.dto.TradeRequestDTO;
 import com.uniport.dto.TradeResponseDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.Order;
 import com.uniport.entity.OrderType;
 import com.uniport.entity.OrderStatus;
@@ -44,18 +45,21 @@ public class TradeService {
     private final TeamHoldingRepository teamHoldingRepository;
     private final ChatService chatService;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
 
     public TradeService(OrderRepository orderRepository, KisApiService kisApiService,
                         TeamAccountRepository teamAccountRepository,
                         TeamHoldingRepository teamHoldingRepository,
                         ChatService chatService,
-                        StockVisualAssetResolver stockVisualAssetResolver) {
+                        StockVisualAssetResolver stockVisualAssetResolver,
+                        StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.orderRepository = orderRepository;
         this.kisApiService = kisApiService;
         this.teamAccountRepository = teamAccountRepository;
         this.teamHoldingRepository = teamHoldingRepository;
         this.chatService = chatService;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
 
     /** 한국 시간 기준 거래 가능 여부. 09:00 ~ 15:30 미만만 허용. */
@@ -211,13 +215,15 @@ public class TradeService {
                 .build();
         order = orderRepository.save(order);
 
+        StockVisualDTO visual = stockVisualAssetResolver.resolve("KRX", order.getStockCode(), request.getStockName(), null);
+        String logoUrl = stockSymbolLogoUrlResolver.resolve("KRX", order.getStockCode(), visual);
         return OrderResponseDTO.builder()
                 .orderId(order.getId())
                 .stockCode(order.getStockCode())
                 .stockName(request.getStockName())
                 .market("KRX")
-                .logoUrl(null)
-                .visual(stockVisualAssetResolver.resolve("KRX", order.getStockCode(), request.getStockName(), null))
+                .logoUrl(logoUrl)
+                .visual(visual)
                 .quantity(order.getQuantity())
                 .price(order.getPrice())
                 .orderType(order.getOrderType())
@@ -291,12 +297,14 @@ public class TradeService {
     }
 
     private OrderResponseDTO toOrderResponseDTO(Order order) {
+        StockVisualDTO visual = stockVisualAssetResolver.resolve("KRX", order.getStockCode(), null, null);
+        String logoUrl = stockSymbolLogoUrlResolver.resolve("KRX", order.getStockCode(), visual);
         return OrderResponseDTO.builder()
                 .orderId(order.getId())
                 .stockCode(order.getStockCode())
                 .market("KRX")
-                .logoUrl(null)
-                .visual(stockVisualAssetResolver.resolve("KRX", order.getStockCode(), null, null))
+                .logoUrl(logoUrl)
+                .visual(visual)
                 .quantity(order.getQuantity())
                 .price(order.getPrice())
                 .orderType(order.getOrderType())

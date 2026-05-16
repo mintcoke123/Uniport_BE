@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import com.uniport.dto.PlaceOrderRequestDTO;
 import com.uniport.dto.StockPriceDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.Order;
 import com.uniport.entity.OrderType;
 import com.uniport.entity.OrderStatus;
@@ -62,6 +63,7 @@ public class VoteService {
     private final ChatService chatService;
     private final GroupChatBroadcaster groupChatBroadcaster;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
     private final PushNotificationService pushNotificationService;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -76,6 +78,7 @@ public class VoteService {
                        ChatService chatService,
                        GroupChatBroadcaster groupChatBroadcaster,
                        StockVisualAssetResolver stockVisualAssetResolver,
+                       StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver,
                        PushNotificationService pushNotificationService) {
         this.voteRepository = voteRepository;
         this.voteParticipantRepository = voteParticipantRepository;
@@ -88,6 +91,7 @@ public class VoteService {
         this.chatService = chatService;
         this.groupChatBroadcaster = groupChatBroadcaster;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
         this.pushNotificationService = pushNotificationService;
     }
 
@@ -239,8 +243,9 @@ public class VoteService {
         map.put("stockName", null);
         map.put("stockCode", o.getStockCode() != null ? o.getStockCode() : "");
         map.put("market", "KRX");
-        map.put("logoUrl", null);
-        map.put("visual", stockVisualAssetResolver.resolve("KRX", o.getStockCode(), null, null));
+        StockVisualDTO visual = stockVisualAssetResolver.resolve("KRX", o.getStockCode(), null, null);
+        map.put("logoUrl", stockSymbolLogoUrlResolver.resolve("KRX", o.getStockCode(), visual));
+        map.put("visual", visual);
         map.put("quantity", o.getQuantity());
         map.put("proposedPrice", o.getPrice());
         map.put("executionPrice", o.getPrice());
@@ -265,8 +270,9 @@ public class VoteService {
         map.put("stockName", v.getStockName());
         map.put("stockCode", v.getStockCode() != null ? v.getStockCode() : "");
         map.put("market", "KRX");
-        map.put("logoUrl", null);
-        map.put("visual", stockVisualAssetResolver.resolve("KRX", v.getStockCode(), v.getStockName(), null));
+        StockVisualDTO visual = stockVisualAssetResolver.resolve("KRX", v.getStockCode(), v.getStockName(), null);
+        map.put("logoUrl", stockSymbolLogoUrlResolver.resolve("KRX", v.getStockCode(), visual));
+        map.put("visual", visual);
         map.put("proposerId", v.getProposerId());
         map.put("proposerName", v.getProposerName());
         map.put("quantity", v.getQuantity());
