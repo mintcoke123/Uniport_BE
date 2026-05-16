@@ -348,7 +348,7 @@ public class MatchingRoomService {
                 if (joinableRoom != null) {
                     Map<String, Object> joined = doJoin(joinableRoom, creator);
                     long memberCount = matchingRoomMemberRepository.countByMatchingRoomId(joinableRoom.getId());
-                    if (memberCount >= Math.min(joinableRoom.getCapacity(), 2)) {
+                    if (memberCount >= joinableRoom.getCapacity()) {
                         Map<String, Object> started = start(toApiId(joinableRoom.getId()), creator);
                         yield Map.of(
                                 "mode", "RANDOM",

@@ -7,6 +7,7 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -42,6 +43,9 @@ class MatchingRoomServiceTest {
 
     @Autowired
     private MatchingRoomMemberRepository matchingRoomMemberRepository;
+
+    @Autowired
+    private MatchingRoomRepository matchingRoomRepository;
 
     @Autowired
     private FriendRelationRepository friendRelationRepository;
@@ -167,6 +171,58 @@ class MatchingRoomServiceTest {
     }
 
     @Test
+    void quickMatchRandomMode_keepsWaitingAtTwoMembersUntilManualStart() {
+        User firstUser = persistUser("20263017", "random-wait-first");
+        User secondUser = persistUser("20263018", "random-wait-second");
+        entityManager.flush();
+
+        Map<String, Object> firstResponse = matchingRoomService.quickMatch("RANDOM", "KR", List.of(), firstUser);
+        Map<String, Object> firstDetail = map(firstResponse.get("detail"));
+        String roomId = (String) firstDetail.get("roomId");
+        assertEquals("waiting", findRoom(roomId).getStatus());
+        assertFalse((Boolean) map(firstDetail.get("actions")).get("chatEnabled"));
+        assertFalse((Boolean) map(firstDetail.get("actions")).get("startEnabled"));
+
+        Map<String, Object> secondResponse = matchingRoomService.quickMatch("RANDOM", "KR", List.of(), secondUser);
+        Map<String, Object> secondDetail = map(secondResponse.get("detail"));
+
+        assertEquals(roomId, secondDetail.get("roomId"));
+        assertEquals("waiting", findRoom(roomId).getStatus());
+        assertEquals(2, secondDetail.get("memberCount"));
+        assertFalse((Boolean) map(secondDetail.get("actions")).get("chatEnabled"));
+        assertTrue((Boolean) map(secondDetail.get("actions")).get("startEnabled"));
+        assertFalse(secondResponse.containsKey("teamId"));
+
+        Map<String, Object> started = matchingRoomService.start(roomId, firstUser);
+        Map<String, Object> startedDetail = map(started.get("detail"));
+        assertEquals("started", findRoom(roomId).getStatus());
+        assertEquals("COMPLETED", startedDetail.get("status"));
+        assertTrue((Boolean) map(startedDetail.get("actions")).get("chatEnabled"));
+    }
+
+    @Test
+    void quickMatchRandomMode_autoStartsWhenThirdMemberJoins() {
+        User firstUser = persistUser("20263019", "random-full-first");
+        User secondUser = persistUser("20263020", "random-full-second");
+        User thirdUser = persistUser("20263021", "random-full-third");
+        entityManager.flush();
+
+        Map<String, Object> firstResponse = matchingRoomService.quickMatch("RANDOM", "KR", List.of(), firstUser);
+        String roomId = (String) map(firstResponse.get("detail")).get("roomId");
+        matchingRoomService.quickMatch("RANDOM", "KR", List.of(), secondUser);
+
+        Map<String, Object> thirdResponse = matchingRoomService.quickMatch("RANDOM", "KR", List.of(), thirdUser);
+        Map<String, Object> detail = map(thirdResponse.get("detail"));
+
+        assertEquals(roomId, detail.get("roomId"));
+        assertEquals("started", findRoom(roomId).getStatus());
+        assertEquals("COMPLETED", detail.get("status"));
+        assertEquals(3, detail.get("memberCount"));
+        assertEquals("team-" + roomId.substring("room-".length()), thirdResponse.get("teamId"));
+        assertTrue((Boolean) map(detail.get("actions")).get("chatEnabled"));
+    }
+
+    @Test
     void assertTeamRoomForCallAll_rejectsPersonalRoomWithCallAllMessage() {
         MatchingRoom room = MatchingRoom.create("개인방", 1);
         entityManager.persist(room);
@@ -245,6 +301,11 @@ class MatchingRoomServiceTest {
                 .orElseThrow();
         assertEquals("CONFIRMED", member.get("status"));
         assertEquals(role, member.get("role"));
+    }
+
+    private MatchingRoom findRoom(String roomId) {
+        Long id = Long.parseLong(roomId.substring("room-".length()));
+        return matchingRoomRepository.findById(id).orElseThrow();
     }
 
     @SuppressWarnings("unchecked")
