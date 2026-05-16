@@ -5,6 +5,7 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.service.ChatRoomService;
 import com.uniport.service.CurrentUserResolver;
+import com.uniport.service.MatchingRoomService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,10 +27,14 @@ public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
     private final CurrentUserResolver currentUserResolver;
+    private final MatchingRoomService matchingRoomService;
 
-    public ChatRoomController(ChatRoomService chatRoomService, CurrentUserResolver currentUserResolver) {
+    public ChatRoomController(ChatRoomService chatRoomService,
+                              CurrentUserResolver currentUserResolver,
+                              MatchingRoomService matchingRoomService) {
         this.chatRoomService = chatRoomService;
         this.currentUserResolver = currentUserResolver;
+        this.matchingRoomService = matchingRoomService;
     }
 
     @GetMapping
@@ -70,5 +75,14 @@ public class ChatRoomController {
                     : HttpStatus.NOT_FOUND;
             throw new ApiException(ex.getMessage(), status);
         }
+    }
+
+    @PostMapping("/{roomId}/leave")
+    public ResponseEntity<Map<String, Object>> leaveChatRoom(
+            @PathVariable Long roomId,
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(matchingRoomService.leave("room-" + roomId, user));
     }
 }
