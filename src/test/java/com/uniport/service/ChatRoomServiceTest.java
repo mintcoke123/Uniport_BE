@@ -6,6 +6,7 @@ import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.entity.Vote;
 import com.uniport.entity.VoteParticipant;
+import com.uniport.exception.ApiException;
 import com.uniport.repository.ChatMessageRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
@@ -14,6 +15,7 @@ import com.uniport.repository.TeamHoldingRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -438,5 +440,123 @@ class ChatRoomServiceTest {
         assertEquals("Chat room access denied", exception.getMessage());
 
         verify(matchingRoomMemberRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void renameChatRoomTrimsNameAndReturnsRoomIdentity() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
+        TeamAccountRepository teamAccountRepository = mock(TeamAccountRepository.class);
+        TeamHoldingRepository teamHoldingRepository = mock(TeamHoldingRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatRoomService service = new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatMessageRepository,
+                teamAccountRepository,
+                teamHoldingRepository,
+                voteRepository,
+                voteParticipantRepository,
+                kisApiService
+        );
+
+        User user = User.builder().id(10L).nickname("tester").build();
+        MatchingRoom room = MatchingRoom.builder().id(3L).name("이전 이름").build();
+        when(matchingRoomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())).thenReturn(true);
+
+        Map<String, Object> response = service.renameChatRoom(room.getId(), user, "  새 채팅방 이름  ");
+
+        assertEquals(room.getId(), response.get("roomId"));
+        assertEquals(room.getId(), response.get("groupId"));
+        assertEquals("새 채팅방 이름", response.get("name"));
+        assertEquals("새 채팅방 이름 채팅방", response.get("title"));
+        assertEquals("새 채팅방 이름", room.getName());
+        verify(matchingRoomRepository).save(room);
+    }
+
+    @Test
+    void renameChatRoomRejectsBlankName() {
+        ChatRoomService service = createChatRoomService(
+                mock(MatchingRoomMemberRepository.class),
+                mock(MatchingRoomRepository.class)
+        );
+        User user = User.builder().id(10L).nickname("tester").build();
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.renameChatRoom(3L, user, "   ")
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+    }
+
+    @Test
+    void renameChatRoomRejectsNameLongerThanThirtyCharacters() {
+        ChatRoomService service = createChatRoomService(
+                mock(MatchingRoomMemberRepository.class),
+                mock(MatchingRoomRepository.class)
+        );
+        User user = User.builder().id(10L).nickname("tester").build();
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.renameChatRoom(3L, user, "가".repeat(31))
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+    }
+
+    @Test
+    void renameChatRoomReturnsNotFoundWhenRoomIsMissing() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatRoomService service = createChatRoomService(matchingRoomMemberRepository, matchingRoomRepository);
+        User user = User.builder().id(10L).nickname("tester").build();
+        when(matchingRoomRepository.findById(3L)).thenReturn(Optional.empty());
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.renameChatRoom(3L, user, "새 이름")
+        );
+
+        assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
+        verify(matchingRoomMemberRepository, never()).existsByMatchingRoomIdAndUserId(3L, user.getId());
+    }
+
+    @Test
+    void renameChatRoomRejectsNonMember() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatRoomService service = createChatRoomService(matchingRoomMemberRepository, matchingRoomRepository);
+        User user = User.builder().id(10L).nickname("tester").build();
+        MatchingRoom room = MatchingRoom.builder().id(3L).name("이전 이름").build();
+        when(matchingRoomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())).thenReturn(false);
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.renameChatRoom(room.getId(), user, "새 이름")
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+        verify(matchingRoomRepository, never()).save(room);
+    }
+
+    private ChatRoomService createChatRoomService(MatchingRoomMemberRepository matchingRoomMemberRepository,
+                                                  MatchingRoomRepository matchingRoomRepository) {
+        return new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                mock(ChatMessageRepository.class),
+                mock(TeamAccountRepository.class),
+                mock(TeamHoldingRepository.class),
+                mock(VoteRepository.class),
+                mock(VoteParticipantRepository.class),
+                mock(KisApiService.class)
+        );
     }
 }

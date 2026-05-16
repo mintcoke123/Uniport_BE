@@ -8,6 +8,7 @@ import com.uniport.entity.TeamAccount;
 import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
 import com.uniport.entity.Vote;
+import com.uniport.exception.ApiException;
 import com.uniport.repository.ChatMessageRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
@@ -15,6 +16,7 @@ import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -138,6 +140,32 @@ public class ChatRoomService {
         return Map.of(
                 "roomId", roomId,
                 "unreadCount", 0
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> renameChatRoom(Long roomId, User user, String name) {
+        String trimmedName = name != null ? name.trim() : "";
+        if (trimmedName.isBlank()) {
+            throw new ApiException("name is required", HttpStatus.BAD_REQUEST);
+        }
+        if (trimmedName.length() > 30) {
+            throw new ApiException("name must be 30 characters or less", HttpStatus.BAD_REQUEST);
+        }
+
+        MatchingRoom room = matchingRoomRepository.findById(roomId)
+                .orElseThrow(() -> new ApiException("Chat room not found", HttpStatus.NOT_FOUND));
+        if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(roomId, user.getId())) {
+            throw new ApiException("Chat room access denied", HttpStatus.FORBIDDEN);
+        }
+
+        room.setName(trimmedName);
+        matchingRoomRepository.save(room);
+        return Map.of(
+                "roomId", room.getId(),
+                "groupId", room.getId(),
+                "name", room.getName(),
+                "title", room.getName() + " 채팅방"
         );
     }
 
