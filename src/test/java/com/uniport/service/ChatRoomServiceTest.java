@@ -1,5 +1,6 @@
 package com.uniport.service;
 
+import com.uniport.entity.ChatMessage;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
@@ -95,6 +96,65 @@ class ChatRoomServiceTest {
         verify(teamAccountRepository, never()).findByTeamId(waitingRoom.getId());
         verify(chatMessageRepository, never()).findTopByRoomIdOrderByCreatedAtDesc(waitingRoom.getId());
         verify(voteRepository, never()).findByRoomIdOrderByCreatedAtDesc(waitingRoom.getId());
+    }
+
+    @Test
+    void getMyChatRooms_formatsMentionAllLastMessagePreview() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
+        TeamAccountRepository teamAccountRepository = mock(TeamAccountRepository.class);
+        TeamHoldingRepository teamHoldingRepository = mock(TeamHoldingRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatRoomService service = new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatMessageRepository,
+                teamAccountRepository,
+                teamHoldingRepository,
+                voteRepository,
+                voteParticipantRepository,
+                kisApiService
+        );
+
+        User user = User.builder().id(10L).nickname("tester").build();
+        MatchingRoom room = MatchingRoom.builder()
+                .id(3L)
+                .name("테스트방")
+                .capacity(3)
+                .memberCount(2)
+                .status("started")
+                .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
+                .build();
+        MatchingRoomMember membership = MatchingRoomMember.builder()
+                .id(1L)
+                .matchingRoom(room)
+                .user(user)
+                .joinedAt(Instant.parse("2026-05-17T00:10:00Z"))
+                .build();
+        ChatMessage mentionAllMessage = ChatMessage.of(
+                room.getId(),
+                user.getId(),
+                user.getNickname(),
+                "{\"type\":\"mention_all\",\"message\":\"모든 팀원을 호출했어요!\",\"callerId\":10,\"callerNickname\":\"tester\"}"
+        );
+        mentionAllMessage.setId(123L);
+
+        when(matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(user.getId())).thenReturn(List.of(membership));
+        when(teamAccountRepository.findByTeamId(room.getId())).thenReturn(Optional.empty());
+        when(teamHoldingRepository.findByTeamId(room.getId())).thenReturn(List.of());
+        when(chatMessageRepository.findTopByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(Optional.of(mentionAllMessage));
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(List.of());
+
+        List<Map<String, Object>> rooms = service.getMyChatRooms(user);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> lastMessage = (Map<String, Object>) rooms.get(0).get("lastMessage");
+        assertEquals("mention_all", lastMessage.get("type"));
+        assertEquals("모든 팀원을 호출했어요!", lastMessage.get("preview"));
+        assertEquals("전체 호출", lastMessage.get("title"));
     }
 
     @Test

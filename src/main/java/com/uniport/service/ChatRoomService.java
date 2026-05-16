@@ -311,6 +311,11 @@ public class ChatRoomService {
                     preview.put("preview", title);
                     preview.put("title", "뉴스 공유");
                     preview.put("description", "팀원이 함께 볼 뉴스를 공유했어요.");
+                } else if (ChatService.TYPE_MENTION_ALL.equals(type)) {
+                    Object mentionMessage = parsed.get("message");
+                    preview.put("preview", mentionMessage != null ? String.valueOf(mentionMessage) : ChatService.MENTION_ALL_MESSAGE);
+                    preview.put("title", "전체 호출");
+                    preview.put("description", "팀원이 모두에게 알림을 보냈어요.");
                 }
             } catch (Exception ignored) {
             }
