@@ -88,6 +88,36 @@ class PushNotificationServiceTest {
     }
 
     @Test
+    void sendChatRoomCreatedSendsRoomPayloadToAllMembers() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(7L, List.of(pushToken("first-token")));
+        pushTokenService.tokensByUserId.put(8L, List.of(pushToken("second-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        MatchingRoom room = MatchingRoom.create("랜덤 매칭방", 3);
+        room.setId(260L);
+
+        service.sendChatRoomCreated(room, List.of(7L, 8L));
+
+        assertEquals(2, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("first-token", message.getToken());
+        assertEquals("채팅방이 생성됐어요", message.getTitle());
+        assertTrue(message.getBody().contains("랜덤 매칭방"));
+        assertEquals("chat_room_created", message.getData().get("type"));
+        assertEquals("260", message.getData().get("entityId"));
+        assertEquals("260", message.getData().get("roomId"));
+        assertEquals(
+                "https://uniportbe-production.up.railway.app/matching-room?roomId=260",
+                message.getData().get("deeplink")
+        );
+    }
+
+    @Test
     void sendChatMentionAllSendsMentionPayloadToRoomMembersExceptCaller() {
         FakePushTokenService pushTokenService = new FakePushTokenService();
         pushTokenService.tokensByUserId.put(8L, List.of(pushToken("member-token")));

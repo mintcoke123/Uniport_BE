@@ -75,6 +75,24 @@ public class PushNotificationService {
         );
     }
 
+    public void sendChatRoomCreated(MatchingRoom room, List<Long> roomMemberUserIds) {
+        if (room == null || room.getId() == null || roomMemberUserIds == null || roomMemberUserIds.isEmpty()) {
+            return;
+        }
+        String roomName = valueOrDefault(room.getName(), "매칭방");
+        sendToUsers(
+                roomMemberUserIds,
+                "채팅방이 생성됐어요",
+                roomName + " 채팅방이 생성됐어요.",
+                Map.of(
+                        "type", "chat_room_created",
+                        "deeplink", matchingRoomLink(room.getId()),
+                        "entityId", String.valueOf(room.getId()),
+                        "roomId", String.valueOf(room.getId())
+                )
+        );
+    }
+
     public void sendChatMentionAll(Long roomId, User caller, List<Long> roomMemberUserIds) {
         if (roomId == null || roomMemberUserIds == null || roomMemberUserIds.isEmpty()) {
             return;

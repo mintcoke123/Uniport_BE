@@ -201,6 +201,23 @@ class MatchingRoomServiceTest {
         assertTrue(!room.getEndedAt().isAfter(expectedLatestEnd));
     }
 
+    @Test
+    void start_sendsChatRoomCreatedPushToAllRandomRoomMembersWhenWaitingRoomStarts() {
+        User firstUser = persistUser("20263015", "random-first");
+        User secondUser = persistUser("20263016", "random-second");
+        MatchingRoom room = MatchingRoom.create("랜덤 매칭방", 3);
+        room.setMatchType("RANDOM");
+        entityManager.persist(room);
+        entityManager.persist(MatchingRoomMember.of(room, firstUser));
+        entityManager.persist(MatchingRoomMember.of(room, secondUser));
+        room.setMemberCount(2);
+        entityManager.flush();
+
+        matchingRoomService.start("room-" + room.getId(), secondUser);
+
+        verify(pushNotificationService).sendChatRoomCreated(room, List.of(firstUser.getId(), secondUser.getId()));
+    }
+
     private User persistUser(String studentId, String nickname) {
         User user = User.builder()
                 .studentId(studentId)

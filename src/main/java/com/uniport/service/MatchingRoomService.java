@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -217,6 +218,7 @@ public class MatchingRoomService {
             throw new ApiException("단체 매칭은 2명 이상 모여야 시작할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
 
+        boolean waitingRoomStarted = "waiting".equalsIgnoreCase(room.getStatus());
         boolean startedNow = !"started".equals(room.getStatus());
         boolean missingEndTime = room.getEndedAt() == null;
         if (startedNow || missingEndTime) {
@@ -238,6 +240,15 @@ public class MatchingRoomService {
                     joinedUser.setTeamId(teamIdStr);
                     userRepository.save(joinedUser);
                 }
+            }
+            if (waitingRoomStarted && "RANDOM".equalsIgnoreCase(room.getMatchType())) {
+                List<Long> memberUserIds = members.stream()
+                        .map(MatchingRoomMember::getUser)
+                        .filter(Objects::nonNull)
+                        .map(User::getId)
+                        .filter(Objects::nonNull)
+                        .toList();
+                pushNotificationService.sendChatRoomCreated(room, memberUserIds);
             }
         }
 
