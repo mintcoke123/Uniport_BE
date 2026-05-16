@@ -16,6 +16,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -177,6 +179,26 @@ class MatchingRoomServiceTest {
 
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
         assertEquals("개인방에서는 전체 호출을 사용할 수 없습니다.", exception.getMessage());
+    }
+
+    @Test
+    void start_setsSevenDayEndTimeForFeedbackReportGeneration() {
+        User user = persistUser("20263014", "session-user");
+        MatchingRoom room = MatchingRoom.create("일주일 투자방", 1);
+        entityManager.persist(room);
+        entityManager.persist(MatchingRoomMember.of(room, user));
+        room.setMemberCount(1);
+        entityManager.flush();
+        Instant beforeStart = Instant.now();
+
+        matchingRoomService.start("room-" + room.getId(), user);
+
+        entityManager.flush();
+        assertEquals("started", room.getStatus());
+        Instant expectedEarliestEnd = beforeStart.plus(Duration.ofDays(7));
+        Instant expectedLatestEnd = Instant.now().plus(Duration.ofDays(7));
+        assertTrue(!room.getEndedAt().isBefore(expectedEarliestEnd));
+        assertTrue(!room.getEndedAt().isAfter(expectedLatestEnd));
     }
 
     private User persistUser(String studentId, String nickname) {

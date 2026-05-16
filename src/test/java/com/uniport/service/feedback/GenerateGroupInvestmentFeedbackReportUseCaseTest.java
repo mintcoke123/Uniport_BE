@@ -18,6 +18,7 @@ import com.uniport.service.TradeNewsContextService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -264,6 +265,147 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         assertEquals("FALLBACK_SYMBOL", visual.get("type"));
         assertEquals("NEGATIVE", newsContext.get("beforeSentiment"));
         assertEquals("POSITIVE", newsContext.get("afterSentiment"));
+    }
+
+    @Test
+    void generatePendingReports_endsExpiredStartedRoomAndPublishesReport() {
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        GroupInvestmentFeedbackReportRepository reportRepository = mock(GroupInvestmentFeedbackReportRepository.class);
+        GroupInvestmentMemberFeedbackRepository memberFeedbackRepository = mock(GroupInvestmentMemberFeedbackRepository.class);
+        GroupInvestmentEndPriceProvider endPriceProvider = mock(GroupInvestmentEndPriceProvider.class);
+        FeedbackCommentGenerator commentGenerator = mock(FeedbackCommentGenerator.class);
+        GroupInvestmentPointSettlementService pointSettlementService = mock(GroupInvestmentPointSettlementService.class);
+        StockVisualAssetResolver stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        TradeNewsContextService tradeNewsContextService = mock(TradeNewsContextService.class);
+        ChatService chatService = mock(ChatService.class);
+        GenerateGroupInvestmentFeedbackReportUseCase useCase = new GenerateGroupInvestmentFeedbackReportUseCase(
+                matchingRoomRepository,
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                reportRepository,
+                memberFeedbackRepository,
+                endPriceProvider,
+                new GroupInvestmentFeedbackCalculator(),
+                new MemberDecisionFeedbackAnalyzer(),
+                commentGenerator,
+                pointSettlementService,
+                stockVisualAssetResolver,
+                tradeNewsContextService,
+                chatService
+        );
+        MatchingRoom room = MatchingRoom.builder()
+                .id(1L)
+                .name("만료된 투자방")
+                .capacity(3)
+                .memberCount(2)
+                .status("started")
+                .endedAt(Instant.now().minusSeconds(60))
+                .createdAt(Instant.parse("2026-01-21T13:00:00Z"))
+                .build();
+        when(matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("started"), any(Instant.class)))
+                .thenReturn(List.of(room));
+        when(matchingRoomRepository.findByStatusAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(eq("started"), any(Instant.class)))
+                .thenReturn(List.of());
+        when(matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("ended"), any(Instant.class)))
+                .thenReturn(List.of());
+        when(reportRepository.existsBySessionId(1L)).thenReturn(false);
+        when(matchingRoomRepository.findById(1L)).thenReturn(Optional.of(room));
+        when(reportRepository.findBySessionId(1L)).thenReturn(Optional.empty());
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(1L)).thenReturn(List.of());
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(1L)).thenReturn(List.of());
+        when(commentGenerator.generate(any(GroupInvestmentFeedbackCalculation.class)))
+                .thenReturn(new GeneratedFeedbackComment("이번 라운드는 분석할 거래가 부족해요.", "TEMPLATE"));
+        when(reportRepository.save(any(GroupInvestmentFeedbackReport.class))).thenAnswer(invocation -> {
+            GroupInvestmentFeedbackReport report = invocation.getArgument(0);
+            if (report.getId() == null) {
+                report.setId(7L);
+            }
+            return report;
+        });
+        when(chatService.saveFeedbackReportMessage(eq(1L), eq(7L), anyMap()))
+                .thenReturn(ChatMessage.of(1L, 0L, "시스템", "{}"));
+
+        int generated = useCase.generatePendingReports();
+
+        assertEquals(1, generated);
+        assertEquals("ended", room.getStatus());
+        verify(matchingRoomRepository).save(room);
+        verify(chatService).saveFeedbackReportMessage(eq(1L), eq(7L), anyMap());
+    }
+
+    @Test
+    void generatePendingReports_endsLegacyStartedRoomWithoutEndTimeAfterSevenDays() {
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        GroupInvestmentFeedbackReportRepository reportRepository = mock(GroupInvestmentFeedbackReportRepository.class);
+        GroupInvestmentMemberFeedbackRepository memberFeedbackRepository = mock(GroupInvestmentMemberFeedbackRepository.class);
+        GroupInvestmentEndPriceProvider endPriceProvider = mock(GroupInvestmentEndPriceProvider.class);
+        FeedbackCommentGenerator commentGenerator = mock(FeedbackCommentGenerator.class);
+        GroupInvestmentPointSettlementService pointSettlementService = mock(GroupInvestmentPointSettlementService.class);
+        StockVisualAssetResolver stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        TradeNewsContextService tradeNewsContextService = mock(TradeNewsContextService.class);
+        ChatService chatService = mock(ChatService.class);
+        GenerateGroupInvestmentFeedbackReportUseCase useCase = new GenerateGroupInvestmentFeedbackReportUseCase(
+                matchingRoomRepository,
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                reportRepository,
+                memberFeedbackRepository,
+                endPriceProvider,
+                new GroupInvestmentFeedbackCalculator(),
+                new MemberDecisionFeedbackAnalyzer(),
+                commentGenerator,
+                pointSettlementService,
+                stockVisualAssetResolver,
+                tradeNewsContextService,
+                chatService
+        );
+        Instant createdAt = Instant.now().minus(Duration.ofDays(8));
+        MatchingRoom room = MatchingRoom.builder()
+                .id(2L)
+                .name("레거시 투자방")
+                .capacity(3)
+                .memberCount(2)
+                .status("started")
+                .createdAt(createdAt)
+                .build();
+        when(matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("started"), any(Instant.class)))
+                .thenReturn(List.of());
+        when(matchingRoomRepository.findByStatusAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(eq("started"), any(Instant.class)))
+                .thenReturn(List.of(room));
+        when(matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("ended"), any(Instant.class)))
+                .thenReturn(List.of());
+        when(reportRepository.existsBySessionId(2L)).thenReturn(false);
+        when(matchingRoomRepository.findById(2L)).thenReturn(Optional.of(room));
+        when(reportRepository.findBySessionId(2L)).thenReturn(Optional.empty());
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(2L)).thenReturn(List.of());
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(2L)).thenReturn(List.of());
+        when(commentGenerator.generate(any(GroupInvestmentFeedbackCalculation.class)))
+                .thenReturn(new GeneratedFeedbackComment("이번 라운드는 분석할 거래가 부족해요.", "TEMPLATE"));
+        when(reportRepository.save(any(GroupInvestmentFeedbackReport.class))).thenAnswer(invocation -> {
+            GroupInvestmentFeedbackReport report = invocation.getArgument(0);
+            if (report.getId() == null) {
+                report.setId(8L);
+            }
+            return report;
+        });
+        when(chatService.saveFeedbackReportMessage(eq(2L), eq(8L), anyMap()))
+                .thenReturn(ChatMessage.of(2L, 0L, "시스템", "{}"));
+
+        int generated = useCase.generatePendingReports();
+
+        assertEquals(1, generated);
+        assertEquals("ended", room.getStatus());
+        assertEquals(createdAt.plus(Duration.ofDays(7)), room.getEndedAt());
+        verify(matchingRoomRepository).save(room);
+        verify(chatService).saveFeedbackReportMessage(eq(2L), eq(8L), anyMap());
     }
 
     private StockVisualDTO visual(String text) {

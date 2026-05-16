@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,6 +34,7 @@ public class MatchingRoomService {
     private static final String BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final int INVITE_CODE_LENGTH = 8;
     private static final int INVITE_CODE_MAX_RETRIES = 10;
+    private static final Duration MOCK_INVESTMENT_SESSION_DURATION = Duration.ofDays(7);
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final MatchingRoomRepository matchingRoomRepository;
@@ -214,10 +217,19 @@ public class MatchingRoomService {
             throw new ApiException("단체 매칭은 2명 이상 모여야 시작할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
 
-        if (!"started".equals(room.getStatus())) {
-            room.setStatus("started");
+        boolean startedNow = !"started".equals(room.getStatus());
+        boolean missingEndTime = room.getEndedAt() == null;
+        if (startedNow || missingEndTime) {
+            if (startedNow) {
+                room.setStatus("started");
+            }
+            if (missingEndTime) {
+                room.setEndedAt(Instant.now().plus(MOCK_INVESTMENT_SESSION_DURATION));
+            }
             matchingRoomRepository.save(room);
+        }
 
+        if (startedNow) {
             String teamIdStr = "team-" + room.getId();
             List<MatchingRoomMember> members = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());
             for (MatchingRoomMember m : members) {

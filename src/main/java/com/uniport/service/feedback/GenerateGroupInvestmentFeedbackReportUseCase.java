@@ -28,9 +28,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +46,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(GenerateGroupInvestmentFeedbackReportUseCase.class);
     public static final BigDecimal INITIAL_TEAM_CAPITAL = new BigDecimal("10000000");
+    private static final Duration MOCK_INVESTMENT_SESSION_DURATION = Duration.ofDays(7);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final MatchingRoomRepository matchingRoomRepository;
@@ -178,15 +181,47 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
 
     @Transactional
     public int generatePendingReports() {
+        Instant now = Instant.now();
         int generated = 0;
-        for (MatchingRoom room : matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc("ended", Instant.now())) {
-            if (room.getId() == null || reportRepository.existsBySessionId(room.getId())) {
+        Set<Long> processedRoomIds = new HashSet<>();
+        for (MatchingRoom room : matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc("started", now)) {
+            generated += endStartedRoomAndGenerateReport(room, processedRoomIds);
+        }
+        Instant legacyStartedCutoff = now.minus(MOCK_INVESTMENT_SESSION_DURATION);
+        for (MatchingRoom room : matchingRoomRepository.findByStatusAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc("started", legacyStartedCutoff)) {
+            if (room.getId() == null || processedRoomIds.contains(room.getId())) {
+                continue;
+            }
+            Instant inferredEndedAt = room.getCreatedAt() != null
+                    ? room.getCreatedAt().plus(MOCK_INVESTMENT_SESSION_DURATION)
+                    : now;
+            if (inferredEndedAt.isAfter(now)) {
+                continue;
+            }
+            room.setEndedAt(inferredEndedAt);
+            generated += endStartedRoomAndGenerateReport(room, processedRoomIds);
+        }
+        for (MatchingRoom room : matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc("ended", now)) {
+            if (room.getId() == null || processedRoomIds.contains(room.getId()) || reportRepository.existsBySessionId(room.getId())) {
                 continue;
             }
             generateForRoom(room.getId());
             generated++;
         }
         return generated;
+    }
+
+    private int endStartedRoomAndGenerateReport(MatchingRoom room, Set<Long> processedRoomIds) {
+        if (room.getId() == null || !processedRoomIds.add(room.getId())) {
+            return 0;
+        }
+        room.setStatus("ended");
+        matchingRoomRepository.save(room);
+        if (reportRepository.existsBySessionId(room.getId())) {
+            return 0;
+        }
+        generateForRoom(room.getId());
+        return 1;
     }
 
     @Transactional(readOnly = true)
