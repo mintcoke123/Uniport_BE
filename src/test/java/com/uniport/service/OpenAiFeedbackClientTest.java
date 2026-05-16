@@ -88,15 +88,15 @@ class OpenAiFeedbackClientTest {
         Assertions.assertTrue(prompt.contains("한 줄 결론:"));
         Assertions.assertTrue(prompt.contains("핵심 원인:"));
         Assertions.assertTrue(prompt.contains("가장 큰 리스크:"));
-        Assertions.assertTrue(prompt.contains("확인할 것:"));
+        Assertions.assertTrue(prompt.contains("조정 방향:"));
         Assertions.assertTrue(prompt.contains("actual holding names and weights"));
-        Assertions.assertTrue(prompt.contains("why the user's portfolio behaved that way"));
+        Assertions.assertTrue(prompt.contains("portfolio's character"));
         Assertions.assertTrue(prompt.contains("Do not replay metrics the user can already see"));
         Assertions.assertTrue(prompt.contains("Make a clear judgment"));
         Assertions.assertTrue(prompt.contains("plain, subjective, intuitive Korean"));
-        Assertions.assertTrue(prompt.contains("whether a candidate stock is worth adding"));
-        Assertions.assertTrue(prompt.contains("추가 검토 가능"));
-        Assertions.assertTrue(prompt.contains("관찰 우선"));
+        Assertions.assertTrue(prompt.contains("portfolio-fit judgment"));
+        Assertions.assertTrue(prompt.contains("rebalancing direction"));
+        Assertions.assertTrue(prompt.contains("conditions to check before adding"));
     }
 
     private InsightFacts baseFacts() {

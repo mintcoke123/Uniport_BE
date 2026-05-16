@@ -62,8 +62,8 @@ class FinbertFeedbackClientTest {
         assertTrue(feedback.get().bullets().get(0).message().startsWith("핵심 원인:"));
         assertTrue(feedback.get().bullets().get(0).message().contains("Tesla 45.0%"));
         assertTrue(feedback.get().bullets().get(1).message().startsWith("가장 큰 리스크:"));
-        assertTrue(feedback.get().bullets().get(1).message().contains("최대 낙폭 -18.4%"));
-        assertTrue(feedback.get().bullets().get(2).message().startsWith("확인할 것:"));
+        assertTrue(feedback.get().bullets().get(1).message().contains("Tesla"));
+        assertTrue(feedback.get().bullets().get(2).message().startsWith("조정 방향:"));
         assertTrue(feedback.get().bullets().get(2).message().contains("인도량"));
         verify(restTemplate).postForObject(eq("http://localhost:8011/analyze"), any(HttpEntity.class), eq(Map.class));
     }

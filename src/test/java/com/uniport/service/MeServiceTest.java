@@ -39,6 +39,9 @@ class MeServiceTest {
     @Mock
     private StockVisualAssetResolver stockVisualAssetResolver;
 
+    @Mock
+    private StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
+
     @InjectMocks
     private MeService meService;
 
