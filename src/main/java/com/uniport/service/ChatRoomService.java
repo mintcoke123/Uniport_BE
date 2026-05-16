@@ -32,6 +32,7 @@ import java.util.Optional;
 @Service
 public class ChatRoomService {
 
+    private static final String ROOM_STATUS_STARTED = "started";
     private static final BigDecimal INITIAL_TEAM_BALANCE = new BigDecimal("10000000");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -69,6 +70,9 @@ public class ChatRoomService {
         for (MatchingRoomMember membership : memberships) {
             MatchingRoom room = membership.getMatchingRoom();
             if (room == null || room.getId() == null) {
+                continue;
+            }
+            if (!ROOM_STATUS_STARTED.equalsIgnoreCase(room.getStatus())) {
                 continue;
             }
             Map<String, Object> roomMap = new HashMap<>();

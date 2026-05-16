@@ -31,6 +31,73 @@ import static org.mockito.Mockito.when;
 class ChatRoomServiceTest {
 
     @Test
+    void getMyChatRooms_returnsOnlyStartedRooms() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
+        TeamAccountRepository teamAccountRepository = mock(TeamAccountRepository.class);
+        TeamHoldingRepository teamHoldingRepository = mock(TeamHoldingRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatRoomService service = new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatMessageRepository,
+                teamAccountRepository,
+                teamHoldingRepository,
+                voteRepository,
+                voteParticipantRepository,
+                kisApiService
+        );
+
+        User user = User.builder().id(10L).nickname("tester").build();
+        MatchingRoom startedRoom = MatchingRoom.builder()
+                .id(3L)
+                .name("시작된 방")
+                .capacity(3)
+                .memberCount(3)
+                .status("started")
+                .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
+                .build();
+        MatchingRoom waitingRoom = MatchingRoom.builder()
+                .id(4L)
+                .name("대기 중인 방")
+                .capacity(3)
+                .memberCount(1)
+                .status("waiting")
+                .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
+                .build();
+        MatchingRoomMember startedMembership = MatchingRoomMember.builder()
+                .id(1L)
+                .matchingRoom(startedRoom)
+                .user(user)
+                .joinedAt(Instant.parse("2026-05-17T00:10:00Z"))
+                .build();
+        MatchingRoomMember waitingMembership = MatchingRoomMember.builder()
+                .id(2L)
+                .matchingRoom(waitingRoom)
+                .user(user)
+                .joinedAt(Instant.parse("2026-05-17T00:20:00Z"))
+                .build();
+
+        when(matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(user.getId()))
+                .thenReturn(List.of(waitingMembership, startedMembership));
+        when(teamAccountRepository.findByTeamId(startedRoom.getId())).thenReturn(Optional.empty());
+        when(teamHoldingRepository.findByTeamId(startedRoom.getId())).thenReturn(List.of());
+        when(chatMessageRepository.findTopByRoomIdOrderByCreatedAtDesc(startedRoom.getId())).thenReturn(Optional.empty());
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(startedRoom.getId())).thenReturn(List.of());
+
+        List<Map<String, Object>> rooms = service.getMyChatRooms(user);
+
+        assertEquals(1, rooms.size());
+        assertEquals(startedRoom.getId(), rooms.get(0).get("roomId"));
+        verify(teamAccountRepository, never()).findByTeamId(waitingRoom.getId());
+        verify(chatMessageRepository, never()).findTopByRoomIdOrderByCreatedAtDesc(waitingRoom.getId());
+        verify(voteRepository, never()).findByRoomIdOrderByCreatedAtDesc(waitingRoom.getId());
+    }
+
+    @Test
     void getMyChatRooms_buildsActiveVoteSummaryFromParticipantRepository() {
         MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
         MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
@@ -165,6 +232,7 @@ class ChatRoomServiceTest {
                 .name("테스트방")
                 .capacity(3)
                 .memberCount(2)
+                .status("started")
                 .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
                 .build();
         MatchingRoomMember membership = MatchingRoomMember.builder()
@@ -216,6 +284,7 @@ class ChatRoomServiceTest {
                 .name("테스트방")
                 .capacity(3)
                 .memberCount(2)
+                .status("started")
                 .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
                 .build();
         MatchingRoomMember membership = MatchingRoomMember.builder()
