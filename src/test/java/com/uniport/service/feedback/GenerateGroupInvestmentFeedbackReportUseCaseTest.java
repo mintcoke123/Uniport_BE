@@ -2,7 +2,10 @@ package com.uniport.service.feedback;
 
 import com.uniport.entity.ChatMessage;
 import com.uniport.entity.GroupInvestmentFeedbackReport;
+import com.uniport.entity.GroupInvestmentMemberFeedback;
+import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.MatchingRoom;
+import com.uniport.entity.User;
 import com.uniport.entity.Vote;
 import com.uniport.dto.StockVisualDTO;
 import com.uniport.repository.GroupInvestmentFeedbackReportRepository;
@@ -12,6 +15,7 @@ import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import com.uniport.service.ChatService;
+import com.uniport.service.PushNotificationService;
 import com.uniport.service.StockVisualAssetResolver;
 import com.uniport.service.TradeNewsContext;
 import com.uniport.service.TradeNewsContextService;
@@ -48,6 +52,7 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         StockVisualAssetResolver stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
         TradeNewsContextService tradeNewsContextService = mock(TradeNewsContextService.class);
         ChatService chatService = mock(ChatService.class);
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
         GenerateGroupInvestmentFeedbackReportUseCase useCase = new GenerateGroupInvestmentFeedbackReportUseCase(
                 matchingRoomRepository,
                 voteRepository,
@@ -62,7 +67,8 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 pointSettlementService,
                 stockVisualAssetResolver,
                 tradeNewsContextService,
-                chatService
+                chatService,
+                pushNotificationService
         );
         Instant endedAt = Instant.parse("2026-01-28T13:00:00Z");
         MatchingRoom room = MatchingRoom.builder()
@@ -77,7 +83,10 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         when(matchingRoomRepository.findById(1L)).thenReturn(Optional.of(room));
         when(reportRepository.findBySessionId(1L)).thenReturn(Optional.empty());
         when(voteRepository.findByRoomIdOrderByCreatedAtDesc(1L)).thenReturn(List.of());
-        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(1L)).thenReturn(List.of());
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(1L)).thenReturn(List.of(
+                MatchingRoomMember.of(room, User.builder().id(10L).studentId("10").password("p").nickname("A").build()),
+                MatchingRoomMember.of(room, User.builder().id(20L).studentId("20").password("p").nickname("B").build())
+        ));
         when(commentGenerator.generate(any(GroupInvestmentFeedbackCalculation.class)))
                 .thenReturn(new GeneratedFeedbackComment("이번 라운드는 분석할 거래가 부족해요. 다음에는 제안과 투표를 더 남겨보세요.", "TEMPLATE"));
         when(reportRepository.save(any(GroupInvestmentFeedbackReport.class))).thenAnswer(invocation -> {
@@ -89,6 +98,7 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         });
         when(chatService.saveFeedbackReportMessage(eq(1L), eq(7L), anyMap()))
                 .thenReturn(ChatMessage.of(1L, 0L, "시스템", "{}"));
+        when(memberFeedbackRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         Map<String, Object> response = useCase.generateForRoom(1L);
 
@@ -96,8 +106,18 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         assertEquals(7L, response.get("reportId"));
         assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) response.get("profitAmount")));
         verify(chatService).saveFeedbackReportMessage(eq(1L), eq(7L), anyMap());
-        verify(memberFeedbackRepository).saveAll(List.of());
-        verify(pointSettlementService).settle(any(GroupInvestmentFeedbackReport.class), eq(List.of()));
+        verify(pushNotificationService).sendGroupInvestmentFeedbackReport(
+                eq(1L),
+                eq(7L),
+                eq("+0.0%"),
+                eq(0),
+                eq(0),
+                eq(List.of(10L, 20L))
+        );
+        verify(pushNotificationService).sendGroupInvestmentPointSettlement(eq(1L), eq(7L), eq(10L), eq(0), eq(0));
+        verify(pushNotificationService).sendGroupInvestmentPointSettlement(eq(1L), eq(7L), eq(20L), eq(0), eq(0));
+        verify(memberFeedbackRepository).saveAll(any());
+        verify(pointSettlementService).settle(any(GroupInvestmentFeedbackReport.class), any());
     }
 
     @Test
@@ -128,7 +148,8 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 pointSettlementService,
                 stockVisualAssetResolver,
                 tradeNewsContextService,
-                chatService
+                chatService,
+                mock(PushNotificationService.class)
         );
         MatchingRoom room = MatchingRoom.builder()
                 .id(1L)
@@ -166,6 +187,68 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
     }
 
     @Test
+    void responseClampsNegativeSettledPointAndExpToZero() {
+        GenerateGroupInvestmentFeedbackReportUseCase useCase = new GenerateGroupInvestmentFeedbackReportUseCase(
+                mock(MatchingRoomRepository.class),
+                mock(VoteRepository.class),
+                mock(VoteParticipantRepository.class),
+                mock(MatchingRoomMemberRepository.class),
+                mock(GroupInvestmentFeedbackReportRepository.class),
+                mock(GroupInvestmentMemberFeedbackRepository.class),
+                mock(GroupInvestmentEndPriceProvider.class),
+                new GroupInvestmentFeedbackCalculator(),
+                new MemberDecisionFeedbackAnalyzer(),
+                mock(FeedbackCommentGenerator.class),
+                mock(GroupInvestmentPointSettlementService.class),
+                mock(StockVisualAssetResolver.class),
+                mock(TradeNewsContextService.class),
+                mock(ChatService.class),
+                mock(PushNotificationService.class)
+        );
+        GroupInvestmentFeedbackReport report = GroupInvestmentFeedbackReport.builder()
+                .id(7L)
+                .sessionId(1L)
+                .roomId(1L)
+                .status("PUBLISHED")
+                .initialCapital(new BigDecimal("10000000"))
+                .finalEquity(new BigDecimal("10000000"))
+                .profitAmount(BigDecimal.ZERO)
+                .returnRate(BigDecimal.ZERO)
+                .aiComment("comment")
+                .aiSource("TEMPLATE")
+                .endedAt(Instant.parse("2026-01-28T13:00:00Z"))
+                .generatedAt(Instant.parse("2026-01-28T13:01:00Z"))
+                .pointSettlementStatus("SETTLED")
+                .build();
+        GroupInvestmentMemberFeedback member = GroupInvestmentMemberFeedback.builder()
+                .id(1L)
+                .report(report)
+                .memberId(10L)
+                .nickname("A")
+                .representativeDecision("삼성전자 매수 제안")
+                .level("LOW")
+                .contributionAmount(BigDecimal.ZERO)
+                .contributionRate(new BigDecimal("-3.0"))
+                .participatedDecisionCount(1)
+                .totalDecisionCount(2)
+                .participationRate(new BigDecimal("50.0"))
+                .settledPoint(-300)
+                .settledExp(-100)
+                .pointSettlementStatus("SETTLED")
+                .sortOrder(0)
+                .build();
+
+        Map<String, Object> response = useCase.toResponse(report, List.of(member));
+
+        assertEquals(0, response.get("totalSettledPoint"));
+        assertEquals(0, response.get("totalSettledExp"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> members = (List<Map<String, Object>>) response.get("memberAnalyses");
+        assertEquals(0, members.get(0).get("settledPoint"));
+        assertEquals(0, members.get(0).get("settledExp"));
+    }
+
+    @Test
     void generatedTradeSnapshotIncludesStockVisual() {
         MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
         VoteRepository voteRepository = mock(VoteRepository.class);
@@ -193,7 +276,8 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 pointSettlementService,
                 stockVisualAssetResolver,
                 tradeNewsContextService,
-                chatService
+                chatService,
+                mock(PushNotificationService.class)
         );
         Instant endedAt = Instant.parse("2026-01-28T13:00:00Z");
         MatchingRoom room = MatchingRoom.builder()
@@ -295,7 +379,8 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 pointSettlementService,
                 stockVisualAssetResolver,
                 tradeNewsContextService,
-                chatService
+                chatService,
+                mock(PushNotificationService.class)
         );
         MatchingRoom room = MatchingRoom.builder()
                 .id(1L)
@@ -365,7 +450,8 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 pointSettlementService,
                 stockVisualAssetResolver,
                 tradeNewsContextService,
-                chatService
+                chatService,
+                mock(PushNotificationService.class)
         );
         Instant createdAt = Instant.now().minus(Duration.ofDays(8));
         MatchingRoom room = MatchingRoom.builder()

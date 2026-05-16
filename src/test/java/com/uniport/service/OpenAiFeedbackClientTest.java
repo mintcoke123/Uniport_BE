@@ -4,8 +4,10 @@ import com.uniport.service.backtest.InsightFacts;
 import com.uniport.service.backtest.OpenAiFeedbackClient;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.mockito.ArgumentCaptor;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OpenAiFeedbackClientTest {
+
+    @Test
+    void applicationConfig_enablesOpenAiFeedbackByDefaultWhenApiKeyExists() {
+        YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+        yaml.setResources(new ClassPathResource("application.yaml"));
+
+        assertEquals("${OPENAI_FEEDBACK_ENABLED:true}",
+                yaml.getObject().getProperty("openai.feedback.enabled"));
+    }
 
     @Test
     void generate_returnsEmptyWhenApiKeyIsMissing() {
@@ -78,6 +89,14 @@ class OpenAiFeedbackClientTest {
         Assertions.assertTrue(prompt.contains("핵심 원인:"));
         Assertions.assertTrue(prompt.contains("가장 큰 리스크:"));
         Assertions.assertTrue(prompt.contains("확인할 것:"));
+        Assertions.assertTrue(prompt.contains("actual holding names and weights"));
+        Assertions.assertTrue(prompt.contains("why the user's portfolio behaved that way"));
+        Assertions.assertTrue(prompt.contains("Do not replay metrics the user can already see"));
+        Assertions.assertTrue(prompt.contains("Make a clear judgment"));
+        Assertions.assertTrue(prompt.contains("plain, subjective, intuitive Korean"));
+        Assertions.assertTrue(prompt.contains("whether a candidate stock is worth adding"));
+        Assertions.assertTrue(prompt.contains("추가 검토 가능"));
+        Assertions.assertTrue(prompt.contains("관찰 우선"));
     }
 
     private InsightFacts baseFacts() {

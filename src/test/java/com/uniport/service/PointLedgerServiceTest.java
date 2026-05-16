@@ -3,6 +3,7 @@ package com.uniport.service;
 import com.uniport.entity.PointTransaction;
 import com.uniport.entity.PointWallet;
 import com.uniport.entity.User;
+import com.uniport.exception.ApiException;
 import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -66,23 +68,48 @@ class PointLedgerServiceTest {
     }
 
     @Test
-    void deductCreatesUseTransactionAndAllowsNegativeBalance() {
+    void deductRejectsWhenBalanceWouldBecomeNegative() {
         PointWalletRepository walletRepository = mock(PointWalletRepository.class);
         PointTransactionRepository transactionRepository = mock(PointTransactionRepository.class);
         PointLedgerService service = new PointLedgerService(walletRepository, transactionRepository);
         User user = User.builder().id(10L).nickname("A").studentId("1").password("p").build();
 
-        when(transactionRepository.findBySourceTypeAndSourceId("GROUP_FEEDBACK_REPORT", "member-2"))
+        when(transactionRepository.findBySourceTypeAndSourceId("SHOP_REDEMPTION", "order-1"))
                 .thenReturn(Optional.empty());
         when(walletRepository.findByUser_IdForUpdate(10L)).thenReturn(Optional.empty());
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.deduct(user, 300, "SHOP_REDEMPTION", "order-1", "포인트샵 사용")
+        );
+
+        assertEquals("보유 포인트가 부족합니다.", exception.getMessage());
+        verify(walletRepository, never()).save(any(PointWallet.class));
+        verify(transactionRepository, never()).save(any(PointTransaction.class));
+    }
+
+    @Test
+    void deductCreatesUseTransactionWhenBalanceIsEnough() {
+        PointWalletRepository walletRepository = mock(PointWalletRepository.class);
+        PointTransactionRepository transactionRepository = mock(PointTransactionRepository.class);
+        PointLedgerService service = new PointLedgerService(walletRepository, transactionRepository);
+        User user = User.builder().id(10L).nickname("A").studentId("1").password("p").build();
+        PointWallet wallet = PointWallet.builder()
+                .user(user)
+                .balance(500)
+                .build();
+
+        when(transactionRepository.findBySourceTypeAndSourceId("SHOP_REDEMPTION", "order-2"))
+                .thenReturn(Optional.empty());
+        when(walletRepository.findByUser_IdForUpdate(10L)).thenReturn(Optional.of(wallet));
         when(walletRepository.save(any(PointWallet.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(transactionRepository.save(any(PointTransaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        PointTransaction transaction = service.deduct(user, 300, "GROUP_FEEDBACK_REPORT", "member-2", "피드백 리포트 기여도 차감");
+        PointTransaction transaction = service.deduct(user, 300, "SHOP_REDEMPTION", "order-2", "포인트샵 사용");
 
         assertEquals("USE", transaction.getType());
         assertEquals(-300, transaction.getAmount());
-        assertEquals(-300, transaction.getBalanceAfter());
+        assertEquals(200, transaction.getBalanceAfter());
         verify(walletRepository).save(any(PointWallet.class));
         verify(transactionRepository).save(any(PointTransaction.class));
     }

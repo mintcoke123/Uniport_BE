@@ -97,6 +97,7 @@ class MemberDecisionFeedbackAnalyzerTest {
                 side,
                 10,
                 new BigDecimal("70000"),
+                "실적 개선 기대",
                 new BigDecimal(pnlAmount),
                 new BigDecimal("10.0"),
                 Instant.parse("2026-01-23T01:35:00Z")

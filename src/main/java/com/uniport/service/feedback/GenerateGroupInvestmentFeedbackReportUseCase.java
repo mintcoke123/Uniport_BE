@@ -17,6 +17,7 @@ import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import com.uniport.service.ChatService;
+import com.uniport.service.PushNotificationService;
 import com.uniport.service.StockVisualAssetResolver;
 import com.uniport.service.TradeNewsContext;
 import com.uniport.service.TradeNewsContextService;
@@ -63,6 +64,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final TradeNewsContextService tradeNewsContextService;
     private final ChatService chatService;
+    private final PushNotificationService pushNotificationService;
 
     public GenerateGroupInvestmentFeedbackReportUseCase(MatchingRoomRepository matchingRoomRepository,
                                                         VoteRepository voteRepository,
@@ -77,7 +79,8 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
                                                         GroupInvestmentPointSettlementService pointSettlementService,
                                                         StockVisualAssetResolver stockVisualAssetResolver,
                                                         TradeNewsContextService tradeNewsContextService,
-                                                        ChatService chatService) {
+                                                        ChatService chatService,
+                                                        PushNotificationService pushNotificationService) {
         this.matchingRoomRepository = matchingRoomRepository;
         this.voteRepository = voteRepository;
         this.voteParticipantRepository = voteParticipantRepository;
@@ -92,6 +95,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.tradeNewsContextService = tradeNewsContextService;
         this.chatService = chatService;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @Transactional
@@ -160,7 +164,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
             if (savedEntities != null) {
                 entities = savedEntities;
             }
-            pointSettlementService.settle(report, entities);
+            GroupInvestmentPointSettlementResult settlementResult = pointSettlementService.settle(report, entities);
 
             Map<String, Object> snapshot = toResponse(report, entities);
             try {
@@ -171,6 +175,18 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
                 log.warn("[group-feedback-report] report saved but chat message publish failed. roomId={} reportId={} error={}",
                         room.getId(), report.getId(), messageError.getMessage());
             }
+            pushNotificationService.sendGroupInvestmentFeedbackReport(
+                    room.getId(),
+                    report.getId(),
+                    signedDecimal(report.getReturnRate()) + "%",
+                    settlementResult != null ? settlementResult.totalSettledPoint() : totalSettledPoint(entities),
+                    settlementResult != null ? settlementResult.totalSettledExp() : totalSettledExp(entities),
+                    members.stream()
+                            .map(MemberSnapshot::memberId)
+                            .filter(Objects::nonNull)
+                            .toList()
+            );
+            sendPointSettlementNotifications(room.getId(), report.getId(), entities);
             return toResponse(report, entities);
         } catch (RuntimeException ex) {
             report.setStatus("FAILED");
@@ -256,6 +272,11 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
                 .filter(Integer.class::isInstance)
                 .map(Integer.class::cast)
                 .reduce(0, Integer::sum));
+        body.put("totalSettledExp", memberResponse.stream()
+                .map(item -> item.get("settledExp"))
+                .filter(Integer.class::isInstance)
+                .map(Integer.class::cast)
+                .reduce(0, Integer::sum));
         body.put("memberAnalyses", memberResponse);
         body.put("topMembers", memberResponse.stream().limit(3).toList());
         return body;
@@ -281,6 +302,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
                 "매도".equals(vote.getType()) ? TradeSide.SELL : TradeSide.BUY,
                 vote.getQuantity(),
                 price,
+                vote.getReason(),
                 BigDecimal.ZERO,
                 vote.getExecutedAt() != null ? vote.getExecutedAt() : vote.getCreatedAt()
         );
@@ -436,13 +458,60 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
                     map.put("participatedDecisionCount", item.getParticipatedDecisionCount());
                     map.put("totalDecisionCount", item.getTotalDecisionCount());
                     map.put("participationRate", item.getParticipationRate());
-                    map.put("settledPoint", item.getSettledPoint());
+                    map.put("settledPoint", nonNegative(item.getSettledPoint()));
+                    map.put("settledExp", nonNegative(item.getSettledExp()));
                     map.put("pointSettlementStatus", item.getPointSettlementStatus());
                     map.put("pointTransactionId", item.getPointTransactionId());
                     map.put("sortOrder", item.getSortOrder());
                     return map;
                 })
                 .toList();
+    }
+
+    private int totalSettledPoint(List<GroupInvestmentMemberFeedback> memberFeedbacks) {
+        if (memberFeedbacks == null) {
+            return 0;
+        }
+        return memberFeedbacks.stream()
+                .map(GroupInvestmentMemberFeedback::getSettledPoint)
+                .filter(Objects::nonNull)
+                .map(GenerateGroupInvestmentFeedbackReportUseCase::nonNegative)
+                .reduce(0, Integer::sum);
+    }
+
+    private int totalSettledExp(List<GroupInvestmentMemberFeedback> memberFeedbacks) {
+        if (memberFeedbacks == null) {
+            return 0;
+        }
+        return memberFeedbacks.stream()
+                .map(GroupInvestmentMemberFeedback::getSettledExp)
+                .filter(Objects::nonNull)
+                .map(GenerateGroupInvestmentFeedbackReportUseCase::nonNegative)
+                .reduce(0, Integer::sum);
+    }
+
+    private void sendPointSettlementNotifications(Long roomId,
+                                                  Long reportId,
+                                                  List<GroupInvestmentMemberFeedback> memberFeedbacks) {
+        if (memberFeedbacks == null) {
+            return;
+        }
+        for (GroupInvestmentMemberFeedback memberFeedback : memberFeedbacks) {
+            if (memberFeedback == null || memberFeedback.getMemberId() == null) {
+                continue;
+            }
+            pushNotificationService.sendGroupInvestmentPointSettlement(
+                    roomId,
+                    reportId,
+                    memberFeedback.getMemberId(),
+                    nonNegative(memberFeedback.getSettledPoint()),
+                    nonNegative(memberFeedback.getSettledExp())
+            );
+        }
+    }
+
+    private static int nonNegative(Integer value) {
+        return Math.max(value != null ? value : 0, 0);
     }
 
     private static String won(BigDecimal value) {
@@ -455,7 +524,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
     }
 
     private static String signedDecimal(BigDecimal value) {
-        String sign = value.compareTo(BigDecimal.ZERO) > 0 ? "+" : "";
+        String sign = value.compareTo(BigDecimal.ZERO) >= 0 ? "+" : "";
         return sign + value.setScale(1, RoundingMode.HALF_UP).toPlainString();
     }
 }

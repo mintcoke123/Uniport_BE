@@ -34,7 +34,7 @@ class EtfAiFeedbackServiceTest {
         RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
 
         assertTrue(feedback.summary().contains("기술"));
-        assertTrue(feedback.summary().contains("70.0%"));
+        assertTrue(feedback.summary().contains("기울어"));
         assertTrue(feedback.bullets().stream().anyMatch(bullet -> bullet.message().contains("집중")));
     }
 
@@ -49,7 +49,7 @@ class EtfAiFeedbackServiceTest {
         RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
 
         assertTrue(feedback.summary().contains("상위 종목"));
-        assertTrue(feedback.summary().contains("45.0%"));
+        assertTrue(!feedback.summary().contains("45.0%"));
     }
 
     @Test
@@ -73,9 +73,60 @@ class EtfAiFeedbackServiceTest {
         assertEquals(3, feedback.bullets().size());
         assertEquals("RISK", feedback.bullets().get(0).type());
         assertTrue(feedback.bullets().get(0).message().startsWith("핵심 원인:"));
-        assertTrue(feedback.bullets().get(0).message().contains("NVIDIA Corp. 45.0%"));
+        assertTrue(feedback.bullets().get(0).message().contains("NVIDIA Corp."));
+        assertTrue(feedback.bullets().get(0).message().contains("45.0%"));
+        assertTrue(feedback.bullets().get(0).message().contains("Apple Inc. 30.0%"));
         assertTrue(feedback.bullets().get(1).message().startsWith("가장 큰 리스크:"));
-        assertTrue(feedback.bullets().get(2).message().startsWith("확인할 것:"));
+        assertTrue(feedback.bullets().get(2).message().startsWith("조정 방향:"));
+    }
+
+    @Test
+    void buildFallbackFeedback_comparesActualHoldingMixWithWeights() {
+        InsightFacts facts = baseFacts()
+                .holdings(List.of(
+                        new BacktestHolding("US_NVDA", "NVIDIA", BigDecimal.valueOf(35.0), "반도체"),
+                        new BacktestHolding("US_AAPL", "Apple", BigDecimal.valueOf(25.0), "빅테크"),
+                        new BacktestHolding("US_MSFT", "Microsoft", BigDecimal.valueOf(20.0), "소프트웨어"),
+                        new BacktestHolding("US_JPM", "JPMorgan", BigDecimal.valueOf(20.0), "금융")
+                ))
+                .topHoldingName("NVIDIA")
+                .topHoldingWeightPercent(BigDecimal.valueOf(35.0))
+                .top3WeightPercent(BigDecimal.valueOf(80.0))
+                .dominantSector("혼합")
+                .dominantSectorWeightPercent(BigDecimal.valueOf(80.0))
+                .build();
+
+        RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
+
+        assertTrue(feedback.summary().contains("NVIDIA 35.0%"));
+        assertTrue(feedback.summary().contains("Apple 25.0%"));
+        assertTrue(feedback.bullets().get(0).message().contains("Microsoft 20.0%"));
+        assertTrue(feedback.bullets().get(1).message().contains("JPMorgan"));
+        assertTrue(!feedback.bullets().get(0).message().contains("상위 종목 몇 개"));
+    }
+
+    @Test
+    void buildFallbackFeedback_givesPortfolioCheckupStyleJudgmentAndRebalanceDirection() {
+        InsightFacts facts = baseFacts()
+                .holdings(List.of(
+                        new BacktestHolding("US_NVDA", "NVIDIA", BigDecimal.valueOf(55.0), "반도체"),
+                        new BacktestHolding("US_AMD", "AMD", BigDecimal.valueOf(25.0), "반도체"),
+                        new BacktestHolding("US_JPM", "JPMorgan", BigDecimal.valueOf(20.0), "금융")
+                ))
+                .topHoldingName("NVIDIA")
+                .topHoldingWeightPercent(BigDecimal.valueOf(55.0))
+                .top3WeightPercent(BigDecimal.valueOf(100.0))
+                .dominantSector("반도체")
+                .dominantSectorWeightPercent(BigDecimal.valueOf(80.0))
+                .build();
+
+        RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
+
+        assertTrue(feedback.summary().contains("포트폴리오"));
+        assertTrue(feedback.summary().contains("방어"));
+        assertTrue(feedback.bullets().get(1).message().contains("성장주 편중"));
+        assertTrue(feedback.bullets().get(2).message().startsWith("조정 방향:"));
+        assertTrue(feedback.bullets().get(2).message().contains("리밸런싱"));
     }
 
     @Test
@@ -100,10 +151,12 @@ class EtfAiFeedbackServiceTest {
         assertTrue(feedback.summary().contains("공격형"));
         assertEquals(3, feedback.bullets().size());
         assertTrue(feedback.bullets().get(0).message().startsWith("핵심 원인:"));
-        assertTrue(feedback.bullets().get(0).message().contains("NVIDIA 70.0%"));
+        assertTrue(feedback.bullets().get(0).message().contains("NVIDIA"));
+        assertTrue(feedback.bullets().get(0).message().contains("70.0%"));
+        assertTrue(feedback.bullets().get(0).message().contains("Apple 30.0%"));
         assertTrue(feedback.bullets().get(1).message().startsWith("가장 큰 리스크:"));
-        assertTrue(feedback.bullets().get(1).message().contains("최대 낙폭 -18.4%"));
-        assertTrue(feedback.bullets().get(2).message().startsWith("확인할 것:"));
+        assertTrue(feedback.bullets().get(1).message().contains("방어"));
+        assertTrue(feedback.bullets().get(2).message().startsWith("조정 방향:"));
         assertTrue(feedback.bullets().get(2).message().contains("AI 칩 수요"));
     }
 
@@ -159,6 +212,46 @@ class EtfAiFeedbackServiceTest {
         RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
 
         assertTrue(feedback.bullets().get(2).message().contains("인도량"));
+    }
+
+    @Test
+    void buildFallbackFeedback_usesHoldingNamesAndNewsRiskInCheckpoint() {
+        EtfNewsExposure newsExposure = new EtfNewsExposure(
+                BigDecimal.valueOf(10.0).setScale(1),
+                BigDecimal.valueOf(90.0).setScale(1),
+                3,
+                List.of(new HoldingNewsExposure(
+                        "US_NVDA",
+                        "NVIDIA",
+                        BigDecimal.valueOf(55.0).setScale(1),
+                        "NEGATIVE",
+                        0.86,
+                        2,
+                        "데이터센터 수요 둔화 우려가 커지고 있어요.",
+                        "NVIDIA 데이터센터 수요 둔화"
+                )),
+                List.of(),
+                List.of("NVIDIA 55.0%에 악재 뉴스가 우세해요: 데이터센터 수요 둔화 우려가 커지고 있어요.")
+        );
+        InsightFacts facts = baseFacts()
+                .holdings(List.of(
+                        new BacktestHolding("US_NVDA", "NVIDIA", BigDecimal.valueOf(55.0), "반도체"),
+                        new BacktestHolding("US_AMD", "AMD", BigDecimal.valueOf(25.0), "반도체"),
+                        new BacktestHolding("US_MSFT", "Microsoft", BigDecimal.valueOf(20.0), "소프트웨어")
+                ))
+                .topHoldingName("NVIDIA")
+                .topHoldingWeightPercent(BigDecimal.valueOf(55.0))
+                .top3WeightPercent(BigDecimal.valueOf(100.0))
+                .dominantSector("반도체")
+                .dominantSectorWeightPercent(BigDecimal.valueOf(80.0))
+                .newsExposure(newsExposure)
+                .riskFacts(List.of("NVIDIA 55.0%에 악재 뉴스가 우세해요: 데이터센터 수요 둔화 우려가 커지고 있어요."))
+                .build();
+
+        RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
+
+        assertTrue(feedback.bullets().get(2).message().contains("NVIDIA와 AMD"));
+        assertTrue(feedback.bullets().get(2).message().contains("데이터센터 수요 둔화"));
     }
 
     @Test

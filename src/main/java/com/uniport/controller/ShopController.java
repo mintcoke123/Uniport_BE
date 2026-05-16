@@ -2,6 +2,12 @@ package com.uniport.controller;
 
 import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.ErrorResponseDTO;
+import com.uniport.dto.PointShopOrderDetailResponseDTO;
+import com.uniport.dto.PointShopOrderRequestDTO;
+import com.uniport.dto.PointShopOrderResponseDTO;
+import com.uniport.dto.PointShopOrdersResponseDTO;
+import com.uniport.dto.PointShopProductDetailResponseDTO;
+import com.uniport.dto.PointShopProductsResponseDTO;
 import com.uniport.dto.ShopItemsResponseDTO;
 import com.uniport.dto.ShopRedemptionDetailResponseDTO;
 import com.uniport.dto.ShopRedemptionListResponseDTO;
@@ -136,5 +142,70 @@ public class ShopController {
             @RequestBody ShopRedemptionRequestDTO request) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.status(HttpStatus.CREATED).body(pointSocialDataService.redeem(user, request));
+    }
+}
+
+@RestController
+@RequestMapping("/api/point-shop")
+@Tag(name = "Point Shop", description = "PRD 포인트샵 API")
+class PointShopController {
+
+    private final PointSocialDataService pointSocialDataService;
+    private final CurrentUserResolver currentUserResolver;
+
+    PointShopController(PointSocialDataService pointSocialDataService,
+                        CurrentUserResolver currentUserResolver) {
+        this.pointSocialDataService = pointSocialDataService;
+        this.currentUserResolver = currentUserResolver;
+    }
+
+    @GetMapping("/products")
+    @Operation(summary = "PRD 포인트샵 상품 목록 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    public ResponseEntity<PointShopProductsResponseDTO> getProducts(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(value = "category", required = false) String category) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(pointSocialDataService.getPointShopProducts(user, category));
+    }
+
+    @GetMapping("/products/{productId}")
+    @Operation(summary = "PRD 포인트샵 상품 상세 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    public ResponseEntity<PointShopProductDetailResponseDTO> getProductDetail(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String productId) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(pointSocialDataService.getPointShopProductDetail(user, productId));
+    }
+
+    @PostMapping("/orders")
+    @Operation(summary = "PRD 포인트샵 교환 신청", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    public ResponseEntity<PointShopOrderResponseDTO> createOrder(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody PointShopOrderRequestDTO request) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(pointSocialDataService.createPointShopOrder(user, request != null ? request.getProductId() : null));
+    }
+
+    @GetMapping("/orders")
+    @Operation(summary = "PRD 포인트샵 교환 내역 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    public ResponseEntity<PointShopOrdersResponseDTO> getOrders(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(pointSocialDataService.getPointShopOrders(user));
+    }
+
+    @GetMapping("/orders/{orderId}")
+    @Operation(summary = "PRD 포인트샵 교환 상세 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    public ResponseEntity<PointShopOrderDetailResponseDTO> getOrderDetail(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String orderId) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(pointSocialDataService.getPointShopOrderDetail(user, orderId));
     }
 }

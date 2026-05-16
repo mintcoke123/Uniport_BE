@@ -12,6 +12,7 @@ public record ExecutedTradeSnapshot(
         TradeSide side,
         int quantity,
         BigDecimal executedPrice,
+        String reason,
         BigDecimal feeAmount,
         Instant executedAt
 ) {

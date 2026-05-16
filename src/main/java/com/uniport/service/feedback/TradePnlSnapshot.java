@@ -12,6 +12,7 @@ public record TradePnlSnapshot(
         TradeSide side,
         int quantity,
         BigDecimal executedPrice,
+        String reason,
         BigDecimal pnlAmount,
         BigDecimal pnlRate,
         Instant executedAt

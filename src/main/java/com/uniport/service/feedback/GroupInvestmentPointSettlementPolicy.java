@@ -21,6 +21,20 @@ public class GroupInvestmentPointSettlementPolicy {
         BigDecimal participationPoint = zeroIfNull(memberFeedback.getParticipationRate())
                 .multiply(PARTICIPATION_POINT_PER_PERCENT);
         return contributionPoint.add(participationPoint)
+                .max(BigDecimal.ZERO)
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValue();
+    }
+
+    public int calculateExp(GroupInvestmentMemberFeedback memberFeedback) {
+        if (memberFeedback == null) {
+            return 0;
+        }
+        BigDecimal positiveContribution = zeroIfNull(memberFeedback.getContributionRate()).max(BigDecimal.ZERO)
+                .multiply(CONTRIBUTION_POINT_PER_PERCENT);
+        BigDecimal participationExp = zeroIfNull(memberFeedback.getParticipationRate())
+                .multiply(PARTICIPATION_POINT_PER_PERCENT);
+        return positiveContribution.add(participationExp)
                 .setScale(0, RoundingMode.HALF_UP)
                 .intValue();
     }

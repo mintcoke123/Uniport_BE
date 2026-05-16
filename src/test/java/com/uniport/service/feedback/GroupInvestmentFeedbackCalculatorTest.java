@@ -30,6 +30,7 @@ class GroupInvestmentFeedbackCalculatorTest {
                 TradeSide.BUY,
                 10,
                 new BigDecimal("70000"),
+                "실적 개선 기대",
                 BigDecimal.ZERO,
                 Instant.parse("2026-01-23T01:35:00Z")
         ));
@@ -110,6 +111,7 @@ class GroupInvestmentFeedbackCalculatorTest {
                 TradeSide.BUY,
                 quantity,
                 new BigDecimal(executedPrice),
+                "실적 개선 기대",
                 BigDecimal.ZERO,
                 Instant.parse("2026-01-23T01:35:00Z").plusSeconds(tradeId)
         );

@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 @Service
 public class FeedbackCommentGenerator {
 
-    private static final int MAX_LENGTH = 90;
+    private static final int MAX_LENGTH = 220;
     private static final List<String> PROHIBITED_WORDS = List.of(
             "무조건", "반드시", "추천", "확실히 오른다", "실패했다", "잘못했다", "책임"
     );
@@ -34,9 +34,10 @@ public class FeedbackCommentGenerator {
         GroupFeedbackFacts facts = new GroupFeedbackFacts(
                 calculation.returnRate(),
                 calculation.finalEquity(),
+                calculation.tradePnls() != null ? calculation.tradePnls() : List.of(),
                 calculation.bestTrade().orElse(null),
                 calculation.worstTrade().orElse(null),
-                "친근하지만 과장 없는 투자 학습 피드백",
+                "거래내역과 종목을 바탕으로 한 직관적인 매매 피드백",
                 MAX_LENGTH
         );
         Optional<String> generated = llmClient.generate(facts);
@@ -72,7 +73,18 @@ public class FeedbackCommentGenerator {
         return matches(normalized, facts.returnRate())
                 || matches(normalized, facts.finalEquity())
                 || (facts.bestTrade() != null && matches(normalized, facts.bestTrade().pnlAmount()))
-                || (facts.worstTrade() != null && matches(normalized, facts.worstTrade().pnlAmount()));
+                || (facts.worstTrade() != null && matches(normalized, facts.worstTrade().pnlAmount()))
+                || facts.tradeHistory().stream().anyMatch(trade -> matchesTradeNumber(normalized, trade));
+    }
+
+    private boolean matchesTradeNumber(String normalized, TradePnlSnapshot trade) {
+        if (trade == null) {
+            return false;
+        }
+        return normalized.equals(String.valueOf(trade.quantity()))
+                || matches(normalized, trade.executedPrice())
+                || matches(normalized, trade.pnlAmount())
+                || matches(normalized, trade.pnlRate());
     }
 
     private boolean matches(String text, BigDecimal value) {
@@ -81,6 +93,7 @@ public class FeedbackCommentGenerator {
         }
         String numeric = text.replace("%", "").replace("원", "");
         return numeric.equals(value.stripTrailingZeros().toPlainString())
+                || numeric.equals(value.setScale(1, java.math.RoundingMode.HALF_UP).toPlainString())
                 || numeric.equals(value.setScale(1, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString())
                 || numeric.equals(value.setScale(0, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString());
     }

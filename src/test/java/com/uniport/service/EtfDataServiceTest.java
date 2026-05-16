@@ -1029,8 +1029,75 @@ class EtfDataServiceTest {
         );
 
         assertEquals("US_GOOGL", response.getItems().get(0).getStockId());
-        assertTrue(response.getItems().get(0).getTags().contains("BERT 적합"));
-        assertTrue(response.getItems().get(0).getReason().contains("BERT"));
+        assertTrue(response.getItems().get(0).getTags().contains("적합 신호"));
+        assertTrue(response.getItems().get(0).getReason().contains("역할:"));
+        assertTrue(response.getItems().get(0).getReason().contains("주의:"));
+        assertTrue(response.getItems().get(0).getReason().contains("확인:"));
+        assertTrue(response.getItems().get(0).getReason().contains("현재 포트폴리오와 방향성이 맞고"));
+        assertTrue(!response.getItems().get(0).getReason().contains("BERT"));
+    }
+
+    @Test
+    void recommendPortfolioFitStocks_diversifiesSimilarThemeCandidates() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_AI_SEMICON")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("AI 반도체 ETF")
+                .theme("반도체")
+                .holdingsJson("[{\"stockId\":\"KRX_005930\",\"weight\":60},{\"stockId\":\"KRX_000660\",\"weight\":40}]")
+                .build();
+        AssetMaster samsung = asset("KRX_005930", "STOCK", "삼성전자", "005930", "KOSPI", "KRW");
+        AssetMaster hynix = asset("KRX_000660", "STOCK", "SK하이닉스", "000660", "KOSPI", "KRW");
+        AssetMaster hanmi = asset("KRX_042700", "STOCK", "한미반도체", "042700", "KOSPI", "KRW");
+        AssetMaster nvidia = asset("US_NVDA", "STOCK", "NVIDIA Corp.", "NVDA", "NASDAQ", "USD");
+        AssetMaster amd = asset("US_AMD", "STOCK", "Advanced Micro Devices", "AMD", "NASDAQ", "USD");
+        AssetMaster intel = asset("US_INTC", "STOCK", "Intel Corp.", "INTC", "NASDAQ", "USD");
+        AssetMaster naver = asset("KRX_035420", "STOCK", "NAVER", "035420", "KOSPI", "KRW");
+        AssetMaster jpmorgan = asset("US_JPM", "STOCK", "JPMorgan Chase", "JPM", "NYSE", "USD");
+        when(managedEtfRepository.findByEtfCode("ETF_AI_SEMICON")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_005930")).thenReturn(Optional.of(samsung));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_000660")).thenReturn(Optional.of(hynix));
+        when(assetMasterRepository.searchActive(eq(""), eq("STOCK"), eq(null), any(Pageable.class)))
+                .thenReturn(List.of(hanmi, nvidia, amd, intel, naver, jpmorgan, samsung, hynix));
+        when(stockVisualAssetResolver.resolve(any(), any(), any(), any())).thenReturn(visual("ETF"));
+
+        EtfPortfolioFitRecommendationResponseDTO response = etfDataService.recommendPortfolioFitStocks(
+                user,
+                EtfPortfolioFitRecommendationRequestDTO.builder()
+                        .customEtfId("ETF_AI_SEMICON")
+                        .limit(4)
+                        .market("ALL")
+                        .build()
+        );
+
+        long semiconductorLinkedCount = response.getItems().stream()
+                .filter(item -> item.getTags().contains("반도체 연계"))
+                .count();
+        var firstThemeCandidate = response.getItems().stream()
+                .filter(item -> item.getTags().contains("반도체 연계"))
+                .findFirst()
+                .orElseThrow();
+        var naverCandidate = response.getItems().stream()
+                .filter(item -> item.getStockId().equals("KRX_035420"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(4, response.getItems().size());
+        assertTrue(semiconductorLinkedCount <= 2);
+        assertTrue(response.getItems().stream().anyMatch(item -> item.getStockId().equals("KRX_035420")));
+        assertTrue(firstThemeCandidate.getTags().contains("추가 검토"));
+        assertTrue(firstThemeCandidate.getReason().contains("추가 검토 가능"));
+        assertTrue(response.getItems().stream()
+                .filter(item -> item.getStockId().equals("KRX_035420"))
+                .findFirst()
+                .orElseThrow()
+                .getTags()
+                .contains("섹터 분산"));
+        assertTrue(naverCandidate.getTags().contains("분산용 검토"));
+        assertTrue(naverCandidate.getReason().contains("분산 목적이라면 검토"));
+        assertTrue(response.getItems().stream().noneMatch(item -> item.getStockId().equals("KRX_005930")));
+        assertTrue(response.getItems().stream().noneMatch(item -> item.getStockId().equals("KRX_000660")));
     }
 
     @Test
