@@ -140,7 +140,7 @@ public class EducationV1Service {
                     ? new DayTarget(course.coreTrack(), null, day, "core")
                     : sectorDayTarget(course, selectedSectorIds, day);
             EducationOverviewEntity overview = overviewByDay.get(day);
-            String title = resolveRoadmapTitle(day, target, overview);
+            String title = resolveDayTitle(day, target, overview);
             Map<String, Object> dayMap = linkedMap();
             dayMap.put("day", day);
             dayMap.put("title", title);
@@ -231,8 +231,9 @@ public class EducationV1Service {
             throw new ApiException("DAY_NOT_FOUND", HttpStatus.NOT_FOUND);
         }
 
+        String title = resolveDayTitle(day, target, overview.orElse(null));
         List<Map<String, Object>> flow = new ArrayList<>();
-        overview.ifPresent(value -> flow.add(toOverviewStep(course, day, value)));
+        overview.ifPresent(value -> flow.add(toOverviewStep(course, day, value, title)));
         for (EducationCardEntity card : cards) {
             flow.add(toCardStep(course, day, card));
         }
@@ -253,7 +254,7 @@ public class EducationV1Service {
         response.put("status_label", statusLabel(dayStatus));
         response.put("is_locked", false);
         response.put("locked_reason", null);
-        response.put("title", overview.map(EducationOverviewEntity::getTitle).orElse("Day " + day));
+        response.put("title", title);
         response.put("estimated_minutes", 5);
         response.put("progress", progressMap(Math.min(completedSteps + 1, Math.max(flow.size(), 1)), Math.max(flow.size(), 1), completedSteps));
         response.put("primary_action", actionMap(dayStatus, course.id() + "_d" + day));
@@ -476,19 +477,19 @@ public class EducationV1Service {
         return map;
     }
 
-    private Map<String, Object> toOverviewStep(CourseDefinition course, int day, EducationOverviewEntity overview) {
+    private Map<String, Object> toOverviewStep(CourseDefinition course, int day, EducationOverviewEntity overview, String title) {
         Map<String, Object> step = linkedMap();
         step.put("step_id", course.id() + "_d" + day + "_overview");
         step.put("step_type", "overview");
         step.put("template_type", "day_overview");
-        step.put("title", overview.getTitle());
+        step.put("title", title);
         step.put("body", bodyList(overview));
         step.put("key_concepts", readStringList(overview.getKeyPointsJson()));
         step.put("visual", Map.of(
                 "visual_type", "component",
                 "visual_key", course.id() + "_day" + day + "_overview",
                 "asset_key", "",
-                "alt", overview.getTitle()));
+                "alt", title));
         return step;
     }
 
@@ -636,9 +637,9 @@ public class EducationV1Service {
         return new DayTarget(course.sectorTrack(), sector.name(), sourceDay, "sector", sector.id());
     }
 
-    private String resolveRoadmapTitle(int day, DayTarget target, EducationOverviewEntity overview) {
+    private String resolveDayTitle(int day, DayTarget target, EducationOverviewEntity overview) {
         if ("sector".equals(target.moduleType())) {
-            return target.sectorName() + " 섹터 " + target.sourceDay();
+            return target.sectorName() + " Day" + target.sourceDay();
         }
         if (overview != null && overview.getTitle() != null) {
             return overview.getTitle();

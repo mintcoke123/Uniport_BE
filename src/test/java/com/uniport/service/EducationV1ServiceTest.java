@@ -89,7 +89,32 @@ class EducationV1ServiceTest {
         assertEquals("ai_semiconductor", days.get(27).get("sector_id"));
         assertEquals("quantum_computer", days.get(28).get("sector_id"));
         assertEquals("quantum_computer", days.get(29).get("sector_id"));
+        assertEquals("AI 반도체 Day1", days.get(26).get("title"));
+        assertEquals("AI 반도체 Day2", days.get(27).get("title"));
+        assertEquals("양자컴퓨터 Day1", days.get(28).get("title"));
+        assertEquals("양자컴퓨터 Day2", days.get(29).get("title"));
         assertFalse(days.stream().anyMatch(day -> "battery".equals(day.get("sector_id"))));
+    }
+
+    @Test
+    void courseDayReplacesSelectedSectorPlaceholderTitleWithSelectedSectorName() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateWithSelectedSectors()));
+        when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_sector"), eq("AI 반도체"), eq(1)))
+                .thenReturn(Optional.of(overview("intro_sector", "AI 반도체", 1, "선택 섹터 A Day1")));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_sector"), eq("AI 반도체"), eq(1)))
+                .thenReturn(List.of());
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_sector"), eq("AI 반도체"), eq(1)))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseDay(user, "intro", 27);
+
+        assertEquals("AI 반도체 Day1", response.get("title"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> flow = (List<Map<String, Object>>) response.get("flow");
+        assertEquals("AI 반도체 Day1", flow.getFirst().get("title"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> visual = (Map<String, Object>) flow.getFirst().get("visual");
+        assertEquals("AI 반도체 Day1", visual.get("alt"));
     }
 
     @Test
