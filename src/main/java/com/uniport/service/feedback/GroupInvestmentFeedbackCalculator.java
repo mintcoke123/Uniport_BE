@@ -99,6 +99,7 @@ public class GroupInvestmentFeedbackCalculator {
                     trade.side(),
                     trade.quantity(),
                     trade.executedPrice(),
+                    trade.reason(),
                     pnlAmount,
                     pnlRate(pnlAmount, trade.executedPrice().multiply(BigDecimal.valueOf(trade.quantity()))),
                     trade.executedAt()

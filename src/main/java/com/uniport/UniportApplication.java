@@ -3,9 +3,13 @@ package com.uniport;
 import com.uniport.dto.LoginRequestDTO;
 import com.uniport.dto.PlaceOrderRequestDTO;
 import com.uniport.entity.Competition;
+import com.uniport.entity.GifticonInventory;
 import com.uniport.entity.OrderType;
+import com.uniport.entity.PointShopProduct;
 import com.uniport.entity.User;
 import com.uniport.repository.CompetitionRepository;
+import com.uniport.repository.GifticonInventoryRepository;
+import com.uniport.repository.PointShopProductRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.AuthService;
 import com.uniport.service.StockService;
@@ -20,6 +24,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @SpringBootApplication
 @EnableScheduling
@@ -37,6 +43,8 @@ public class UniportApplication {
 	public CommandLineRunner startupRunner(
 			UserRepository userRepository,
 			CompetitionRepository competitionRepository,
+			PointShopProductRepository pointShopProductRepository,
+			GifticonInventoryRepository gifticonInventoryRepository,
 			PasswordEncoder passwordEncoder,
 			AuthService authService,
 			StockService stockService,
@@ -55,6 +63,61 @@ public class UniportApplication {
 						.status("ongoing")
 						.build();
 				competitionRepository.save(defaultCompetition);
+			}
+
+			if (pointShopProductRepository.count() == 0) {
+				List<PointShopProduct> products = List.of(
+						PointShopProduct.builder()
+								.brand("스타벅스")
+								.name("아이스 카페 아메리카노 T")
+								.category("CAFE")
+								.pricePoint(4500)
+								.imageUrl("https://image.istarbucks.co.kr/upload/store/skuimg/2021/04/[9200000004786]_20210430112319040.jpg")
+								.description("스타벅스 매장에서 사용할 수 있는 아이스 카페 아메리카노 Tall 교환권입니다.")
+								.notice("교환 신청 후 마이페이지 교환 내역에서 기프티콘 코드와 유효기간을 확인할 수 있습니다.")
+								.status("ACTIVE")
+								.stockCount(3)
+								.sortOrder(1)
+								.build(),
+						PointShopProduct.builder()
+								.brand("CU")
+								.name("모바일 금액권 1,000원")
+								.category("CONVENIENCE")
+								.pricePoint(1500)
+								.imageUrl("https://static.bgfretail.com/images/brand/brand_cu.png")
+								.description("전국 CU 편의점에서 사용할 수 있는 모바일 금액권입니다.")
+								.notice("일부 특수 매장에서는 사용이 제한될 수 있습니다. 잔액 환불은 제공되지 않습니다.")
+								.status("ACTIVE")
+								.stockCount(3)
+								.sortOrder(2)
+								.build(),
+						PointShopProduct.builder()
+								.brand("GS25")
+								.name("모바일 금액권 5,000원")
+								.category("CONVENIENCE")
+								.pricePoint(5500)
+								.imageUrl("https://www.gsretail.com/_ui/desktop/common/images/gscvs/logo.png")
+								.description("전국 GS25 편의점에서 사용할 수 있는 모바일 금액권입니다.")
+								.notice("담배, 주류 등 일부 품목과 특수 매장에서는 사용이 제한될 수 있습니다.")
+								.status("ACTIVE")
+								.stockCount(3)
+								.sortOrder(3)
+								.build(),
+						PointShopProduct.builder()
+								.brand("BHC")
+								.name("후라이드 치킨 + 콜라 1.25L")
+								.category("FOOD")
+								.pricePoint(18000)
+								.imageUrl("https://www.bhc.co.kr/images/common/logo.png")
+								.description("BHC 매장에서 사용할 수 있는 후라이드 치킨 세트 교환권입니다.")
+								.notice("매장 상황에 따라 일부 지점 사용이 제한될 수 있으며 배달비는 별도입니다.")
+								.status("ACTIVE")
+								.stockCount(3)
+								.sortOrder(4)
+								.build()
+				);
+				pointShopProductRepository.saveAll(products).forEach(product -> seedGifticonInventory(gifticonInventoryRepository, product));
+				org.slf4j.LoggerFactory.getLogger(UniportApplication.class).info("[uniport] Point shop seed products created: count={}", products.size());
 			}
 
 			if (seedTestUserEnabled) {
@@ -161,5 +224,20 @@ public class UniportApplication {
 				org.slf4j.LoggerFactory.getLogger(UniportApplication.class).warn("[uniport] SISU-admin user skipped: studentId or password not set (studentId={}, passwordSet={})", sisuAdminStudentId, sisuAdminPassword != null && !sisuAdminPassword.isBlank());
 			}
 		};
+	}
+
+	private static void seedGifticonInventory(GifticonInventoryRepository gifticonInventoryRepository, PointShopProduct product) {
+		LocalDateTime expiredAt = LocalDateTime.now().plusMonths(3);
+		for (int index = 1; index <= 3; index++) {
+			gifticonInventoryRepository.save(
+					GifticonInventory.builder()
+							.product(product)
+							.gifticonCode("UNI-DEMO-" + product.getId() + "-" + index)
+							.gifticonUrl("https://uniport.example/gifticons/" + product.getId() + "/" + index)
+							.expiredAt(expiredAt)
+							.status("AVAILABLE")
+							.build()
+			);
+		}
 	}
 }

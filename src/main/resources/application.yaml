@@ -75,7 +75,7 @@ openai:
   base-url: ${OPENAI_BASE_URL:https://api.openai.com}
   model: ${OPENAI_MODEL:gpt-4.1-mini}
   feedback:
-    enabled: ${OPENAI_FEEDBACK_ENABLED:false}
+    enabled: ${OPENAI_FEEDBACK_ENABLED:true}
 
 naver:
   news:

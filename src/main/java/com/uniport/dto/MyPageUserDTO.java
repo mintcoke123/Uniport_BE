@@ -28,6 +28,15 @@ public class MyPageUserDTO {
     @Schema(example = "균형 잡힌 판다형", requiredMode = Schema.RequiredMode.REQUIRED)
     private String character;
 
+    @Schema(example = "PANDA", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String characterCode;
+
+    @Schema(example = "2", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Integer characterStage;
+
+    @Schema(example = "character_panda_stage_2", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String characterAssetKey;
+
     @Schema(example = "장기 투자와 배당주를 좋아해요.")
     private String bio;
 }

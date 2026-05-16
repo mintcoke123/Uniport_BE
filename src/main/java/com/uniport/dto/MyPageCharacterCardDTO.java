@@ -14,5 +14,7 @@ public class MyPageCharacterCardDTO {
     private String name;
     private String emoji;
     private String themeColor;
+    private Integer stage;
+    private String assetKey;
     private Boolean selected;
 }

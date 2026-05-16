@@ -72,6 +72,10 @@ public class GroupInvestmentMemberFeedback {
     @Builder.Default
     private Integer settledPoint = 0;
 
+    @Column(name = "settled_exp", nullable = false)
+    @Builder.Default
+    private Integer settledExp = 0;
+
     @Column(name = "point_transaction_id", length = 100)
     private String pointTransactionId;
 
@@ -98,6 +102,9 @@ public class GroupInvestmentMemberFeedback {
         }
         if (settledPoint == null) {
             settledPoint = 0;
+        }
+        if (settledExp == null) {
+            settledExp = 0;
         }
         if (pointSettlementStatus == null || pointSettlementStatus.isBlank()) {
             pointSettlementStatus = "PENDING";

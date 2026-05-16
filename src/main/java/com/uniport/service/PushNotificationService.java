@@ -245,6 +245,61 @@ public class PushNotificationService {
         );
     }
 
+    public void sendGroupInvestmentFeedbackReport(Long roomId,
+                                                  Long reportId,
+                                                  String returnRateText,
+                                                  int rewardPoint,
+                                                  int rewardExp,
+                                                  List<Long> recipientUserIds) {
+        if (roomId == null || reportId == null || recipientUserIds == null || recipientUserIds.isEmpty()) {
+            return;
+        }
+        String rate = valueOrDefault(returnRateText, "결과");
+        int safeRewardPoint = nonNegative(rewardPoint);
+        int safeRewardExp = nonNegative(rewardExp);
+        sendToUsers(
+                recipientUserIds,
+                "피드백 리포트가 도착했어요",
+                "최종 수익률 " + rate + " · 보상 " + safeRewardPoint + "P / " + safeRewardExp + "XP",
+                Map.of(
+                        "type", "group_investment_feedback_report",
+                        "deeplink", matchingRoomLink(roomId),
+                        "entityId", String.valueOf(reportId),
+                        "roomId", String.valueOf(roomId),
+                        "reportId", String.valueOf(reportId),
+                        "rewardPoint", String.valueOf(safeRewardPoint),
+                        "rewardExp", String.valueOf(safeRewardExp)
+                )
+        );
+    }
+
+    public void sendGroupInvestmentPointSettlement(Long roomId,
+                                                   Long reportId,
+                                                   Long recipientUserId,
+                                                   int rewardPoint,
+                                                   int rewardExp) {
+        if (roomId == null || reportId == null || recipientUserId == null) {
+            return;
+        }
+        int safeRewardPoint = nonNegative(rewardPoint);
+        int safeRewardExp = nonNegative(rewardExp);
+        sendToUsers(
+                List.of(recipientUserId),
+                "포인트 정산이 완료됐어요",
+                "내 정산 결과: " + safeRewardPoint + "P · " + safeRewardExp + "XP",
+                Map.of(
+                        "type", "group_investment_point_settlement",
+                        "deeplink", matchingRoomLink(roomId),
+                        "entityId", String.valueOf(reportId),
+                        "roomId", String.valueOf(roomId),
+                        "reportId", String.valueOf(reportId),
+                        "settlementUserId", String.valueOf(recipientUserId),
+                        "rewardPoint", String.valueOf(safeRewardPoint),
+                        "rewardExp", String.valueOf(safeRewardExp)
+                )
+        );
+    }
+
     public PushTestResponseDTO sendTestPush(User user, PushTestRequestDTO request) {
         if (user == null || user.getId() == null) {
             return deliverySummary(0, 0, 0);
@@ -311,6 +366,10 @@ public class PushNotificationService {
 
     private String matchingRoomLink(Long roomId) {
         return publicBaseUrl + "/matching-room?roomId=" + roomId;
+    }
+
+    private static int nonNegative(int value) {
+        return Math.max(value, 0);
     }
 
     private static String truncate(String value, int maxLength) {

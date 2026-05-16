@@ -318,6 +318,81 @@ class PushNotificationServiceTest {
     }
 
     @Test
+    void sendGroupInvestmentFeedbackReportSendsReportPayloadToRoomMembers() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(7L, List.of(pushToken("feedback-report-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+
+        service.sendGroupInvestmentFeedbackReport(
+                260L,
+                77L,
+                "+8.5%",
+                900,
+                900,
+                List.of(7L)
+        );
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("feedback-report-token", message.getToken());
+        assertEquals("피드백 리포트가 도착했어요", message.getTitle());
+        assertTrue(message.getBody().contains("+8.5%"));
+        assertEquals("group_investment_feedback_report", message.getData().get("type"));
+        assertEquals("77", message.getData().get("entityId"));
+        assertEquals("260", message.getData().get("roomId"));
+        assertEquals("77", message.getData().get("reportId"));
+        assertEquals("900", message.getData().get("rewardPoint"));
+        assertEquals("900", message.getData().get("rewardExp"));
+        assertEquals(
+                "https://uniportbe-production.up.railway.app/matching-room?roomId=260",
+                message.getData().get("deeplink")
+        );
+    }
+
+    @Test
+    void sendGroupInvestmentPointSettlementSendsPersonalSettlementPayload() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(7L, List.of(pushToken("settlement-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+
+        service.sendGroupInvestmentPointSettlement(
+                260L,
+                77L,
+                7L,
+                -200,
+                100
+        );
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.get(0);
+        assertEquals("settlement-token", message.getToken());
+        assertEquals("포인트 정산이 완료됐어요", message.getTitle());
+        assertTrue(message.getBody().contains("0P"));
+        assertTrue(message.getBody().contains("100XP"));
+        assertEquals("group_investment_point_settlement", message.getData().get("type"));
+        assertEquals("77", message.getData().get("entityId"));
+        assertEquals("260", message.getData().get("roomId"));
+        assertEquals("77", message.getData().get("reportId"));
+        assertEquals("7", message.getData().get("settlementUserId"));
+        assertEquals("0", message.getData().get("rewardPoint"));
+        assertEquals("100", message.getData().get("rewardExp"));
+        assertEquals(
+                "https://uniportbe-production.up.railway.app/matching-room?roomId=260",
+                message.getData().get("deeplink")
+        );
+    }
+
+    @Test
     void sendTestPushSendsToCurrentUsersDeliverableTokensAndReturnsSummary() {
         FakePushTokenService pushTokenService = new FakePushTokenService();
         pushTokenService.tokensByUserId.put(7L, List.of(pushToken("token-active"), pushToken("token-invalid")));

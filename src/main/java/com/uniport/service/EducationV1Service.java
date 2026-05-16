@@ -375,6 +375,7 @@ public class EducationV1Service {
         boolean alreadyCompleted = completedDays.contains(day);
         int earnedPoint = alreadyCompleted ? 0 : DAILY_REWARD_POINT;
         int earnedExp = alreadyCompleted ? 0 : DAILY_REWARD_EXP;
+        int beforeLevel = LearningProgressPolicy.fromExp(state.exp).level();
         if (!alreadyCompleted) {
             ensureDayCompletionReady(course, state, day);
             completedDays.add(day);
@@ -409,9 +410,12 @@ public class EducationV1Service {
                 "point", earnedPoint,
                 "total_exp", state.exp,
                 "total_point", state.point,
+                "before_level", beforeLevel,
+                "after_level", progress.level(),
                 "level", progress.level(),
                 "current_exp", progress.currentExp(),
-                "max_exp", progress.maxExp()));
+                "max_exp", progress.maxExp(),
+                "max_level", progress.maxLevel()));
         response.put("character_asset_key", "learning_complete_character_default");
         Map<String, Object> nextAction = linkedMap();
         nextAction.put("type", "roadmap");

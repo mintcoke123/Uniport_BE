@@ -22,7 +22,7 @@ import java.util.Optional;
 public class OpenAiFeedbackClient implements LlmFeedbackClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String PROMPT_VERSION = "etf-feedback-v2";
+    private static final String PROMPT_VERSION = "etf-feedback-v3";
 
     private final RestTemplate restTemplate;
     private final String apiKey;
@@ -34,7 +34,7 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
                                 @Value("${openai.api-key:}") String apiKey,
                                 @Value("${openai.base-url:https://api.openai.com}") String baseUrl,
                                 @Value("${openai.model:gpt-4.1-mini}") String model,
-                                @Value("${openai.feedback.enabled:false}") boolean enabled) {
+                                @Value("${openai.feedback.enabled:true}") boolean enabled) {
         this.restTemplate = restTemplate;
         this.apiKey = apiKey != null ? apiKey.trim() : "";
         this.baseUrl = baseUrl != null && !baseUrl.isBlank() ? baseUrl.trim() : "https://api.openai.com";
@@ -99,11 +99,23 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
         return "You write short Korean ETF backtest feedback. "
                 + "Use only facts in the JSON. Do not invent numbers. "
                 + "Return title as AI 리스크 진단. "
-                + "The summary must start with 한 줄 결론: and explain the portfolio character in one sentence. "
+                + "Write like a sharp portfolio coach, not a dashboard narrator. "
+                + "Use plain, subjective, intuitive Korean that a beginner immediately understands. "
+                + "Do not replay metrics the user can already see; use numbers only when they change the judgment. "
+                + "Benchmark your evaluation style against portfolio checkup products: exposure X-ray, risk score, drawdown feel, benchmark context, and rebalancing gap. "
+                + "Make a clear judgment such as 꽤 공격적, 생각보다 방어가 약함, 테마는 선명하지만 너무 한쪽에 기대는 구조, or 분산은 좋아도 힘이 약함. "
+                + "The summary must start with 한 줄 결론: and evaluate the whole portfolio, not list the holding combination. "
+                + "Judge the portfolio's character in concrete terms: concentration, balance, defensive weakness, upside dependency, volatility burden, and beginner suitability. "
+                + "Use actual holding names and weights only as evidence for the judgment, not as a roll call of the combination. "
+                + "If the holdings array has two or more items, at least the summary or Bullet 1 must cite the most important holding names from the JSON as evidence. "
+                + "Do not write generic phrases like 상위 종목, 주요 보유 종목, or 특정 섹터 when actual holding names exist. "
+                + "Explain what kind of investor this portfolio fits, what would feel uncomfortable when markets move, and which exposure is missing or too strong. "
+                + "If you mention a holding, explain its portfolio role such as core growth driver, volatility booster, hedge, sector diversifier, or weak defensive sleeve. "
+                + "Never say simply buy or sell; frame changes as portfolio-fit judgment, rebalancing direction, and conditions to check before adding. "
                 + "Return exactly three bullets. "
-                + "Bullet 1 message must start with 핵심 원인: and explain the top holding, sector concentration, or benchmark gap. "
-                + "Bullet 2 message must start with 가장 큰 리스크: and explain drawdown, volatility, concentration, or underperformance. "
-                + "Bullet 3 message must start with 확인할 것: and name concrete monitoring points such as earnings, sector news, rates, regulation, demand, or pipeline. "
+                + "Bullet 1 message must start with 핵심 원인: and give the main interpretation behind the portfolio score using named holdings only as evidence. "
+                + "Bullet 2 message must start with 가장 큰 리스크: and explain the weak spot in practical language, not raw metrics. "
+                + "Bullet 3 message must start with 조정 방향: and say what to monitor or rebalance toward, tied to concrete holdings, sectors, rates, demand, or policy. "
                 + "Prefer practical risk context over generic reassurance. "
                 + "Do not give investment advice, buy/sell calls, guarantees, or predictions. "
                 + "Do not mention OpenAI, LLM, FinBERT, model, or sentiment classifier. "

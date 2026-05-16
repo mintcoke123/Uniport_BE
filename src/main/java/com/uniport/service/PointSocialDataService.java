@@ -27,6 +27,13 @@ import com.uniport.dto.MyPageSummaryDTO;
 import com.uniport.dto.MyPageTitleDTO;
 import com.uniport.dto.MyPageUserDTO;
 import com.uniport.dto.PointBalanceResponseDTO;
+import com.uniport.dto.PointShopOrderDetailResponseDTO;
+import com.uniport.dto.PointShopOrderListItemDTO;
+import com.uniport.dto.PointShopOrderResponseDTO;
+import com.uniport.dto.PointShopOrdersResponseDTO;
+import com.uniport.dto.PointShopProductDTO;
+import com.uniport.dto.PointShopProductDetailResponseDTO;
+import com.uniport.dto.PointShopProductsResponseDTO;
 import com.uniport.dto.ShopItemDTO;
 import com.uniport.dto.ShopItemsResponseDTO;
 import com.uniport.dto.ShopPreviewPointDTO;
@@ -88,6 +95,7 @@ public class PointSocialDataService {
     private static final TypeReference<Map<String, Set<Integer>>> COMPLETED_DAYS_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, Integer>> EDUCATION_CURRENT_DAY_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, Set<Integer>>> EDUCATION_COMPLETED_DAYS_TYPE = new TypeReference<>() {};
+    private static final String POINT_SHOP_EXCHANGE_BLOCKED_MESSAGE = "포인트샵 교환은 실제 기프티콘 운영 준비 후 열릴 예정이에요.";
 
     private final PointWalletRepository pointWalletRepository;
     private final PointTransactionRepository pointTransactionRepository;
@@ -101,6 +109,7 @@ public class PointSocialDataService {
     private final OrderRepository orderRepository;
     private final LearningUserStateRepository learningUserStateRepository;
     private final PushNotificationService pushNotificationService;
+    private final PointLedgerService pointLedgerService;
 
     public PointSocialDataService(PointWalletRepository pointWalletRepository,
                                   PointTransactionRepository pointTransactionRepository,
@@ -113,7 +122,8 @@ public class PointSocialDataService {
                                   HoldingRepository holdingRepository,
                                   OrderRepository orderRepository,
                                   LearningUserStateRepository learningUserStateRepository,
-                                  PushNotificationService pushNotificationService) {
+                                  PushNotificationService pushNotificationService,
+                                  PointLedgerService pointLedgerService) {
         this.pointWalletRepository = pointWalletRepository;
         this.pointTransactionRepository = pointTransactionRepository;
         this.pointShopProductRepository = pointShopProductRepository;
@@ -126,6 +136,7 @@ public class PointSocialDataService {
         this.orderRepository = orderRepository;
         this.learningUserStateRepository = learningUserStateRepository;
         this.pushNotificationService = pushNotificationService;
+        this.pointLedgerService = pointLedgerService;
     }
 
     public MyPageResponseDTO getMyPage(User user) {
@@ -135,6 +146,8 @@ public class PointSocialDataService {
         int level = learningProgress.level();
         int currentExp = learningProgress.currentExp();
         int streak = learningProgress.streakDays();
+        String selectedCharacterCode = selectedCharacterCode(preference);
+        int characterStage = characterStage(level);
         int friendCount = (int) friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(user.getId(), user.getId()).stream()
                 .filter(relation -> "ACCEPTED".equalsIgnoreCase(relation.getStatus()))
                 .count();
@@ -150,11 +163,16 @@ public class PointSocialDataService {
                         .level(level)
                         .investmentMbti(defaultString(user.getInvestmentProfileResult(), "균형잡힌 판다형"))
                         .character(resolveSelectedCharacterName(preference))
+                        .characterCode(selectedCharacterCode)
+                        .characterStage(characterStage)
+                        .characterAssetKey(characterAssetKey(selectedCharacterCode, characterStage))
                         .bio(defaultString(preference.getBio(), "나만의 투자 원칙을 기록해 보세요."))
                         .build())
                 .exp(MyPageExpDTO.builder()
                         .currentExp(currentExp)
-                        .maxExp(1000)
+                        .maxExp(learningProgress.maxExp())
+                        .totalExp(learningProgress.totalXp())
+                        .maxLevel(LearningProgressPolicy.MAX_LEVEL)
                         .build())
                 .summary(MyPageSummaryDTO.builder()
                         .learningTimeMinutes(learningProgress.learningTimeMinutes())
@@ -172,7 +190,7 @@ public class PointSocialDataService {
                         .profitLossRate(orZero(user.getProfitLossRate()))
                         .pointBalance(balance)
                         .build())
-                .characters(buildCharacters(preference))
+                .characters(buildCharacters(preference, level))
                 .badges(buildBadges(streak, redemptionCount))
                 .note(buildInvestmentNote(user, holdings))
                 .investmentHistory(buildInvestmentHistory(orders, holdings))
@@ -232,6 +250,119 @@ public class PointSocialDataService {
         return PointBalanceResponseDTO.builder().pointBalance(getBalance(user)).build();
     }
 
+    public PointShopProductsResponseDTO getPointShopProducts(User user, String category) {
+        String safeCategory = normalizePointShopCategory(category);
+        List<PointShopProduct> products = pointShopProductRepository.findAllByOrderBySortOrderAscCreatedAtDesc().stream()
+                .filter(product -> safeCategory == null || safeCategory.equals(normalizePointShopCategory(product.getCategory())))
+                .toList();
+        return PointShopProductsResponseDTO.builder()
+                .myPoint(getBalance(user))
+                .categories(pointShopCategories())
+                .products(products.stream()
+                        .map(this::toPointShopProductDto)
+                        .toList())
+                .build();
+    }
+
+    public PointShopProductDetailResponseDTO getPointShopProductDetail(User user, String productId) {
+        PointShopProduct product = getRequiredPointShopProduct(productId);
+        int myPoint = getBalance(user);
+        int pricePoint = safeInt(product.getPricePoint());
+        int stockCount = getAvailableStockCount(product.getId());
+        boolean active = "ACTIVE".equalsIgnoreCase(product.getStatus());
+        return PointShopProductDetailResponseDTO.builder()
+                .id(toPointShopProductId(product))
+                .brand(product.getBrand())
+                .name(product.getName())
+                .category(toPointShopCategoryLabel(product.getCategory()))
+                .pricePoint(pricePoint)
+                .myPoint(myPoint)
+                .pointAfterExchange(Math.max(0, myPoint - pricePoint))
+                .imageUrl(product.getImageUrl())
+                .description(defaultString(product.getDescription(), product.getName() + " 교환권입니다."))
+                .notice(toNoticeList(product.getNotice()))
+                .status(active && stockCount > 0 ? "ACTIVE" : "SOLD_OUT")
+                .canExchange(active && stockCount > 0 && myPoint >= pricePoint)
+                .build();
+    }
+
+    @Transactional
+    public PointShopOrderResponseDTO createPointShopOrder(User user, String productId) {
+        if (!isPointShopExchangeEnabled()) {
+            throw new ApiException(POINT_SHOP_EXCHANGE_BLOCKED_MESSAGE, HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        if (productId == null || productId.isBlank()) {
+            throw new ApiException("productId is required", HttpStatus.BAD_REQUEST);
+        }
+        PointShopProduct product = getRequiredPointShopProduct(productId);
+        if (!"ACTIVE".equalsIgnoreCase(product.getStatus())) {
+            throw new ApiException("지금은 교환할 수 없는 상품이에요.", HttpStatus.CONFLICT);
+        }
+        GifticonInventory inventory = gifticonInventoryRepository.findFirstByProduct_IdAndStatusOrderByCreatedAtAsc(product.getId(), "AVAILABLE");
+        if (inventory == null) {
+            throw new ApiException("준비된 수량이 모두 소진되었어요.", HttpStatus.CONFLICT);
+        }
+
+        PointShopOrder order = pointShopOrderRepository.save(PointShopOrder.builder()
+                .user(user)
+                .product(product)
+                .inventory(inventory)
+                .usedPoint(safeInt(product.getPricePoint()))
+                .status("REQUESTED")
+                .build());
+        String orderId = toPointShopOrderId(order);
+        PointTransaction transaction = pointLedgerService.deduct(
+                user,
+                safeInt(product.getPricePoint()),
+                "POINT_SHOP",
+                orderId,
+                "포인트샵 교환: " + product.getName()
+        );
+
+        inventory.setStatus("SENT");
+        inventory.setAssignedOrderId(orderId);
+        gifticonInventoryRepository.save(inventory);
+        updatePersistedStockCount(product);
+
+        order.setStatus("SENT");
+        order.setSentAt(LocalDateTime.now());
+        order.setPointTransactionId(transaction.getId() != null ? String.valueOf(transaction.getId()) : null);
+        pointShopOrderRepository.save(order);
+
+        return PointShopOrderResponseDTO.builder()
+                .orderId(orderId)
+                .status(order.getStatus())
+                .usedPoint(order.getUsedPoint())
+                .balanceAfter(transaction.getBalanceAfter())
+                .message("교환 신청이 완료되었어요.")
+                .build();
+    }
+
+    public PointShopOrdersResponseDTO getPointShopOrders(User user) {
+        return PointShopOrdersResponseDTO.builder()
+                .orders(pointShopOrderRepository.findByUser_IdOrderByCreatedAtDesc(user.getId()).stream()
+                        .map(this::toPointShopOrderListItem)
+                        .toList())
+                .build();
+    }
+
+    public PointShopOrderDetailResponseDTO getPointShopOrderDetail(User user, String orderId) {
+        PointShopOrder order = getRequiredPointShopOrder(user.getId(), orderId);
+        GifticonInventory inventory = order.getInventory();
+        return PointShopOrderDetailResponseDTO.builder()
+                .orderId(toPointShopOrderId(order))
+                .productName(order.getProduct().getName())
+                .brand(order.getProduct().getBrand())
+                .usedPoint(order.getUsedPoint())
+                .status(order.getStatus())
+                .gifticonUrl(inventory != null ? inventory.getGifticonUrl() : null)
+                .gifticonCode(inventory != null ? inventory.getGifticonCode() : null)
+                .expiredAt(inventory != null && inventory.getExpiredAt() != null
+                        ? inventory.getExpiredAt().atOffset(ZoneOffset.ofHours(9)).toString()
+                        : null)
+                .build();
+    }
+
     public ShopItemsResponseDTO getShopItems(String category, String sort, Integer page, Integer size) {
         String safeCategory = category == null || category.isBlank() ? null : category.trim().toUpperCase(Locale.ROOT);
         String safeSort = sort == null || sort.isBlank() ? "POPULAR" : sort.trim().toUpperCase(Locale.ROOT);
@@ -284,54 +415,14 @@ public class PointSocialDataService {
         if (request == null || request.getItemId() == null || request.getItemId().isBlank()) {
             throw new ApiException("itemId is required", HttpStatus.BAD_REQUEST);
         }
-        PointShopProduct product = getRequiredProduct(request.getItemId());
-        PointWallet wallet = pointWalletRepository.findByUser_Id(user.getId())
-                .orElseThrow(() -> new ApiException("point wallet not found", HttpStatus.CONFLICT));
-        GifticonInventory inventory = gifticonInventoryRepository.findFirstByProduct_IdAndStatusOrderByCreatedAtAsc(product.getId(), "AVAILABLE");
-        if (inventory == null) {
-            throw new ApiException("item is sold out", HttpStatus.CONFLICT);
-        }
-        if (wallet.getBalance() < safeInt(product.getPricePoint())) {
-            throw new ApiException("not enough points", HttpStatus.CONFLICT);
-        }
-
-        wallet.setBalance(wallet.getBalance() - safeInt(product.getPricePoint()));
-        pointWalletRepository.save(wallet);
-
-        PointShopOrder order = pointShopOrderRepository.save(PointShopOrder.builder()
-                .user(user)
-                .product(product)
-                .inventory(inventory)
-                .usedPoint(safeInt(product.getPricePoint()))
-                .status("COMPLETED")
-                .sentAt(LocalDateTime.now())
-                .build());
-
-        inventory.setStatus("ASSIGNED");
-        inventory.setAssignedOrderId("REDEEM_" + order.getId());
-        gifticonInventoryRepository.save(inventory);
-        updatePersistedStockCount(product);
-
-        PointTransaction transaction = pointTransactionRepository.save(PointTransaction.builder()
-                .user(user)
-                .type("USE")
-                .amount(-safeInt(product.getPricePoint()))
-                .balanceAfter(wallet.getBalance())
-                .sourceType("SHOP_REDEMPTION")
-                .sourceId(String.valueOf(order.getId()))
-                .description(product.getName() + " redemption")
-                .build());
-
-        order.setPointTransactionId(String.valueOf(transaction.getId()));
-        pointShopOrderRepository.save(order);
-
+        PointShopOrderResponseDTO order = createPointShopOrder(user, request.getItemId());
         return ShopRedemptionResponseDTO.builder()
-                .redemptionId("REDEEM_" + order.getId())
-                .itemId("ITEM_" + product.getId())
+                .redemptionId(order.getOrderId())
+                .itemId(request.getItemId())
                 .usedPoint(order.getUsedPoint())
-                .remainingPoint(wallet.getBalance())
+                .remainingPoint(order.getBalanceAfter())
                 .status(order.getStatus())
-                .createdAt(order.getCreatedAt().atOffset(ZoneOffset.UTC).toString())
+                .createdAt(LocalDateTime.now().atOffset(ZoneOffset.UTC).toString())
                 .build();
     }
 
@@ -534,20 +625,27 @@ public class PointSocialDataService {
     }
 
     private List<MyPageCharacterCardDTO> buildCharacters(UserMyPagePreference preference) {
+        return buildCharacters(preference, 1);
+    }
+
+    private List<MyPageCharacterCardDTO> buildCharacters(UserMyPagePreference preference, int level) {
         String selectedCode = defaultString(preference.getSelectedCharacterCode(), "SEED");
+        int stage = characterStage(level);
         return List.of(
-                character("SEED", "조심스러운 거북이형", "🐢", "#d9f1c7", selectedCode),
-                character("PANDA", "균형잡힌 판다형", "🐼", "#d3ecff", selectedCode),
-                character("FOX", "기회를 찾는 여우형", "🦊", "#ffe0c2", selectedCode)
+                character("SEED", "조심스러운 거북이형", "🐢", "#d9f1c7", stage, selectedCode),
+                character("PANDA", "균형잡힌 판다형", "🐼", "#d3ecff", stage, selectedCode),
+                character("FOX", "기회를 찾는 여우형", "🦊", "#ffe0c2", stage, selectedCode)
         );
     }
 
-    private MyPageCharacterCardDTO character(String code, String name, String emoji, String themeColor, String selectedCode) {
+    private MyPageCharacterCardDTO character(String code, String name, String emoji, String themeColor, int stage, String selectedCode) {
         return MyPageCharacterCardDTO.builder()
                 .code(code)
                 .name(name)
                 .emoji(emoji)
                 .themeColor(themeColor)
+                .stage(stage)
+                .assetKey(characterAssetKey(code, stage))
                 .selected(code.equalsIgnoreCase(selectedCode))
                 .build();
     }
@@ -729,6 +827,33 @@ public class PointSocialDataService {
                 .build();
     }
 
+    private PointShopProductDTO toPointShopProductDto(PointShopProduct product) {
+        int availableStockCount = getAvailableStockCount(product.getId());
+        boolean active = "ACTIVE".equalsIgnoreCase(product.getStatus()) && availableStockCount > 0;
+        return PointShopProductDTO.builder()
+                .id(toPointShopProductId(product))
+                .brand(product.getBrand())
+                .name(product.getName())
+                .category(toPointShopCategoryLabel(product.getCategory()))
+                .pricePoint(safeInt(product.getPricePoint()))
+                .imageUrl(product.getImageUrl())
+                .status(active ? "ACTIVE" : "SOLD_OUT")
+                .stockCount(availableStockCount)
+                .build();
+    }
+
+    private PointShopOrderListItemDTO toPointShopOrderListItem(PointShopOrder order) {
+        return PointShopOrderListItemDTO.builder()
+                .orderId(toPointShopOrderId(order))
+                .productName(order.getProduct().getName())
+                .brand(order.getProduct().getBrand())
+                .usedPoint(order.getUsedPoint())
+                .status(order.getStatus())
+                .createdAt(order.getCreatedAt() != null ? order.getCreatedAt().atOffset(ZoneOffset.ofHours(9)).toString() : null)
+                .sentAt(order.getSentAt() != null ? order.getSentAt().atOffset(ZoneOffset.ofHours(9)).toString() : null)
+                .build();
+    }
+
     private Comparator<PointShopProduct> resolveProductComparator(String sort, Map<Long, Integer> availableStockByProduct) {
         return switch (sort) {
             case "LOW_POINT" -> Comparator.comparingInt(product -> safeInt(product.getPricePoint()));
@@ -811,6 +936,12 @@ public class PointSocialDataService {
                 .orElseThrow(() -> new ApiException("shop item not found", HttpStatus.NOT_FOUND));
     }
 
+    private PointShopProduct getRequiredPointShopProduct(String productId) {
+        Long id = parsePointShopProductId(productId);
+        return pointShopProductRepository.findById(id)
+                .orElseThrow(() -> new ApiException("상품 정보를 찾을 수 없어요.", HttpStatus.NOT_FOUND));
+    }
+
     private PointShopOrder getRequiredOrder(Long userId, String redemptionId) {
         Long id = parsePrefixedId(redemptionId, "REDEEM_");
         PointShopOrder order = pointShopOrderRepository.findById(id)
@@ -821,12 +952,118 @@ public class PointSocialDataService {
         return order;
     }
 
+    private PointShopOrder getRequiredPointShopOrder(Long userId, String orderId) {
+        Long id = parsePointShopOrderId(orderId);
+        PointShopOrder order = pointShopOrderRepository.findById(id)
+                .orElseThrow(() -> new ApiException("교환 내역을 찾을 수 없어요.", HttpStatus.NOT_FOUND));
+        if (!order.getUser().getId().equals(userId)) {
+            throw new ApiException("교환 내역을 찾을 수 없어요.", HttpStatus.NOT_FOUND);
+        }
+        return order;
+    }
+
+    private String toPointShopProductId(PointShopProduct product) {
+        return "product-" + product.getId();
+    }
+
+    private String toPointShopOrderId(PointShopOrder order) {
+        return "order-" + order.getId();
+    }
+
+    private Long parsePointShopProductId(String value) {
+        String normalized = value != null && value.startsWith("product-") ? value.substring("product-".length()) : value;
+        if (normalized != null && normalized.startsWith("ITEM_")) {
+            normalized = normalized.substring("ITEM_".length());
+        }
+        return parseLongId(normalized);
+    }
+
+    private Long parsePointShopOrderId(String value) {
+        String normalized = value != null && value.startsWith("order-") ? value.substring("order-".length()) : value;
+        if (normalized != null && normalized.startsWith("REDEEM_")) {
+            normalized = normalized.substring("REDEEM_".length());
+        }
+        return parseLongId(normalized);
+    }
+
+    private Long parseLongId(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (Exception e) {
+            throw new ApiException("invalid id", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private List<String> pointShopCategories() {
+        return List.of("전체", "커피", "편의점");
+    }
+
+    private String normalizePointShopCategory(String value) {
+        if (value == null || value.isBlank() || "전체".equals(value.trim())) {
+            return null;
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "커피", "CAFE", "COFFEE" -> "CAFE";
+            case "편의점", "CONVENIENCE", "CU" -> "CONVENIENCE";
+            default -> normalized;
+        };
+    }
+
+    private String toPointShopCategoryLabel(String value) {
+        String normalized = normalizePointShopCategory(value);
+        if ("CAFE".equals(normalized)) {
+            return "커피";
+        }
+        if ("CONVENIENCE".equals(normalized)) {
+            return "편의점";
+        }
+        return defaultString(value, "기타");
+    }
+
+    private List<String> toNoticeList(String notice) {
+        if (notice == null || notice.isBlank()) {
+            return List.of(
+                    "교환 신청 후 기프티콘은 마이페이지에서 확인할 수 있습니다.",
+                    "유효기간이 지난 기프티콘은 재발급이 어려울 수 있습니다.",
+                    "부정한 방법으로 적립한 포인트는 회수될 수 있습니다."
+            );
+        }
+        return notice.lines()
+                .map(String::trim)
+                .filter(line -> !line.isBlank())
+                .toList();
+    }
+
     private String resolveSelectedCharacterName(UserMyPagePreference preference) {
         return buildCharacters(preference).stream()
                 .filter(character -> Boolean.TRUE.equals(character.getSelected()))
                 .findFirst()
                 .map(MyPageCharacterCardDTO::getName)
                 .orElse("조심스러운 거북이형");
+    }
+
+    private String selectedCharacterCode(UserMyPagePreference preference) {
+        return defaultString(preference.getSelectedCharacterCode(), "SEED").trim().toUpperCase(Locale.ROOT);
+    }
+
+    private int characterStage(int level) {
+        if (level >= 70) {
+            return 3;
+        }
+        if (level >= 30) {
+            return 2;
+        }
+        return 1;
+    }
+
+    private String characterAssetKey(String code, int stage) {
+        return "character_" + selectedCodeSegment(code) + "_stage_" + Math.max(1, Math.min(stage, 3));
+    }
+
+    private String selectedCodeSegment(String code) {
+        String safeCode = code == null || code.isBlank() ? "SEED" : code.trim();
+        return safeCode.toLowerCase(Locale.ROOT);
     }
 
     private boolean resolvePushEnabled(User user, UserMyPagePreference preference) {
@@ -839,6 +1076,10 @@ public class PointSocialDataService {
 
     private int getBalance(User user) {
         return pointWalletRepository.findByUser_Id(user.getId()).map(PointWallet::getBalance).orElse(0);
+    }
+
+    private boolean isPointShopExchangeEnabled() {
+        return false;
     }
 
     private int safeInt(Integer value) {

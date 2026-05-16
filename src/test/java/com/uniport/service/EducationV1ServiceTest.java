@@ -538,13 +538,18 @@ class EducationV1ServiceTest {
         assertEquals(500, firstReward.get("total_point"));
         assertEquals(500, firstReward.get("exp"));
         assertEquals(500, firstReward.get("total_exp"));
+        assertEquals(1, firstReward.get("before_level"));
+        assertEquals(2, firstReward.get("after_level"));
         assertEquals(2, firstReward.get("level"));
         assertEquals(200, firstReward.get("current_exp"));
         assertEquals(300, firstReward.get("max_exp"));
+        assertEquals(100, firstReward.get("max_level"));
         assertEquals(0, secondReward.get("point"));
         assertEquals(500, secondReward.get("total_point"));
         assertEquals(0, secondReward.get("exp"));
         assertEquals(500, secondReward.get("total_exp"));
+        assertEquals(2, secondReward.get("before_level"));
+        assertEquals(2, secondReward.get("after_level"));
         assertEquals(2, savedState.getLevel());
         assertEquals(500, savedState.getPoint());
         assertEquals(500, savedState.getExp());

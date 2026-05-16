@@ -3,8 +3,10 @@ package com.uniport.service;
 import com.uniport.entity.PointTransaction;
 import com.uniport.entity.PointWallet;
 import com.uniport.entity.User;
+import com.uniport.exception.ApiException;
 import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,6 +65,9 @@ public class PointLedgerService {
                         .balance(0)
                         .build());
         int nextBalance = safeBalance(wallet) + signedAmount;
+        if (nextBalance < 0) {
+            throw new ApiException("보유 포인트가 부족합니다.", HttpStatus.CONFLICT);
+        }
         wallet.setBalance(nextBalance);
         walletRepository.save(wallet);
 

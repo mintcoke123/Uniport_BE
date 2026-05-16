@@ -23,4 +23,15 @@ class LearningProgressPolicyTest {
         assertEquals(0, progress.currentExp());
         assertEquals(300, progress.maxExp());
     }
+
+    @Test
+    void levelIsCappedAtOneHundredAndProgressIsFullAfterCap() {
+        LearningProgressPolicy.Progress progress = LearningProgressPolicy.fromExp(40_000);
+
+        assertEquals(100, progress.level());
+        assertEquals(300, progress.currentExp());
+        assertEquals(300, progress.maxExp());
+        assertEquals(40_000, progress.totalExp());
+        assertEquals(100, progress.maxLevel());
+    }
 }
