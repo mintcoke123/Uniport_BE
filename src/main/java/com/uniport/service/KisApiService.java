@@ -392,6 +392,17 @@ public class KisApiService {
      * appkey/appsecret 미설정 시 예외 발생(스텁 반환 금지).
      */
     public StockPriceDTO getStockPrice(String stockCode) {
+        return getStockPrice(stockCode, true);
+    }
+
+    /**
+     * KIS HTTP 현재가 응답을 조회합니다. 상세 화면의 OHLC는 웹소켓 캐시에 없는 정보이므로 HTTP quote를 사용합니다.
+     */
+    public StockPriceDTO getStockQuote(String stockCode) {
+        return getStockPrice(stockCode, false);
+    }
+
+    private StockPriceDTO getStockPrice(String stockCode, boolean allowRealtimeCache) {
         if (stockCode == null || stockCode.isBlank()) {
             throw new ApiException("Stock code is required", HttpStatus.BAD_REQUEST);
         }
@@ -401,16 +412,18 @@ public class KisApiService {
         String code = stockCode.trim();
         String normalized = code.length() >= 6 ? code : String.format("%6s", code).replace(' ', '0');
         kisWsSubscriptionManager.ensureSubscribed(normalized);
-        Optional<PriceSnapshot> cached = priceCache.get(normalized);
-        if (cached.isPresent()) {
-            PriceSnapshot sn = cached.get();
-            if (System.currentTimeMillis() - sn.getUpdatedAtMillis() <= PRICE_CACHE_FRESH_MILLIS) {
-                StockPriceDTO dto = mapPriceSnapshotToStockPriceDTO(normalized, sn);
-                if (log.isDebugEnabled()) {
-                    log.debug("[getStockPrice] stockCode={} source=CACHE currentPrice={} updatedAtMillis={}",
-                            normalized, dto.getCurrentPrice(), sn.getUpdatedAtMillis());
+        if (allowRealtimeCache) {
+            Optional<PriceSnapshot> cached = priceCache.get(normalized);
+            if (cached.isPresent()) {
+                PriceSnapshot sn = cached.get();
+                if (System.currentTimeMillis() - sn.getUpdatedAtMillis() <= PRICE_CACHE_FRESH_MILLIS) {
+                    StockPriceDTO dto = mapPriceSnapshotToStockPriceDTO(normalized, sn);
+                    if (log.isDebugEnabled()) {
+                        log.debug("[getStockPrice] stockCode={} source=CACHE currentPrice={} updatedAtMillis={}",
+                                normalized, dto.getCurrentPrice(), sn.getUpdatedAtMillis());
+                    }
+                    return dto;
                 }
-                return dto;
             }
         }
         long now = System.currentTimeMillis();
@@ -572,6 +585,10 @@ public class KisApiService {
                 .logoUrl(logoUrl)
                 .visual(visual)
                 .currentPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
+                .openPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
+                .closePrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
+                .lowPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
+                .highPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
                 .changeAmount(sn.getChange() != null ? sn.getChange() : BigDecimal.ZERO)
                 .changeRate(sn.getChangeRate() != null ? sn.getChangeRate() : BigDecimal.ZERO)
                 .volume(sn.getVolume() != null ? sn.getVolume() : 0L)
@@ -581,11 +598,27 @@ public class KisApiService {
     private StockPriceDTO mapToStockPriceDTO(String stockCode, Map<String, Object> output2) {
         String stockName = getStockNameFromOutput(output2, stockCode);
         BigDecimal currentPrice = getBigDecimal(output2, "stck_prpr");
+        BigDecimal openPrice = getBigDecimal(output2, "stck_oprc");
+        BigDecimal closePrice = getBigDecimal(output2, "stck_clpr");
+        BigDecimal lowPrice = getBigDecimal(output2, "stck_lwpr");
+        BigDecimal highPrice = getBigDecimal(output2, "stck_hgpr");
         BigDecimal changeAmount = getBigDecimal(output2, "prdy_vrss");
         BigDecimal changeRate = getBigDecimal(output2, "prdy_ctrt");
         Long volume = getLong(output2, "acml_vol");
         if (currentPrice == null) {
             currentPrice = BigDecimal.ZERO;
+        }
+        if (openPrice == null) {
+            openPrice = currentPrice;
+        }
+        if (closePrice == null) {
+            closePrice = currentPrice;
+        }
+        if (lowPrice == null) {
+            lowPrice = currentPrice;
+        }
+        if (highPrice == null) {
+            highPrice = currentPrice;
         }
         if (changeAmount == null) {
             changeAmount = BigDecimal.ZERO;
@@ -606,6 +639,10 @@ public class KisApiService {
                 .logoUrl(logoUrl)
                 .visual(visual)
                 .currentPrice(currentPrice)
+                .openPrice(openPrice)
+                .closePrice(closePrice)
+                .lowPrice(lowPrice)
+                .highPrice(highPrice)
                 .changeAmount(changeAmount)
                 .changeRate(changeRate)
                 .volume(volume)

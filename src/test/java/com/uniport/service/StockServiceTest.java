@@ -64,7 +64,7 @@ class StockServiceTest {
                 .nameKr("삼성전자")
                 .market("KOSPI")
                 .build();
-        when(kisApiService.getStockPrice("005930")).thenReturn(price);
+        when(kisApiService.getStockQuote("005930")).thenReturn(price);
         when(stockMasterRepository.findById("005930")).thenReturn(Optional.of(master));
         when(managedStockNewsService.getNewsForStock("005930", "삼성전자", 3)).thenReturn(List.of());
         when(communityService.getInvestorSentiment("005930")).thenReturn(InvestorSentimentDTO.builder().build());
@@ -76,6 +76,40 @@ class StockServiceTest {
         assertEquals("KOSPI", response.getMarket());
         assertEquals("삼성", response.getVisual().getText());
         assertEquals("FALLBACK_SYMBOL", response.getVisual().getType());
+    }
+
+    @Test
+    void getStockDetail_usesKisQuotePricesForDistinctMarketData() {
+        StockPriceDTO price = StockPriceDTO.builder()
+                .stockCode("005930")
+                .stockName("삼성전자")
+                .currentPrice(new BigDecimal("70000"))
+                .openPrice(new BigDecimal("69000"))
+                .closePrice(new BigDecimal("70000"))
+                .lowPrice(new BigDecimal("68500"))
+                .highPrice(new BigDecimal("71000"))
+                .changeAmount(new BigDecimal("1000"))
+                .changeRate(new BigDecimal("1.45"))
+                .volume(1000L)
+                .build();
+        StockMaster master = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+        when(kisApiService.getStockQuote("005930")).thenReturn(price);
+        when(stockMasterRepository.findById("005930")).thenReturn(Optional.of(master));
+        when(managedStockNewsService.getNewsForStock("005930", "삼성전자", 3)).thenReturn(List.of());
+        when(communityService.getInvestorSentiment("005930")).thenReturn(InvestorSentimentDTO.builder().build());
+        when(communityService.getDiscussionCount("005930")).thenReturn(0);
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
+
+        StockDetailDTO response = stockService.getStockDetail(5930L, null);
+
+        assertEquals(new BigDecimal("69000"), response.getMarketData().getOpenPrice());
+        assertEquals(new BigDecimal("70000"), response.getMarketData().getClosePrice());
+        assertEquals(new BigDecimal("68500"), response.getMarketData().getLowPrice());
+        assertEquals(new BigDecimal("71000"), response.getMarketData().getHighPrice());
     }
 
     private StockVisualDTO visual(String text) {

@@ -105,7 +105,7 @@ public class StockService {
             // Realtime subscription failure should not block the REST response.
         }
 
-        StockPriceDTO price = getStockPrice(code);
+        StockPriceDTO price = kisApiService.getStockQuote(code);
         String displayName = resolveDisplayName(code, price.getStockName());
         String market = resolveMarket(code, price.getMarket());
         StockVisualDTO visual = stockVisualAssetResolver.resolve(market, code, displayName, null);
@@ -115,13 +115,7 @@ public class StockService {
         BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
         Long volume = price.getVolume() != null ? price.getVolume() : 0L;
 
-        MarketDataDTO marketData = MarketDataDTO.builder()
-                .openPrice(currentPrice)
-                .closePrice(currentPrice)
-                .volume(volume)
-                .lowPrice(currentPrice)
-                .highPrice(currentPrice)
-                .build();
+        MarketDataDTO marketData = resolveMarketData(price, currentPrice, volume);
 
         List<ManagedNewsArticle> relatedArticles = managedStockNewsService.getNewsForStock(code, displayName, 3);
         List<FinancialDataItemDTO> financialData = relatedArticles.stream()
@@ -189,6 +183,20 @@ public class StockService {
         return holdingRepository.findByUser_IdAndStockCode(user.getId(), code)
                 .map(holding -> toMyHolding(holding.getQuantity(), holding.getAveragePurchasePrice(), currentPrice))
                 .orElse(null);
+    }
+
+    private MarketDataDTO resolveMarketData(StockPriceDTO price, BigDecimal currentPrice, Long volume) {
+        return MarketDataDTO.builder()
+                .openPrice(priceOrFallback(price.getOpenPrice(), currentPrice))
+                .closePrice(priceOrFallback(price.getClosePrice(), currentPrice))
+                .volume(volume)
+                .lowPrice(priceOrFallback(price.getLowPrice(), currentPrice))
+                .highPrice(priceOrFallback(price.getHighPrice(), currentPrice))
+                .build();
+    }
+
+    private BigDecimal priceOrFallback(BigDecimal price, BigDecimal fallback) {
+        return price != null ? price : fallback;
     }
 
     private MyHoldingDTO toMyHolding(int quantity, BigDecimal averagePrice, BigDecimal currentPrice) {
