@@ -386,6 +386,7 @@ public class MatchingRoomService {
         Map<String, Object> body = new HashMap<>();
         body.put("roomId", toApiId(room.getId()));
         body.put("name", room.getName());
+        body.put("createdAt", room.getCreatedAt().toString());
         body.put("status", resolveMatchingStatus(room, joinedMembers, invitedUserIds));
         body.put("marketType", room.getMarketType() != null ? room.getMarketType() : "KR");
         body.put("marketLabel", marketLabel(room.getMarketType()));

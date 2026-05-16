@@ -201,6 +201,19 @@ class MatchingRoomServiceTest {
     }
 
     @Test
+    void getRoomDetail_includesRoomCreatedAtForWaitingTimer() {
+        User user = persistUser("20263022", "timer-user");
+        entityManager.flush();
+
+        Map<String, Object> response = matchingRoomService.quickMatch("RANDOM", "KR", List.of(), user);
+        Map<String, Object> detail = map(response.get("detail"));
+        String roomId = (String) detail.get("roomId");
+        MatchingRoom room = findRoom(roomId);
+
+        assertEquals(room.getCreatedAt().toString(), detail.get("createdAt"));
+    }
+
+    @Test
     void quickMatchRandomMode_autoStartsWhenThirdMemberJoins() {
         User firstUser = persistUser("20263019", "random-full-first");
         User secondUser = persistUser("20263020", "random-full-second");
