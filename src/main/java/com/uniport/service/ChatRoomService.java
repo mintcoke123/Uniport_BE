@@ -16,6 +16,7 @@ import com.uniport.repository.TeamHoldingRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -61,6 +62,7 @@ public class ChatRoomService {
         this.kisApiService = kisApiService;
     }
 
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getMyChatRooms(User user) {
         List<MatchingRoomMember> memberships = matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(user.getId());
         List<Map<String, Object>> result = new ArrayList<>();
@@ -86,12 +88,13 @@ public class ChatRoomService {
             roomMap.put("portfolioSummary", buildPortfolioSummary(room.getId()));
             roomMap.put("lastMessage", buildLastMessagePreview(room.getId()));
             roomMap.put("activeVote", buildActiveVotePreview(room.getId(), user));
-            roomMap.put("unreadCount", 0);
+            roomMap.put("unreadCount", countUnreadMessages(room.getId(), membership, user));
             result.add(roomMap);
         }
         return result;
     }
 
+    @Transactional
     public Map<String, Object> getChatRoomSummary(Long roomId, User user) {
         if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(roomId, user.getId())) {
             throw new IllegalArgumentException("Chat room access denied");
@@ -118,7 +121,30 @@ public class ChatRoomService {
         summary.put("activeVotes", buildVotes(room.getId(), user, true));
         summary.put("closedVotes", buildVotes(room.getId(), user, false));
         summary.put("lastMessage", buildLastMessagePreview(room.getId()));
+        markRoomAsRead(roomId, user);
         return summary;
+    }
+
+    @Transactional
+    public Map<String, Object> markRoomAsRead(Long roomId, User user) {
+        MatchingRoomMember membership = matchingRoomMemberRepository.findByMatchingRoomIdAndUserId(roomId, user.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Chat room access denied"));
+        membership.setLastReadAt(Instant.now());
+        matchingRoomMemberRepository.save(membership);
+        return Map.of(
+                "roomId", roomId,
+                "unreadCount", 0
+        );
+    }
+
+    private long countUnreadMessages(Long roomId, MatchingRoomMember membership, User user) {
+        Instant baseline = membership.getLastReadAt() != null
+                ? membership.getLastReadAt()
+                : membership.getJoinedAt();
+        if (baseline == null) {
+            baseline = Instant.EPOCH;
+        }
+        return chatMessageRepository.countByRoomIdAndCreatedAtAfterAndUserIdNot(roomId, baseline, user.getId());
     }
 
     private Map<String, Object> buildRoomInfo(MatchingRoom room, User currentUser) {

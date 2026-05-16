@@ -37,11 +37,16 @@ public class MatchingRoomMember {
     @Column(nullable = false, updatable = false)
     private Instant joinedAt;
 
+    @Column(name = "last_read_at")
+    private Instant lastReadAt;
+
     public static MatchingRoomMember of(MatchingRoom room, User user) {
+        Instant joinedAt = Instant.now();
         return MatchingRoomMember.builder()
                 .matchingRoom(room)
                 .user(user)
-                .joinedAt(Instant.now())
+                .joinedAt(joinedAt)
+                .lastReadAt(joinedAt)
                 .build();
     }
 }

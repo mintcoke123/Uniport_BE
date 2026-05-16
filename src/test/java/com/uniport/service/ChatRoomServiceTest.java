@@ -22,7 +22,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -134,5 +136,178 @@ class ChatRoomServiceTest {
         assertEquals(2L, voteSummary.get("participantCount"));
         assertEquals("찬성", voteSummary.get("myVote"));
         verify(voteParticipantRepository).findByVote_IdOrderById(vote.getId());
+    }
+
+    @Test
+    void getMyChatRooms_countsUnreadMessagesAfterLastReadAtExcludingMyMessages() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
+        TeamAccountRepository teamAccountRepository = mock(TeamAccountRepository.class);
+        TeamHoldingRepository teamHoldingRepository = mock(TeamHoldingRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatRoomService service = new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatMessageRepository,
+                teamAccountRepository,
+                teamHoldingRepository,
+                voteRepository,
+                voteParticipantRepository,
+                kisApiService
+        );
+
+        User user = User.builder().id(10L).nickname("tester").build();
+        MatchingRoom room = MatchingRoom.builder()
+                .id(3L)
+                .name("테스트방")
+                .capacity(3)
+                .memberCount(2)
+                .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
+                .build();
+        MatchingRoomMember membership = MatchingRoomMember.builder()
+                .id(1L)
+                .matchingRoom(room)
+                .user(user)
+                .joinedAt(Instant.parse("2026-05-17T00:10:00Z"))
+                .lastReadAt(Instant.parse("2026-05-17T00:20:00Z"))
+                .build();
+
+        when(matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(user.getId())).thenReturn(List.of(membership));
+        when(teamAccountRepository.findByTeamId(room.getId())).thenReturn(Optional.empty());
+        when(teamHoldingRepository.findByTeamId(room.getId())).thenReturn(List.of());
+        when(chatMessageRepository.findTopByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(Optional.empty());
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(List.of());
+        when(chatMessageRepository.countByRoomIdAndCreatedAtAfterAndUserIdNot(room.getId(), membership.getLastReadAt(), user.getId()))
+                .thenReturn(4L);
+
+        List<Map<String, Object>> rooms = service.getMyChatRooms(user);
+
+        assertEquals(4L, rooms.get(0).get("unreadCount"));
+        verify(chatMessageRepository).countByRoomIdAndCreatedAtAfterAndUserIdNot(room.getId(), membership.getLastReadAt(), user.getId());
+    }
+
+    @Test
+    void getMyChatRooms_usesJoinedAtAsUnreadBaselineWhenRoomHasNeverBeenRead() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
+        TeamAccountRepository teamAccountRepository = mock(TeamAccountRepository.class);
+        TeamHoldingRepository teamHoldingRepository = mock(TeamHoldingRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatRoomService service = new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatMessageRepository,
+                teamAccountRepository,
+                teamHoldingRepository,
+                voteRepository,
+                voteParticipantRepository,
+                kisApiService
+        );
+
+        User user = User.builder().id(10L).nickname("tester").build();
+        MatchingRoom room = MatchingRoom.builder()
+                .id(3L)
+                .name("테스트방")
+                .capacity(3)
+                .memberCount(2)
+                .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
+                .build();
+        MatchingRoomMember membership = MatchingRoomMember.builder()
+                .id(1L)
+                .matchingRoom(room)
+                .user(user)
+                .joinedAt(Instant.parse("2026-05-17T00:10:00Z"))
+                .build();
+
+        when(matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(user.getId())).thenReturn(List.of(membership));
+        when(teamAccountRepository.findByTeamId(room.getId())).thenReturn(Optional.empty());
+        when(teamHoldingRepository.findByTeamId(room.getId())).thenReturn(List.of());
+        when(chatMessageRepository.findTopByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(Optional.empty());
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(List.of());
+        when(chatMessageRepository.countByRoomIdAndCreatedAtAfterAndUserIdNot(room.getId(), membership.getJoinedAt(), user.getId()))
+                .thenReturn(2L);
+
+        List<Map<String, Object>> rooms = service.getMyChatRooms(user);
+
+        assertEquals(2L, rooms.get(0).get("unreadCount"));
+        verify(chatMessageRepository).countByRoomIdAndCreatedAtAfterAndUserIdNot(room.getId(), membership.getJoinedAt(), user.getId());
+    }
+
+    @Test
+    void markRoomAsReadUpdatesMembershipReadTimestamp() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
+        TeamAccountRepository teamAccountRepository = mock(TeamAccountRepository.class);
+        TeamHoldingRepository teamHoldingRepository = mock(TeamHoldingRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatRoomService service = new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatMessageRepository,
+                teamAccountRepository,
+                teamHoldingRepository,
+                voteRepository,
+                voteParticipantRepository,
+                kisApiService
+        );
+
+        User user = User.builder().id(10L).nickname("tester").build();
+        MatchingRoom room = MatchingRoom.builder().id(3L).name("테스트방").build();
+        MatchingRoomMember membership = MatchingRoomMember.builder()
+                .id(1L)
+                .matchingRoom(room)
+                .user(user)
+                .joinedAt(Instant.parse("2026-05-17T00:10:00Z"))
+                .build();
+
+        when(matchingRoomMemberRepository.findByMatchingRoomIdAndUserId(room.getId(), user.getId()))
+                .thenReturn(Optional.of(membership));
+
+        service.markRoomAsRead(room.getId(), user);
+
+        verify(matchingRoomMemberRepository).save(membership);
+        assertEquals(true, membership.getLastReadAt() != null);
+    }
+
+    @Test
+    void markRoomAsReadRejectsNonMember() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
+        TeamAccountRepository teamAccountRepository = mock(TeamAccountRepository.class);
+        TeamHoldingRepository teamHoldingRepository = mock(TeamHoldingRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatRoomService service = new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatMessageRepository,
+                teamAccountRepository,
+                teamHoldingRepository,
+                voteRepository,
+                voteParticipantRepository,
+                kisApiService
+        );
+
+        User user = User.builder().id(10L).nickname("tester").build();
+        when(matchingRoomMemberRepository.findByMatchingRoomIdAndUserId(3L, user.getId())).thenReturn(Optional.empty());
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.markRoomAsRead(3L, user)
+        );
+        assertEquals("Chat room access denied", exception.getMessage());
+
+        verify(matchingRoomMemberRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 }
