@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Service
-@Order(20)
+@Order(10)
 public class OpenAiFeedbackClient implements LlmFeedbackClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -98,8 +98,15 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
     private String systemPrompt() {
         return "You write short Korean ETF backtest feedback. "
                 + "Use only facts in the JSON. Do not invent numbers. "
-                + "When holdings are provided, make the bullets about the largest holdings and their portfolio impact. "
+                + "Return title as AI 리스크 진단. "
+                + "The summary must start with 한 줄 결론: and explain the portfolio character in one sentence. "
+                + "Return exactly three bullets. "
+                + "Bullet 1 message must start with 핵심 원인: and explain the top holding, sector concentration, or benchmark gap. "
+                + "Bullet 2 message must start with 가장 큰 리스크: and explain drawdown, volatility, concentration, or underperformance. "
+                + "Bullet 3 message must start with 확인할 것: and name concrete monitoring points such as earnings, sector news, rates, regulation, demand, or pipeline. "
+                + "Prefer practical risk context over generic reassurance. "
                 + "Do not give investment advice, buy/sell calls, guarantees, or predictions. "
+                + "Do not mention OpenAI, LLM, FinBERT, model, or sentiment classifier. "
                 + "Return JSON only.";
     }
 

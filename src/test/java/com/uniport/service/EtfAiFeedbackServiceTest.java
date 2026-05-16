@@ -53,7 +53,7 @@ class EtfAiFeedbackServiceTest {
     }
 
     @Test
-    void buildFeedback_prioritizesTopHoldingSpecificBullets() {
+    void buildFeedback_prioritizesTopHoldingSpecificReason() {
         InsightFacts facts = baseFacts()
                 .holdings(List.of(
                         new BacktestHolding("US_NVDA", "NVIDIA Corp.", BigDecimal.valueOf(45.0), "반도체"),
@@ -72,9 +72,39 @@ class EtfAiFeedbackServiceTest {
         assertTrue(feedback.summary().contains("NVIDIA Corp."));
         assertEquals(3, feedback.bullets().size());
         assertEquals("RISK", feedback.bullets().get(0).type());
+        assertTrue(feedback.bullets().get(0).message().startsWith("핵심 원인:"));
         assertTrue(feedback.bullets().get(0).message().contains("NVIDIA Corp. 45.0%"));
-        assertTrue(feedback.bullets().get(1).message().contains("Apple Inc. 30.0%"));
-        assertTrue(feedback.bullets().get(2).message().contains("Microsoft Corp. 25.0%"));
+        assertTrue(feedback.bullets().get(1).message().startsWith("가장 큰 리스크:"));
+        assertTrue(feedback.bullets().get(2).message().startsWith("확인할 것:"));
+    }
+
+    @Test
+    void buildFallbackFeedback_returnsActionableStructuredFeedback() {
+        InsightFacts facts = baseFacts()
+                .holdings(List.of(
+                        new BacktestHolding("US_NVDA", "NVIDIA", BigDecimal.valueOf(70.0), "반도체"),
+                        new BacktestHolding("US_AAPL", "Apple", BigDecimal.valueOf(30.0), "빅테크")
+                ))
+                .topHoldingName("NVIDIA")
+                .topHoldingWeightPercent(BigDecimal.valueOf(70.0))
+                .top3WeightPercent(BigDecimal.valueOf(100.0))
+                .dominantSector("반도체")
+                .dominantSectorWeightPercent(BigDecimal.valueOf(70.0))
+                .volatilityPercent(BigDecimal.valueOf(22.3))
+                .maxDrawdownPercent(BigDecimal.valueOf(-18.4))
+                .build();
+
+        RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
+
+        assertTrue(feedback.summary().startsWith("한 줄 결론:"));
+        assertTrue(feedback.summary().contains("공격형"));
+        assertEquals(3, feedback.bullets().size());
+        assertTrue(feedback.bullets().get(0).message().startsWith("핵심 원인:"));
+        assertTrue(feedback.bullets().get(0).message().contains("NVIDIA 70.0%"));
+        assertTrue(feedback.bullets().get(1).message().startsWith("가장 큰 리스크:"));
+        assertTrue(feedback.bullets().get(1).message().contains("최대 낙폭 -18.4%"));
+        assertTrue(feedback.bullets().get(2).message().startsWith("확인할 것:"));
+        assertTrue(feedback.bullets().get(2).message().contains("AI 칩 수요"));
     }
 
     @Test
@@ -113,7 +143,7 @@ class EtfAiFeedbackServiceTest {
     }
 
     @Test
-    void buildFeedback_variesHoldingCommentsBySectorContext() {
+    void buildFeedback_variesCheckpointsBySectorContext() {
         InsightFacts facts = baseFacts()
                 .holdings(List.of(
                         new BacktestHolding("US_TSLA", "Tesla", BigDecimal.valueOf(20.0), "전기차"),
@@ -128,9 +158,7 @@ class EtfAiFeedbackServiceTest {
 
         RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
 
-        assertTrue(feedback.bullets().get(0).message().contains("전기차"));
-        assertTrue(feedback.bullets().get(1).message().contains("금융"));
-        assertTrue(feedback.bullets().get(2).message().contains("헬스케어"));
+        assertTrue(feedback.bullets().get(2).message().contains("인도량"));
     }
 
     @Test
@@ -212,6 +240,30 @@ class EtfAiFeedbackServiceTest {
 
         assertEquals(true, validated.usedFallback());
         assertTrue(!validated.summary().contains("999만원"));
+    }
+
+    @Test
+    void validateLlmFeedback_acceptsKnownPeriodAndHoldingCountContext() {
+        InsightFacts facts = baseFacts()
+                .holdings(List.of(
+                        new BacktestHolding("US_NVDA", "엔비디아", BigDecimal.valueOf(35.0), "기술"),
+                        new BacktestHolding("US_AAPL", "Apple", BigDecimal.valueOf(25.0), "빅테크"),
+                        new BacktestHolding("US_MSFT", "Microsoft", BigDecimal.valueOf(20.0), "소프트웨어")
+                ))
+                .build();
+        RuleBasedFeedback generated = new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "1년 기준 수익률은 14.7%였고, 상위 3개 종목 비중이 80.0%라 기술 섹터 집중도를 함께 봐야 해요.",
+                java.util.List.of(new FeedbackBullet("RISK", "엔비디아 35.0%가 가장 큰 비중이라 실적 발표와 AI 반도체 수요에 민감합니다.")),
+                "CAUTION",
+                facts.disclaimer(),
+                false
+        );
+
+        RuleBasedFeedback validated = service.validateOrFallback(generated, facts);
+
+        assertEquals(false, validated.usedFallback());
+        assertEquals(generated.summary(), validated.summary());
     }
 
     @Test

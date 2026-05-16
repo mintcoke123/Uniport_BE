@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Service
-@Order(10)
+@Order(20)
 public class FinbertFeedbackClient implements LlmFeedbackClient {
 
     private static final int MAX_ANALYSIS_TEXT_LENGTH = 1_500;
@@ -43,7 +43,7 @@ public class FinbertFeedbackClient implements LlmFeedbackClient {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             Map<String, Object> request = Map.of(
-                    "newsId", "etf-risk-" + safe(facts.portfolioLabel()).hashCode(),
+                    "newsId", "etf-risk-" + Integer.toHexString(textForAnalysis(facts).hashCode()),
                     "text", truncate(textForAnalysis(facts))
             );
             @SuppressWarnings("unchecked")
@@ -85,40 +85,7 @@ public class FinbertFeedbackClient implements LlmFeedbackClient {
         } else {
             return Optional.empty();
         }
-        String summary = buildSummary(facts, negative);
-        return Optional.of(new RuleBasedFeedback(
-                "AI 리스크 진단",
-                summary,
-                buildBullets(facts, negative),
-                negative ? "CAUTION" : "BALANCED",
-                facts.disclaimer(),
-                false
-        ));
-    }
-
-    private String buildSummary(InsightFacts facts, boolean negative) {
-        String prefix = negative ? "FinBERT가 리스크 신호를 더 강하게 봤어요." : "FinBERT가 긍정 신호를 더 강하게 봤어요.";
-        return prefix + " " + topHoldingPhrase(facts) + sectorPhrase(facts);
-    }
-
-    private List<FeedbackBullet> buildBullets(InsightFacts facts, boolean negative) {
-        List<BacktestHolding> holdings = facts.holdings() != null ? facts.holdings() : List.of();
-        if (!holdings.isEmpty()) {
-            return holdings.stream()
-                    .sorted((left, right) -> normalize(right.weightPercent()).compareTo(normalize(left.weightPercent())))
-                    .limit(3)
-                    .map(holding -> new FeedbackBullet(
-                            negative && normalize(holding.weightPercent()).compareTo(BigDecimal.valueOf(30)) >= 0 ? "RISK" : "INFO",
-                            holding.name() + " " + formatPercent(holding.weightPercent())
-                                    + ": " + sectorLabel(holding) + " 문맥을 FinBERT 진단에 반영했어요."
-                    ))
-                    .toList();
-        }
-        List<String> factsList = negative ? facts.riskFacts() : facts.positiveFacts();
-        if (factsList != null && !factsList.isEmpty()) {
-            return List.of(new FeedbackBullet(negative ? "RISK" : "STRENGTH", factsList.get(0)));
-        }
-        return List.of(new FeedbackBullet("INFO", "보유 종목과 리스크 점수를 함께 확인해주세요."));
+        return Optional.of(EtfFeedbackMessageComposer.compose(facts, negative, false));
     }
 
     private String textForAnalysis(InsightFacts facts) {
@@ -143,24 +110,6 @@ public class FinbertFeedbackClient implements LlmFeedbackClient {
                 .map(holding -> safe(holding.name()) + " " + safe(holding.sector()) + " " + formatPercent(holding.weightPercent()))
                 .reduce((left, right) -> left + " " + right)
                 .orElse("");
-    }
-
-    private String topHoldingPhrase(InsightFacts facts) {
-        if (facts.topHoldingName() == null || facts.topHoldingName().isBlank()) {
-            return "보유 종목별 비중을 확인해주세요.";
-        }
-        return "최대 비중은 " + facts.topHoldingName() + " " + formatPercent(facts.topHoldingWeightPercent()) + "입니다.";
-    }
-
-    private String sectorPhrase(InsightFacts facts) {
-        if (facts.dominantSector() == null || facts.dominantSector().isBlank()) {
-            return "";
-        }
-        return " " + facts.dominantSector() + " 비중은 " + formatPercent(facts.dominantSectorWeightPercent()) + "입니다.";
-    }
-
-    private String sectorLabel(BacktestHolding holding) {
-        return holding.sector() != null && !holding.sector().isBlank() ? holding.sector() : "해당 종목";
     }
 
     private List<String> safeList(List<String> values) {

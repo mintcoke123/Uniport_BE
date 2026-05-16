@@ -2,14 +2,27 @@ package com.uniport.service;
 
 import com.uniport.service.backtest.InsightFacts;
 import com.uniport.service.backtest.OpenAiFeedbackClient;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentCaptor.forClass;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class OpenAiFeedbackClientTest {
 
@@ -24,6 +37,47 @@ class OpenAiFeedbackClientTest {
         );
 
         assertEquals(Optional.empty(), client.generate(baseFacts()));
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void generate_requestsActionablePortfolioFeedbackFormat() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        when(restTemplate.exchange(
+                eq("https://api.openai.com/v1/responses"),
+                eq(HttpMethod.POST),
+                any(HttpEntity.class),
+                any(ParameterizedTypeReference.class)
+        )).thenReturn(ResponseEntity.ok(Map.of(
+                "output_text", """
+                        {"title":"AI 리스크 진단","summary":"한 줄 결론: 테스트 ETF입니다.","tone":"BALANCED","bullets":[]}
+                        """
+        )));
+        OpenAiFeedbackClient client = new OpenAiFeedbackClient(
+                restTemplate,
+                "test-key",
+                "https://api.openai.com",
+                "gpt-4.1-mini",
+                true
+        );
+        ArgumentCaptor<HttpEntity> captor = forClass(HttpEntity.class);
+
+        client.generate(baseFacts());
+
+        verify(restTemplate).exchange(
+                eq("https://api.openai.com/v1/responses"),
+                eq(HttpMethod.POST),
+                captor.capture(),
+                any(ParameterizedTypeReference.class)
+        );
+        Map<?, ?> body = (Map<?, ?>) captor.getValue().getBody();
+        List<?> input = (List<?>) body.get("input");
+        Map<?, ?> systemMessage = (Map<?, ?>) input.get(0);
+        String prompt = String.valueOf(systemMessage.get("content"));
+        Assertions.assertTrue(prompt.contains("한 줄 결론:"));
+        Assertions.assertTrue(prompt.contains("핵심 원인:"));
+        Assertions.assertTrue(prompt.contains("가장 큰 리스크:"));
+        Assertions.assertTrue(prompt.contains("확인할 것:"));
     }
 
     private InsightFacts baseFacts() {

@@ -138,42 +138,7 @@ public class EtfAiFeedbackService {
     }
 
     public RuleBasedFeedback buildFallbackFeedback(InsightFacts facts) {
-        List<FeedbackBullet> bullets = bullets(facts);
-        String summary;
-        String tone = "BALANCED";
-        if (isConcentrationRisk(facts)) {
-            summary = "백테스트 수익률은 " + formatPercent(facts.totalReturnPercent())
-                    + "이고 최대 낙폭은 " + formatPercent(facts.maxDrawdownPercent()) + "였습니다. "
-                    + topHoldingPhrase(facts)
-                    + fallbackSector(facts) + " 비중이 " + formatPercent(fallbackConcentrationWeight(facts))
-                    + "라 관련 업황 변화에 민감할 수 있습니다.";
-            tone = "CAUTION";
-        } else if (facts.excessReturnPercent() != null && facts.excessReturnPercent().compareTo(BigDecimal.valueOf(-1)) <= 0) {
-            summary = "백테스트 기준 포트폴리오 수익률은 " + formatPercent(facts.totalReturnPercent())
-                    + "였지만 " + facts.benchmarkName() + "보다 "
-                    + formatPercentPoint(facts.excessReturnPercent().abs()) + " 낮았습니다. "
-                    + portfolioContextPhrase(facts) + " 비중 조정이나 종목 분산을 다시 확인해보는 편이 좋아요.";
-            tone = "CAUTION";
-        } else if (facts.volatilityPercent().compareTo(BigDecimal.valueOf(20)) >= 0
-                || facts.maxDrawdownPercent().compareTo(BigDecimal.valueOf(-20)) <= 0) {
-            summary = "수익 기회는 있었지만 가격 변동도 큰 구성이에요. "
-                    + facts.periodLabel() + " 기준 수익률은 " + formatPercent(facts.totalReturnPercent())
-                    + "였고, 가장 큰 하락 구간에서는 " + formatPercent(facts.maxDrawdownPercent())
-                    + "까지 내려갔습니다. " + portfolioContextPhrase(facts);
-            tone = "CAUTION";
-        } else if (facts.excessReturnPercent() != null) {
-            summary = "백테스트 기준 " + facts.periodLabel() + " 동안 원금 대비 "
-                    + formatPercent(facts.totalReturnPercent()) + "의 수익 구간이 관찰됐어요. "
-                    + facts.benchmarkName() + "보다 " + formatPercentPoint(facts.excessReturnPercent())
-                    + " 높았고, 최대 낙폭은 " + formatPercent(facts.maxDrawdownPercent())
-                    + "였습니다. " + portfolioContextPhrase(facts);
-        } else {
-            summary = "백테스트 기준 " + facts.periodLabel() + " 동안 원금 대비 "
-                    + formatPercent(facts.totalReturnPercent()) + "의 수익 구간이 관찰됐어요. "
-                    + "벤치마크 데이터는 아직 연결되지 않아 포트폴리오 자체의 변동성과 낙폭을 중심으로 확인해주세요. "
-                    + portfolioContextPhrase(facts);
-        }
-        return new RuleBasedFeedback("AI 리스크 진단", summary, bullets, tone, facts.disclaimer(), true);
+        return EtfFeedbackMessageComposer.compose(facts, false, true);
     }
 
     public RuleBasedFeedback buildFeedback(InsightFacts facts) {
@@ -335,19 +300,64 @@ public class EtfAiFeedbackService {
             allowed.add(formatPercentPoint(value));
             allowed.add(formatPercentPoint(value.abs()));
         }
-        if (facts.expectedProfitAmountKrw() != null) {
-            BigDecimal won = facts.expectedProfitAmountKrw().setScale(0, RoundingMode.HALF_UP);
-            allowed.add(won.toPlainString() + "원");
-            allowed.add(won.abs().toPlainString() + "원");
-        }
+        addKnownNumberTokens(allowed, facts.portfolioLabel());
+        addKnownNumberTokens(allowed, facts.periodLabel());
+        addKnownNumberTokens(allowed, facts.benchmarkName());
+        addKnownNumberTokens(allowed, facts.riskGrade());
+        addKnownNumberTokens(allowed, facts.riskGradeLabel());
+        addMoneyFormats(allowed, facts.principalAmountKrw());
+        addMoneyFormats(allowed, facts.expectedProfitAmountKrw());
+        addKnownNumberTokens(allowed, facts.positiveFacts());
+        addKnownNumberTokens(allowed, facts.riskFacts());
         if (facts.holdings() != null) {
+            allowed.add(String.valueOf(facts.holdings().size()));
             for (BacktestHolding holding : facts.holdings()) {
                 if (holding != null && holding.weightPercent() != null) {
                     allowed.add(formatPercent(holding.weightPercent()));
                 }
+                if (holding != null) {
+                    addKnownNumberTokens(allowed, holding.securityId());
+                    addKnownNumberTokens(allowed, holding.name());
+                    addKnownNumberTokens(allowed, holding.sector());
+                }
             }
         }
         return allowed;
+    }
+
+    private void addKnownNumberTokens(List<String> allowed, List<String> values) {
+        if (values == null) {
+            return;
+        }
+        values.forEach(value -> addKnownNumberTokens(allowed, value));
+    }
+
+    private void addKnownNumberTokens(List<String> allowed, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        Matcher matcher = NUMBER_PATTERN.matcher(value);
+        while (matcher.find()) {
+            allowed.add(matcher.group());
+        }
+    }
+
+    private void addMoneyFormats(List<String> allowed, BigDecimal value) {
+        if (value == null) {
+            return;
+        }
+        BigDecimal rounded = value.setScale(0, RoundingMode.HALF_UP);
+        BigDecimal absRounded = rounded.abs();
+        allowed.add(rounded.toPlainString() + "원");
+        allowed.add(absRounded.toPlainString() + "원");
+        BigDecimal oneHundredMillion = BigDecimal.valueOf(100_000_000);
+        if (absRounded.compareTo(oneHundredMillion) >= 0) {
+            BigDecimal eok = absRounded.divide(oneHundredMillion, 1, RoundingMode.HALF_UP);
+            allowed.add(formatDecimal(eok) + "억원");
+            if (eok.stripTrailingZeros().scale() <= 0) {
+                allowed.add(eok.setScale(0, RoundingMode.HALF_UP).toPlainString() + "억원");
+            }
+        }
     }
 
     private List<BigDecimal> percentValues(InsightFacts facts) {
