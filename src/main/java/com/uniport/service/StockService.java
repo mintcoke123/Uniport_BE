@@ -115,7 +115,7 @@ public class StockService {
         BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
         Long volume = price.getVolume() != null ? price.getVolume() : 0L;
 
-        MarketDataDTO marketData = resolveMarketData(price, currentPrice, volume);
+        MarketDataDTO marketData = resolveMarketData(price, volume);
 
         List<ManagedNewsArticle> relatedArticles = managedStockNewsService.getNewsForStock(code, displayName, 3);
         List<FinancialDataItemDTO> financialData = relatedArticles.stream()
@@ -185,18 +185,14 @@ public class StockService {
                 .orElse(null);
     }
 
-    private MarketDataDTO resolveMarketData(StockPriceDTO price, BigDecimal currentPrice, Long volume) {
+    private MarketDataDTO resolveMarketData(StockPriceDTO price, Long volume) {
         return MarketDataDTO.builder()
-                .openPrice(priceOrFallback(price.getOpenPrice(), currentPrice))
-                .closePrice(priceOrFallback(price.getClosePrice(), currentPrice))
+                .openPrice(price.getOpenPrice())
+                .closePrice(price.getClosePrice())
                 .volume(volume)
-                .lowPrice(priceOrFallback(price.getLowPrice(), currentPrice))
-                .highPrice(priceOrFallback(price.getHighPrice(), currentPrice))
+                .lowPrice(price.getLowPrice())
+                .highPrice(price.getHighPrice())
                 .build();
-    }
-
-    private BigDecimal priceOrFallback(BigDecimal price, BigDecimal fallback) {
-        return price != null ? price : fallback;
     }
 
     private MyHoldingDTO toMyHolding(int quantity, BigDecimal averagePrice, BigDecimal currentPrice) {

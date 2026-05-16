@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -110,6 +111,36 @@ class StockServiceTest {
         assertEquals(new BigDecimal("70000"), response.getMarketData().getClosePrice());
         assertEquals(new BigDecimal("68500"), response.getMarketData().getLowPrice());
         assertEquals(new BigDecimal("71000"), response.getMarketData().getHighPrice());
+    }
+
+    @Test
+    void getStockDetail_doesNotRecordMissingOhlcValues() {
+        StockPriceDTO price = StockPriceDTO.builder()
+                .stockCode("005930")
+                .stockName("삼성전자")
+                .currentPrice(new BigDecimal("70000"))
+                .changeAmount(new BigDecimal("1000"))
+                .changeRate(new BigDecimal("1.45"))
+                .volume(1000L)
+                .build();
+        StockMaster master = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+        when(kisApiService.getStockQuote("005930")).thenReturn(price);
+        when(stockMasterRepository.findById("005930")).thenReturn(Optional.of(master));
+        when(managedStockNewsService.getNewsForStock("005930", "삼성전자", 3)).thenReturn(List.of());
+        when(communityService.getInvestorSentiment("005930")).thenReturn(InvestorSentimentDTO.builder().build());
+        when(communityService.getDiscussionCount("005930")).thenReturn(0);
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
+
+        StockDetailDTO response = stockService.getStockDetail(5930L, null);
+
+        assertNull(response.getMarketData().getOpenPrice());
+        assertNull(response.getMarketData().getClosePrice());
+        assertNull(response.getMarketData().getLowPrice());
+        assertNull(response.getMarketData().getHighPrice());
     }
 
     private StockVisualDTO visual(String text) {

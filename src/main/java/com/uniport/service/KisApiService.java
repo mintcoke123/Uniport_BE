@@ -585,10 +585,6 @@ public class KisApiService {
                 .logoUrl(logoUrl)
                 .visual(visual)
                 .currentPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
-                .openPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
-                .closePrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
-                .lowPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
-                .highPrice(sn.getCurrentPrice() != null ? sn.getCurrentPrice() : BigDecimal.ZERO)
                 .changeAmount(sn.getChange() != null ? sn.getChange() : BigDecimal.ZERO)
                 .changeRate(sn.getChangeRate() != null ? sn.getChangeRate() : BigDecimal.ZERO)
                 .volume(sn.getVolume() != null ? sn.getVolume() : 0L)
@@ -607,18 +603,6 @@ public class KisApiService {
         Long volume = getLong(output2, "acml_vol");
         if (currentPrice == null) {
             currentPrice = BigDecimal.ZERO;
-        }
-        if (openPrice == null) {
-            openPrice = currentPrice;
-        }
-        if (closePrice == null) {
-            closePrice = currentPrice;
-        }
-        if (lowPrice == null) {
-            lowPrice = currentPrice;
-        }
-        if (highPrice == null) {
-            highPrice = currentPrice;
         }
         if (changeAmount == null) {
             changeAmount = BigDecimal.ZERO;
