@@ -62,13 +62,36 @@ public class HomeDataService {
     }
 
     public MockInvestingSummaryResponseDTO getSummary(User user) {
+        long startedAt = System.currentTimeMillis();
+        Long userId = user != null ? user.getId() : null;
+        log.info("[home-summary] start userId={}", userId);
+
+        long stepStartedAt = System.currentTimeMillis();
+        log.info("[home-summary] step=meInvestment start userId={}", userId);
         MyInvestmentResponseDTO investment = meService.getMyInvestment(user);
+        log.info("[home-summary] step=meInvestment completed userId={} elapsedMs={}",
+                userId,
+                System.currentTimeMillis() - stepStartedAt);
         CompetitionDataDTO competition = investment.getCompetitionData();
+
+        stepStartedAt = System.currentTimeMillis();
+        log.info("[home-summary] step=myRanking start userId={}", userId);
         Map<String, Object> myRanking = rankingService.getMyGroupRanking(user);
+        log.info("[home-summary] step=myRanking completed userId={} present={} elapsedMs={}",
+                userId,
+                myRanking != null,
+                System.currentTimeMillis() - stepStartedAt);
+
+        stepStartedAt = System.currentTimeMillis();
+        log.info("[home-summary] step=rooms start userId={}", userId);
         List<Map<String, Object>> rooms = user != null ? matchingRoomService.listRoomsJoinedBy(user) : List.of();
+        log.info("[home-summary] step=rooms completed userId={} count={} elapsedMs={}",
+                userId,
+                rooms.size(),
+                System.currentTimeMillis() - stepStartedAt);
         Map<String, Object> activeRoom = rooms.isEmpty() ? null : rooms.get(0);
 
-        return MockInvestingSummaryResponseDTO.builder()
+        MockInvestingSummaryResponseDTO response = MockInvestingSummaryResponseDTO.builder()
                 .activeMatch(HomeActiveMatchDTO.builder()
                         .roomId(parseRoomId(activeRoom))
                         .title(activeRoom != null ? stringValue(activeRoom.get("name")) : null)
@@ -91,6 +114,10 @@ public class HomeDataService {
                         .groupName(myRanking != null ? stringValue(myRanking.get("groupName")) : null)
                         .build())
                 .build();
+        log.info("[home-summary] completed userId={} elapsedMs={}",
+                userId,
+                System.currentTimeMillis() - startedAt);
+        return response;
     }
 
     @Transactional(readOnly = true)
