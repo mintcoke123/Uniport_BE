@@ -56,7 +56,7 @@ public class SecurityConfig {
                                 "/.well-known/apple-app-site-association",
                                 "/apple-app-site-association"
                         ).permitAll()
-                        .requestMatchers("/api/auth/**", "/api/me/**", "/api/market/**", "/api/stocks/**", "/api/news/**", "/api/ohlcv", "/api/trades", "/api/competitions/**", "/api/ranking/**", "/api/groups/**", "/api/admin/**", "/api/admin-console/**", "/api/config/**", "/api/health", "/api/home/group-insights", "/api/shop/items", "/h2-console/**", "/error", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/api/auth/**", "/api/me/**", "/api/market/**", "/api/stocks/**", "/api/news/**", "/api/ohlcv", "/api/trades", "/api/competitions/**", "/api/ranking/**", "/api/groups/**", "/api/admin/**", "/api/admin-console/**", "/api/config/**", "/api/health", "/api/home/group-insights", "/api/shop/items", "/api/festival/**", "/h2-console/**", "/error", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/etf-discovery/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/community/**").permitAll()
                         .requestMatchers("/groups/*/chat", "/prices").permitAll()

@@ -55,13 +55,19 @@ kis:
   api:
     base-url: ${KIS_API_BASE_URL:https://openapi.koreainvestment.com:9443}
     base-url-mock: ${KIS_API_BASE_URL_MOCK:https://openapivts.koreainvestment.com:29443}
-    appkey: ${KIS_APPKEY_2:}
-    appsecret: ${KIS_APPSECRET_2:}
+    appkey: ${KIS_APPKEY_1:}
+    appsecret: ${KIS_APPSECRET_1:}
     use-mock: ${KIS_API_USE_MOCK:false}
   keys:
-    - id: k2
-      appkey: ${KIS_APPKEY_2:}
-      appsecret: ${KIS_APPSECRET_2:}
+    - id: k1
+      appkey: ${KIS_APPKEY_1:}
+      appsecret: ${KIS_APPSECRET_1:}
+    - id: k3
+      appkey: ${KIS_APPKEY_3:}
+      appsecret: ${KIS_APPSECRET_3:}
+    - id: k4
+      appkey: ${KIS_APPKEY_4:}
+      appsecret: ${KIS_APPSECRET_4:}
 
 backtest:
   fx:

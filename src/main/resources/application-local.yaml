@@ -1,11 +1,13 @@
-# 로컬 전용 오버라이드. 시크릿은 env 로만 설정 (KIS_APPKEY_2, KIS_APPSECRET_2).
+# local overrides
+# KIS keys must come from environment variables only.
+# festival policy: do not use k2. configure only k1, k3, k4.
 spring:
   h2:
     console:
       enabled: true
       path: /h2-console
+
 kis:
   api:
-    # appkey/appsecret 은 application.yaml 에서 ${KIS_APPKEY_2:}, ${KIS_APPSECRET_2:} 로 로드.
-    # 로컬에서 사용 시 환경 변수 또는 .env 에 설정.
+    # application.yaml loads k1 as the default key and k1/k3/k4 for the multi-key pool.
     use-mock: false
