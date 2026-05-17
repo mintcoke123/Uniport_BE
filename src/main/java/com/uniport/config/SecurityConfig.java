@@ -56,6 +56,7 @@ public class SecurityConfig {
                                 "/privacy.html",
                                 "/support",
                                 "/support.html",
+                                "/assets/**",
                                 "/education-assets/**",
                                 "/.well-known/assetlinks.json",
                                 "/.well-known/apple-app-site-association",

@@ -64,6 +64,12 @@ class RealtimeNewsSecurityTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void staticAssets_allowAnonymousImageReads() throws Exception {
+        mockMvc.perform(get("/assets/mypage/profile-options/dolphin.png"))
+                .andExpect(status().isNotFound());
+    }
+
     @Configuration
     @EnableWebMvc
     static class TestConfig {
