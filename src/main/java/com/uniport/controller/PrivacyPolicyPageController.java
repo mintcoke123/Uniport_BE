@@ -105,8 +105,6 @@ public class PrivacyPolicyPageController {
                   <li>Kakao SDK: Kakao 로그인, 사용자 정보 확인, KakaoTalk 공유</li>
                   <li>Uniport 백엔드 서버: 계정, 모의투자, 채팅, 커뮤니티, 학습, 포인트샵 데이터 처리</li>
                   <li>TradingView Lightweight Charts 및 jsDelivr CDN: 앱 내 주식 차트 표시</li>
-                  <li>한국투자증권 KIS Open API: 시장 가격 및 종목 데이터 제공</li>
-                  <li>Naver News API: 뉴스 데이터 제공</li>
                   <li>OpenAI API 또는 FinBERT 기반 분석 서비스: 투자/그룹 피드백 기능이 활성화된 경우 분석 결과 생성</li>
                 </ul>
                 <p>Uniport는 광고 SDK, 광고 식별자 기반 추적, 타사 광고 네트워크를 현재 사용하지 않습니다.</p>

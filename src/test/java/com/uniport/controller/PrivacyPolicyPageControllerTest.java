@@ -20,6 +20,7 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -58,7 +59,9 @@ class PrivacyPolicyPageControllerTest {
                 .andExpect(content().string(containsString("시행일: 2026년 5월 14일")))
                 .andExpect(content().string(containsString("11. 문의")))
                 .andExpect(content().string(containsString("kwakkun2002@gmail.com")))
-                .andExpect(content().string(containsString("mailto:kwakkun2002@gmail.com")));
+                .andExpect(content().string(containsString("mailto:kwakkun2002@gmail.com")))
+                .andExpect(content().string(not(containsString("KIS " + "Open API"))))
+                .andExpect(content().string(not(containsString("Naver " + "News API"))));
     }
 
     @Test
