@@ -334,6 +334,73 @@ class VoteServiceTest {
     }
 
     @Test
+    void submitVoteSchedulesMarketOrderWhenMajorityPassesOutsideTradingHours() {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        TradeService tradeService = mock(TradeService.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        PriceCache priceCache = mock(PriceCache.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatService chatService = mock(ChatService.class);
+        GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                null,
+                null,
+                tradeService,
+                userRepository,
+                priceCache,
+                kisApiService,
+                chatService,
+                broadcaster,
+                null,
+                null,
+                pushNotificationService
+        );
+        Vote vote = Vote.builder()
+                .id(456L)
+                .roomId(123L)
+                .proposerId(7L)
+                .type("매수")
+                .stockName("삼성전자")
+                .stockCode("005930")
+                .quantity(3)
+                .proposedPrice(BigDecimal.valueOf(70000))
+                .orderStrategy(VoteService.ORDER_STRATEGY_MARKET)
+                .totalMembers(2)
+                .status("ongoing")
+                .build();
+        User voter = User.builder().id(8L).nickname("찬성자").build();
+        when(chatService.hasFeedbackMessage(123L)).thenReturn(false);
+        when(voteRepository.findById(456L)).thenReturn(Optional.of(vote));
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(123L, 8L)).thenReturn(true);
+        when(voteParticipantRepository.findByVote_IdAndUserId(456L, 8L)).thenReturn(Optional.empty());
+        when(voteParticipantRepository.findByVote_IdOrderById(456L)).thenReturn(List.of(
+                VoteParticipant.builder().vote(vote).userId(7L).voteChoice("찬성").build(),
+                VoteParticipant.builder().vote(vote).userId(8L).voteChoice("찬성").build()
+        ));
+        when(tradeService.isTradingHoursNow()).thenReturn(false);
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(123L)).thenReturn(List.of(
+                MatchingRoomMember.builder().user(User.builder().id(7L).build()).build(),
+                MatchingRoomMember.builder().user(voter).build()
+        ));
+
+        Map<String, Object> response = service.submitVote(123L, 456L, voter, "찬성");
+
+        assertEquals(VoteService.STATUS_PENDING, vote.getStatus());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> voteSummary = (Map<String, Object>) response.get("vote");
+        assertEquals(VoteService.STATUS_PENDING, voteSummary.get("status"));
+        verify(tradeService).isTradingHoursNow();
+        verify(tradeService, never()).placeOrderForTeam(any(), any(), any());
+        verifyNoInteractions(userRepository, priceCache, kisApiService);
+    }
+
+    @Test
     void processPendingVotesSkipsEndedRooms() {
         VoteRepository voteRepository = mock(VoteRepository.class);
         VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
@@ -387,6 +454,57 @@ class VoteServiceTest {
 
         verify(voteRepository, never()).findByIdForUpdate(456L);
         verifyNoInteractions(tradeService, userRepository, priceCache, kisApiService, chatService, pushNotificationService);
+    }
+
+    @Test
+    void processPendingVotesSkipsMarketOrdersOutsideTradingHours() {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        TradeService tradeService = mock(TradeService.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        PriceCache priceCache = mock(PriceCache.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatService chatService = mock(ChatService.class);
+        GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                null,
+                null,
+                tradeService,
+                userRepository,
+                priceCache,
+                kisApiService,
+                chatService,
+                broadcaster,
+                null,
+                null,
+                pushNotificationService
+        );
+        Vote vote = Vote.builder()
+                .id(456L)
+                .roomId(123L)
+                .proposerId(7L)
+                .type("매수")
+                .stockName("삼성전자")
+                .stockCode("005930")
+                .quantity(3)
+                .proposedPrice(BigDecimal.valueOf(70000))
+                .orderStrategy(VoteService.ORDER_STRATEGY_MARKET)
+                .status(VoteService.STATUS_PENDING)
+                .build();
+        when(voteRepository.findByStatus(VoteService.STATUS_PENDING)).thenReturn(List.of(vote));
+        when(tradeService.isTradingHoursNow()).thenReturn(false);
+
+        service.processPendingVotes();
+
+        verify(tradeService).isTradingHoursNow();
+        verify(voteRepository, never()).findByIdForUpdate(456L);
+        verify(tradeService, never()).placeOrderForTeam(any(), any(), any());
+        verifyNoInteractions(userRepository, priceCache, kisApiService, chatService, pushNotificationService);
     }
 
     @Test
@@ -475,6 +593,7 @@ class VoteServiceTest {
                 .build();
         User proposer = User.builder().id(7L).nickname("제안자").build();
         when(voteRepository.findByStatus(VoteService.STATUS_PENDING)).thenReturn(List.of(vote));
+        when(tradeService.isTradingHoursNow()).thenReturn(true);
         when(voteRepository.findByIdForUpdate(456L)).thenReturn(Optional.of(vote));
         when(userRepository.findById(7L)).thenReturn(Optional.of(proposer));
         when(priceCache.get("005930")).thenReturn(Optional.empty());

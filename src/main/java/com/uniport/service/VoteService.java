@@ -384,9 +384,13 @@ public class VoteService {
             vote.setStatus(STATUS_PASSED);
             voteRepository.save(vote);
             String strategy = vote.getOrderStrategy() != null ? vote.getOrderStrategy() : ORDER_STRATEGY_MARKET;
-            BigDecimal currentPrice = resolveCurrentPrice(vote.getStockCode(), fallbackPrice(vote));
+            boolean tradingHours = tradeService.isTradingHoursNow();
             if (ORDER_STRATEGY_MARKET.equals(strategy)) {
-                if (vote.getStockCode() != null && !vote.getStockCode().isBlank()) {
+                if (!tradingHours) {
+                    vote.setStatus(STATUS_PENDING);
+                    voteRepository.save(vote);
+                } else if (vote.getStockCode() != null && !vote.getStockCode().isBlank()) {
+                    BigDecimal currentPrice = resolveCurrentPrice(vote.getStockCode(), fallbackPrice(vote));
                     Optional<Vote> lockedOpt = voteRepository.findByIdForUpdate(voteId);
                     if (lockedOpt.isPresent() && STATUS_PASSED.equals(lockedOpt.get().getStatus())) {
                         Vote locked = lockedOpt.get();
@@ -402,7 +406,8 @@ public class VoteService {
                     }
                 }
             } else {
-                if (vote.getStockCode() != null && !vote.getStockCode().isBlank() && shouldExecute(vote, currentPrice)) {
+                BigDecimal currentPrice = resolveCurrentPrice(vote.getStockCode(), fallbackPrice(vote));
+                if (tradingHours && vote.getStockCode() != null && !vote.getStockCode().isBlank() && shouldExecute(vote, currentPrice)) {
                     Optional<Vote> lockedOpt = voteRepository.findByIdForUpdate(voteId);
                     if (lockedOpt.isPresent() && STATUS_PASSED.equals(lockedOpt.get().getStatus())) {
                         Vote locked = lockedOpt.get();
@@ -638,6 +643,7 @@ public class VoteService {
                 sendVoteClosedPush(v.getRoomId(), v);
                 continue;
             }
+            if (!tradeService.isTradingHoursNow()) continue;
             BigDecimal currentPrice = resolveCurrentPrice(v.getStockCode(), v.getProposedPrice());
             if (!shouldExecute(v, currentPrice)) continue;
             Optional<Vote> lockedOpt = voteRepository.findByIdForUpdate(v.getId());
