@@ -96,6 +96,7 @@ public class PointSocialDataService {
     private static final TypeReference<Map<String, Integer>> EDUCATION_CURRENT_DAY_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, Set<Integer>>> EDUCATION_COMPLETED_DAYS_TYPE = new TypeReference<>() {};
     private static final String POINT_SHOP_EXCHANGE_BLOCKED_MESSAGE = "포인트샵 교환은 실제 기프티콘 운영 준비 후 열릴 예정이에요.";
+    private static final int FRIEND_RANKING_WINDOW_SIZE = 15;
 
     private final PointWalletRepository pointWalletRepository;
     private final PointTransactionRepository pointTransactionRepository;
@@ -614,17 +615,20 @@ public class PointSocialDataService {
                                 .thenComparing(User::getId)
                 )
                 .toList();
-        List<FriendRankingItemDTO> items = new ArrayList<>();
-        for (int i = 0; i < sorted.size(); i++) {
-            items.add(toRankingItem(i + 1, sorted.get(i)));
-        }
-        int myRank = 1;
+        int myIndex = 0;
         for (int i = 0; i < sorted.size(); i++) {
             if (sorted.get(i).getId().equals(user.getId())) {
-                myRank = i + 1;
+                myIndex = i;
                 break;
             }
         }
+        int startIndex = Math.max(0, myIndex - FRIEND_RANKING_WINDOW_SIZE);
+        int endIndex = Math.min(sorted.size(), myIndex + FRIEND_RANKING_WINDOW_SIZE + 1);
+        List<FriendRankingItemDTO> items = new ArrayList<>();
+        for (int i = startIndex; i < endIndex; i++) {
+            items.add(toRankingItem(i + 1, sorted.get(i)));
+        }
+        int myRank = myIndex + 1;
         return FriendsDashboardResponseDTO.builder()
                 .ranking(FriendRankingSectionDTO.builder().endDay(3).items(items).build())
                 .myRanking(toRankingItem(myRank, user))
