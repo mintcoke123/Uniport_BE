@@ -634,7 +634,12 @@ public class PointSocialDataService {
         return List.of(
                 character("SEED", "조심스러운 거북이형", "🐢", "#d9f1c7", stage, selectedCode),
                 character("PANDA", "균형잡힌 판다형", "🐼", "#d3ecff", stage, selectedCode),
-                character("FOX", "기회를 찾는 여우형", "🦊", "#ffe0c2", stage, selectedCode)
+                character("DOLPHIN", "감각적인 돌고래형", "🐬", "#d3ecff", stage, selectedCode),
+                character("RESEARCHER", "호기심 많은 탐구자형", "🔎", "#ffe7b7", stage, selectedCode),
+                character("FOX", "기회를 찾는 여우형", "🦊", "#ffe0c2", stage, selectedCode),
+                character("FARMER", "성실한 농부형", "🌱", "#e7f8b8", stage, selectedCode),
+                character("OWL", "전략적인 올빼미형", "🦉", "#d5eeff", stage, selectedCode),
+                character("SURFER", "파도타는 서퍼형", "🏄", "#cff4ec", stage, selectedCode)
         );
     }
 

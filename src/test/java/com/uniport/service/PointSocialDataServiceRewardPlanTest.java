@@ -103,6 +103,11 @@ class PointSocialDataServiceRewardPlanTest {
         assertEquals("PANDA", selected.getCode());
         assertEquals(3, selected.getStage());
         assertEquals("character_panda_stage_3", selected.getAssetKey());
+        assertEquals(8, response.getCharacters().size());
+        assertEquals(
+                List.of("SEED", "PANDA", "DOLPHIN", "RESEARCHER", "FOX", "FARMER", "OWL", "SURFER"),
+                response.getCharacters().stream().map(MyPageCharacterCardDTO::getCode).toList()
+        );
         assertTrue(response.getCharacters().stream().allMatch(character -> character.getAssetKey() != null));
     }
 }
