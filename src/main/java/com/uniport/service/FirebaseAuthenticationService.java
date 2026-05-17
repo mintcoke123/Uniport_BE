@@ -202,11 +202,6 @@ public class FirebaseAuthenticationService {
             user.setEmail(email);
             dirty = true;
         }
-        String picture = extractPicture(firebaseToken);
-        if (!picture.isBlank() && !picture.equals(user.getProfileImageUrl())) {
-            user.setProfileImageUrl(picture);
-            dirty = true;
-        }
         String nickname = buildNicknameCandidate(firebaseToken);
         if (!nickname.isBlank() && (user.getNickname() == null || user.getNickname().isBlank() || user.getNickname().startsWith("user_"))) {
             String uniqueNickname = ensureUniqueNickname(nickname, user.getId());
@@ -216,6 +211,11 @@ public class FirebaseAuthenticationService {
             }
         }
         return dirty ? userRepository.save(user) : user;
+    }
+
+    static boolean shouldReplaceProfileImageFromFirebase(String currentProfileImageUrl, String firebasePicture) {
+        // Provider profile photos are intentionally ignored so login scopes do not need profile image consent.
+        return false;
     }
 
     private User createInitialUser(FirebaseToken firebaseToken) {
@@ -231,7 +231,7 @@ public class FirebaseAuthenticationService {
                 .username(username)
                 .password(passwordEncoder.encode(UUID.randomUUID().toString()))
                 .nickname(generatedNickname)
-                .profileImageUrl(blankToNull(extractPicture(firebaseToken)))
+                .profileImageUrl(null)
                 .totalAssets(INITIAL_ASSETS)
                 .investmentAmount(INITIAL_ASSETS)
                 .profitLoss(BigDecimal.ZERO)
@@ -302,14 +302,6 @@ public class FirebaseAuthenticationService {
         }
         String uid = trim(firebaseToken.getUid());
         return uid.isBlank() ? "user" : "user_" + uid.substring(0, Math.min(uid.length(), 8));
-    }
-
-    private String extractPicture(FirebaseToken firebaseToken) {
-        Object picture = firebaseToken.getClaims().get("picture");
-        if (picture == null) {
-            return "";
-        }
-        return trim(String.valueOf(picture));
     }
 
     private String mapFirebaseAuthMessage(FirebaseAuthException ex) {
