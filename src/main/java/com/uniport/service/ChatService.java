@@ -168,7 +168,7 @@ public class ChatService {
                 existingFeedback.setMessage(messageJson);
                 msg = chatMessageRepository.save(existingFeedback);
             } else {
-                msg = ChatMessage.of(roomId, 0L, "관리자", messageJson);
+                msg = ChatMessage.of(roomId, null, "관리자", messageJson);
                 msg = chatMessageRepository.save(msg);
             }
 
@@ -212,7 +212,7 @@ public class ChatService {
             payload.put("report", reportSnapshot != null ? reportSnapshot : Map.of("reportId", reportId));
             String messageJson = OBJECT_MAPPER.writeValueAsString(payload);
 
-            ChatMessage msg = ChatMessage.of(roomId, 0L, "시스템", messageJson);
+            ChatMessage msg = ChatMessage.of(roomId, null, "시스템", messageJson);
             ChatMessage saved = chatMessageRepository.save(msg);
             broadcastToGroup(roomId, saved);
             return saved;

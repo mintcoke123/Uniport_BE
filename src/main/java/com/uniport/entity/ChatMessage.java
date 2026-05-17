@@ -27,7 +27,7 @@ public class ChatMessage {
     @Column(name = "room_id", nullable = false)
     private Long roomId;
 
-    @Column(name = "user_id", nullable = false)
+    @Column(name = "user_id")
     private Long userId;
 
     @Column(name = "user_nickname", nullable = false, length = 100)

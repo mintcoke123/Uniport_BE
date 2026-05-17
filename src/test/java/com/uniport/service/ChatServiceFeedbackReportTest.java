@@ -12,8 +12,11 @@ import java.util.Map;
 import jakarta.persistence.Column;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ChatServiceFeedbackReportTest {
@@ -57,5 +60,33 @@ class ChatServiceFeedbackReportTest {
         Column column = field.getAnnotation(Column.class);
 
         assertEquals("TEXT", column.columnDefinition());
+    }
+
+    @Test
+    void chatMessageUserIdColumnAllowsSystemMessages() throws Exception {
+        Field field = ChatMessage.class.getDeclaredField("userId");
+        Column column = field.getAnnotation(Column.class);
+
+        assertTrue(column.nullable());
+    }
+
+    @Test
+    void feedbackReportSystemMessageDoesNotUseSyntheticUserId() {
+        ChatMessageRepository repository = mock(ChatMessageRepository.class);
+        GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        ChatService service = new ChatService(repository, broadcaster);
+
+        when(repository.findByRoomIdOrderByCreatedAtAsc(1L)).thenReturn(List.of());
+        when(repository.save(any(ChatMessage.class))).thenAnswer(invocation -> {
+            ChatMessage message = invocation.getArgument(0);
+            message.setId(99L);
+            return message;
+        });
+
+        service.saveFeedbackReportMessage(1L, 7L, Map.of("reportId", 7L));
+
+        verify(repository).save(argThat(message ->
+                message.getUserId() == null && "시스템".equals(message.getUserNickname())
+        ));
     }
 }
