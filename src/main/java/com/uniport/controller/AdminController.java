@@ -311,17 +311,18 @@ public class AdminController {
             throw new ApiException("방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
         }
         var now = java.time.Instant.now();
-        MatchingRoom recovered = MatchingRoom.builder()
-                .id(groupId)
-                .name("복구된 매칭방 room-" + groupId)
-                .capacity(Math.max(3, teamUsers.size()))
-                .memberCount(teamUsers.size())
-                .status("ended")
-                .visibility("PUBLIC")
-                .createdAt(now)
-                .endedAt(now)
-                .build();
-        MatchingRoom saved = matchingRoomRepository.save(recovered);
+        matchingRoomRepository.insertRecoveredRoom(
+                groupId,
+                "복구된 매칭방 room-" + groupId,
+                Math.max(3, teamUsers.size()),
+                teamUsers.size(),
+                "ended",
+                "PUBLIC",
+                now,
+                now
+        );
+        MatchingRoom saved = matchingRoomRepository.findById(groupId)
+                .orElseThrow(() -> new ApiException("방 복구에 실패했습니다.", HttpStatus.INTERNAL_SERVER_ERROR));
         for (User teamUser : teamUsers) {
             if (teamUser.getId() != null
                     && !matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(groupId, teamUser.getId())) {

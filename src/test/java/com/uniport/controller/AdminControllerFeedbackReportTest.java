@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -126,9 +127,18 @@ class AdminControllerFeedbackReportTest {
 
         when(authService.getUserFromToken("Bearer sisu"))
                 .thenReturn(User.builder().id(77L).role("sisu_admin").build());
-        when(matchingRoomRepository.findById(328L)).thenReturn(Optional.empty());
+        MatchingRoom recoveredRoom = MatchingRoom.builder()
+                .id(328L)
+                .name("복구된 매칭방 room-328")
+                .capacity(3)
+                .memberCount(2)
+                .status("ended")
+                .visibility("PUBLIC")
+                .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
+                .endedAt(Instant.parse("2026-05-17T00:00:00Z"))
+                .build();
+        when(matchingRoomRepository.findById(328L)).thenReturn(Optional.empty(), Optional.of(recoveredRoom));
         when(userRepository.findByTeamId("team-328")).thenReturn(java.util.List.of(kakao, apple));
-        when(matchingRoomRepository.save(any(MatchingRoom.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(feedbackReportUseCase.generateForRoom(328L)).thenReturn(Map.of(
                 "reportId", 3280L,
                 "roomId", 328L,
@@ -149,6 +159,16 @@ class AdminControllerFeedbackReportTest {
                 .andExpect(jsonPath("$.roomId").value(328))
                 .andExpect(jsonPath("$.status").value("PUBLISHED"));
 
+        verify(matchingRoomRepository).insertRecoveredRoom(
+                eq(328L),
+                eq("복구된 매칭방 room-328"),
+                eq(3),
+                eq(2),
+                eq("ended"),
+                eq("PUBLIC"),
+                any(Instant.class),
+                any(Instant.class)
+        );
         verify(matchingRoomRepository, atLeastOnce()).save(argThat(room ->
                 room.getId().equals(328L)
                         && "ended".equals(room.getStatus())
