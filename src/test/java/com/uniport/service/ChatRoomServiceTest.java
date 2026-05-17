@@ -443,6 +443,79 @@ class ChatRoomServiceTest {
     }
 
     @Test
+    void getChatRoomSummaryIncludesMemberProfileImageUrls() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
+        TeamAccountRepository teamAccountRepository = mock(TeamAccountRepository.class);
+        TeamHoldingRepository teamHoldingRepository = mock(TeamHoldingRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatRoomService service = new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatMessageRepository,
+                teamAccountRepository,
+                teamHoldingRepository,
+                voteRepository,
+                voteParticipantRepository,
+                kisApiService
+        );
+
+        User currentUser = User.builder()
+                .id(10L)
+                .nickname("tester")
+                .profileImageUrl("https://cdn.example.com/me.png")
+                .build();
+        User teammate = User.builder()
+                .id(11L)
+                .nickname("member")
+                .profileImageUrl("https://cdn.example.com/member.png")
+                .build();
+        MatchingRoom room = MatchingRoom.builder()
+                .id(3L)
+                .name("테스트방")
+                .capacity(3)
+                .memberCount(2)
+                .status("started")
+                .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
+                .build();
+        MatchingRoomMember currentMembership = MatchingRoomMember.builder()
+                .id(1L)
+                .matchingRoom(room)
+                .user(currentUser)
+                .joinedAt(Instant.parse("2026-05-17T00:10:00Z"))
+                .build();
+        MatchingRoomMember teammateMembership = MatchingRoomMember.builder()
+                .id(2L)
+                .matchingRoom(room)
+                .user(teammate)
+                .joinedAt(Instant.parse("2026-05-17T00:11:00Z"))
+                .build();
+
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), currentUser.getId())).thenReturn(true);
+        when(matchingRoomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId()))
+                .thenReturn(List.of(currentMembership, teammateMembership));
+        when(teamAccountRepository.findByTeamId(room.getId())).thenReturn(Optional.empty());
+        when(teamHoldingRepository.findByTeamId(room.getId())).thenReturn(List.of());
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(List.of());
+        when(chatMessageRepository.findTopByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(Optional.empty());
+        when(matchingRoomMemberRepository.findByMatchingRoomIdAndUserId(room.getId(), currentUser.getId()))
+                .thenReturn(Optional.of(currentMembership));
+
+        Map<String, Object> response = service.getChatRoomSummary(room.getId(), currentUser);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> roomInfo = (Map<String, Object>) response.get("roomInfo");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> members = (List<Map<String, Object>>) roomInfo.get("members");
+        assertEquals("https://cdn.example.com/me.png", members.get(0).get("profileImageUrl"));
+        assertEquals("https://cdn.example.com/member.png", members.get(1).get("profileImageUrl"));
+    }
+
+    @Test
     void renameChatRoomTrimsNameAndReturnsRoomIdentity() {
         MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
         MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);

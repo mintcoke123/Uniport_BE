@@ -191,6 +191,7 @@ public class ChatRoomService {
             memberSummaries.add(Map.of(
                     "userId", member.getId(),
                     "nickname", member.getNickname() != null ? member.getNickname() : "",
+                    "profileImageUrl", member.getProfileImageUrl() != null ? member.getProfileImageUrl() : "",
                     "role", i == 0 ? "HOST" : "MEMBER",
                     "roleLabel", i == 0 ? "방장" : "팀원",
                     "isMe", isMe
