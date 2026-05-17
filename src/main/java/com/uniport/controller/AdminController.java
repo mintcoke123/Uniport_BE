@@ -276,6 +276,20 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> generateFeedbackReport(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String roomId) {
+        return endRoomAndGenerateFeedbackReport(authorization, roomId, false);
+    }
+
+    /** 운영 관리자용 강제 종료. QA/운영 상황에서 즉시 종료 시각으로 리포트를 생성한다. */
+    @PostMapping("/matching-rooms/{roomId}/force-end-feedback-report")
+    public ResponseEntity<Map<String, Object>> forceEndFeedbackReport(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String roomId) {
+        return endRoomAndGenerateFeedbackReport(authorization, roomId, true);
+    }
+
+    private ResponseEntity<Map<String, Object>> endRoomAndGenerateFeedbackReport(String authorization,
+                                                                                String roomId,
+                                                                                boolean overwriteEndedAt) {
         requireAdminOrSisuAdmin(authorization);
         Long groupId = parseRoomIdToGroupId(roomId);
         var room = matchingRoomRepository.findById(groupId)
@@ -283,7 +297,7 @@ public class AdminController {
         if (!"ended".equalsIgnoreCase(room.getStatus())) {
             room.setStatus("ended");
         }
-        if (room.getEndedAt() == null) {
+        if (overwriteEndedAt || room.getEndedAt() == null) {
             room.setEndedAt(java.time.Instant.now());
         }
         matchingRoomRepository.save(room);
