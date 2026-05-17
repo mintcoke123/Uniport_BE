@@ -54,3 +54,11 @@ uniport:
   education:
     seed:
       force-refresh: ${UNIPORT_EDUCATION_SEED_FORCE_REFRESH:true}
+
+asset:
+  master:
+    us:
+      import:
+        enabled: ${ASSET_MASTER_US_IMPORT_ENABLED:false}
+        on-startup:
+          enabled: ${ASSET_MASTER_US_IMPORT_ON_STARTUP_ENABLED:true}
