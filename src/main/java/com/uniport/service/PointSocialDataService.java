@@ -597,12 +597,17 @@ public class PointSocialDataService {
 
     @Transactional(readOnly = true)
     public FriendsDashboardResponseDTO getFriendsDashboard(User user) {
-        List<User> rankingPool = new ArrayList<>(userRepository.findAll());
-        boolean currentUserIncluded = rankingPool.stream()
-                .anyMatch(candidate -> candidate.getId() != null && candidate.getId().equals(user.getId()));
-        if (!currentUserIncluded) {
-            rankingPool.add(user);
-        }
+        List<User> rankingPool = new ArrayList<>();
+        rankingPool.add(user);
+        friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(user.getId(), user.getId()).stream()
+                .filter(relation -> "ACCEPTED".equalsIgnoreCase(relation.getStatus()))
+                .map(relation -> relation.getRequesterUser().getId().equals(user.getId())
+                        ? relation.getAddresseeUser()
+                        : relation.getRequesterUser())
+                .filter(friend -> friend.getId() != null)
+                .filter(friend -> !friend.getId().equals(user.getId()))
+                .distinct()
+                .forEach(rankingPool::add);
 
         List<Long> userIds = rankingPool.stream()
                 .map(User::getId)

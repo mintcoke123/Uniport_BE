@@ -1,6 +1,7 @@
 package com.uniport.service;
 
 import com.uniport.dto.FriendsDashboardResponseDTO;
+import com.uniport.entity.FriendRelation;
 import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
 import com.uniport.entity.UserMyPagePreference;
@@ -30,26 +31,29 @@ class PointSocialDataServiceFriendDashboardTest {
     private EntityManager entityManager;
 
     @Test
-    void getFriendsDashboardRanksAllUsersNotOnlyAcceptedFriends() {
+    void getFriendsDashboardRanksAcceptedFriendsAndCurrentUserOnly() {
         User currentUser = persistUser("20261011", "현재사용자");
-        User topUser = persistUser("20261012", "전체랭킹1위");
-        User otherUser = persistUser("20261013", "전체랭킹2위");
+        User acceptedFriend = persistUser("20261012", "수락된친구");
+        User nonFriend = persistUser("20261013", "친구아닌유저");
+        User requestedUser = persistUser("20261014", "요청중유저");
         persistLearningState(currentUser.getId(), 1_000);
-        persistLearningState(topUser.getId(), 4_000);
-        persistLearningState(otherUser.getId(), 2_000);
+        persistLearningState(acceptedFriend.getId(), 4_000);
+        persistLearningState(nonFriend.getId(), 8_000);
+        persistLearningState(requestedUser.getId(), 6_000);
+        persistRelation(currentUser, acceptedFriend, "ACCEPTED");
+        persistRelation(currentUser, requestedUser, "REQUESTED");
         entityManager.flush();
         entityManager.clear();
 
         FriendsDashboardResponseDTO response = pointSocialDataService.getFriendsDashboard(currentUser);
 
         assertEquals(
-                List.of("전체랭킹1위", "전체랭킹2위", "현재사용자"),
+                List.of("수락된친구", "현재사용자"),
                 response.getRanking().getItems().stream()
                         .map(item -> item.getNickname())
-                        .limit(3)
                         .toList()
         );
-        assertEquals(3, response.getMyRanking().getRank());
+        assertEquals(2, response.getMyRanking().getRank());
     }
 
     @Test
@@ -93,16 +97,18 @@ class PointSocialDataServiceFriendDashboardTest {
     }
 
     private User persistRankingUsers(int currentUserRank, int userCount) {
-        User currentUser = null;
+        User currentUser = persistUser("20261100", "랭킹" + currentUserRank + "위");
+        persistLearningState(currentUser.getId(), (userCount - currentUserRank + 1) * 100);
         for (int rank = 1; rank <= userCount; rank++) {
+            if (rank == currentUserRank) {
+                continue;
+            }
             User user = persistUser(
                     String.format("202611%02d", rank),
                     "랭킹" + rank + "위"
             );
             persistLearningState(user.getId(), (userCount - rank + 1) * 100);
-            if (rank == currentUserRank) {
-                currentUser = user;
-            }
+            persistRelation(currentUser, user, "ACCEPTED");
         }
         return currentUser;
     }
@@ -115,6 +121,15 @@ class PointSocialDataServiceFriendDashboardTest {
                 .build();
         entityManager.persist(user);
         return user;
+    }
+
+    private void persistRelation(User requester, User addressee, String status) {
+        FriendRelation relation = FriendRelation.builder()
+                .requesterUser(requester)
+                .addresseeUser(addressee)
+                .status(status)
+                .build();
+        entityManager.persist(relation);
     }
 
     private void persistLearningState(Long userId, int exp) {
