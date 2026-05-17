@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import com.uniport.dto.UserSearchItemDTO;
 import com.uniport.entity.FriendRelation;
+import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(properties = {
@@ -59,6 +61,23 @@ class UserSearchServiceTest {
         assertTrue(byNickname.get("받은요청유저").isAlreadyInvited());
     }
 
+    @Test
+    void searchUsesLearningProgressLevelInsteadOfFixedFallback() {
+        User currentUser = persistUser("20262101", "현재사용자", null);
+        User progressedUser = persistUser("20262102", "학습한유저", null);
+        User defaultUser = persistUser("20262103", "학습없는유저", null);
+        persistLearningState(progressedUser.getId(), 650);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<UserSearchItemDTO> result = userSearchService.search(currentUser, "", 20);
+
+        Map<String, UserSearchItemDTO> byNickname = result.stream()
+                .collect(Collectors.toMap(UserSearchItemDTO::getNickname, Function.identity()));
+        assertEquals(3, byNickname.get("학습한유저").getLevel());
+        assertEquals(1, byNickname.get("학습없는유저").getLevel());
+    }
+
     private User persistUser(String studentId, String nickname, String teamId) {
         User user = User.builder()
                 .studentId(studentId)
@@ -77,5 +96,24 @@ class UserSearchServiceTest {
                 .status(status)
                 .build();
         entityManager.persist(relation);
+    }
+
+    private void persistLearningState(Long userId, int exp) {
+        LearningUserStateEntity state = LearningUserStateEntity.builder()
+                .userId(userId)
+                .level(1)
+                .point(0)
+                .exp(exp)
+                .streakDays(0)
+                .currentDayByCourseJson("{}")
+                .completedDaysByCourseJson("{}")
+                .submittedStepIdsJson("{}")
+                .educationCurrentDayJson("{}")
+                .educationCompletedDaysJson("{}")
+                .educationQuizAnswersJson("{}")
+                .educationCardProgressJson("{}")
+                .educationSectorSelectionsJson("{}")
+                .build();
+        entityManager.persist(state);
     }
 }
