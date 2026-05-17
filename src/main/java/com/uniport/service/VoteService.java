@@ -99,6 +99,15 @@ public class VoteService {
     public Vote createVote(Long groupId, User proposer, String type, String stockName, String stockCode,
                            int quantity, BigDecimal proposedPrice, String reason,
                            String orderStrategy, BigDecimal limitPrice, BigDecimal triggerPrice, String triggerDirection) {
+        if (quantity <= 0) {
+            throw new ApiException("quantity must be positive", HttpStatus.BAD_REQUEST);
+        }
+        if (stockCode == null || stockCode.isBlank()) {
+            throw new ApiException("stockCode is required", HttpStatus.BAD_REQUEST);
+        }
+        if (proposedPrice == null || proposedPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ApiException("proposedPrice must be positive", HttpStatus.BAD_REQUEST);
+        }
         if (chatService.hasFeedbackMessage(groupId)) {
             throw new ApiException("대회 종료로 비활성화되었습니다.", HttpStatus.FORBIDDEN);
         }
@@ -159,9 +168,9 @@ public class VoteService {
                 .proposerName(proposer.getNickname() != null ? proposer.getNickname() : "")
                 .type(type != null ? type : "매수")
                 .stockName(stockName != null ? stockName : "")
-                .stockCode(stockCode != null && !stockCode.isBlank() ? stockCode : null)
+                .stockCode(normalizedCode)
                 .quantity(quantity)
-                .proposedPrice(proposedPrice != null ? proposedPrice : BigDecimal.ZERO)
+                .proposedPrice(proposedPrice)
                 .reason(reason != null ? reason : "")
                 .createdAt(now)
                 .expiresAt(expiresAt)

@@ -5,6 +5,7 @@ import com.uniport.entity.User;
 import com.uniport.entity.Vote;
 import com.uniport.entity.VoteParticipant;
 import com.uniport.entity.MatchingRoomMember;
+import com.uniport.exception.ApiException;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.repository.VoteParticipantRepository;
@@ -23,11 +24,13 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -147,6 +150,79 @@ class VoteServiceTest {
         assertEquals(456L, ((Number) payload.get("voteId")).longValue());
         verify(voteParticipantRepository).save(any(VoteParticipant.class));
         verify(pushNotificationService).sendVoteCreated(any(Long.class), any(Vote.class), any(List.class));
+    }
+
+    @Test
+    void createVoteRejectsInvalidOrderFieldsBeforeSaving() {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        ChatService chatService = mock(ChatService.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                null,
+                null,
+                null,
+                null,
+                null,
+                chatService,
+                null,
+                null,
+                null,
+                null
+        );
+        User proposer = User.builder().id(7L).nickname("제안자").build();
+
+        ApiException quantity = assertThrows(ApiException.class, () -> service.createVote(
+                123L,
+                proposer,
+                "매수",
+                "삼성전자",
+                "005930",
+                0,
+                BigDecimal.valueOf(70000),
+                "좋아 보여요",
+                VoteService.ORDER_STRATEGY_MARKET,
+                null,
+                null,
+                null
+        ));
+        assertEquals("quantity must be positive", quantity.getMessage());
+
+        ApiException stockCode = assertThrows(ApiException.class, () -> service.createVote(
+                123L,
+                proposer,
+                "매수",
+                "삼성전자",
+                " ",
+                3,
+                BigDecimal.valueOf(70000),
+                "좋아 보여요",
+                VoteService.ORDER_STRATEGY_MARKET,
+                null,
+                null,
+                null
+        ));
+        assertEquals("stockCode is required", stockCode.getMessage());
+
+        ApiException proposedPrice = assertThrows(ApiException.class, () -> service.createVote(
+                123L,
+                proposer,
+                "매수",
+                "삼성전자",
+                "005930",
+                3,
+                BigDecimal.ZERO,
+                "좋아 보여요",
+                VoteService.ORDER_STRATEGY_MARKET,
+                null,
+                null,
+                null
+        ));
+        assertEquals("proposedPrice must be positive", proposedPrice.getMessage());
+        verifyNoInteractions(voteRepository, voteParticipantRepository, matchingRoomMemberRepository, chatService);
     }
 
     @Test

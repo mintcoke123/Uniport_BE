@@ -10,11 +10,13 @@ import com.uniport.dto.StockPriceDTO;
 import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.Holding;
 import com.uniport.entity.ManagedNewsArticle;
+import com.uniport.entity.TeamAccount;
 import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.StockMasterRepository;
+import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
 import com.uniport.service.kisws.KisWsSubscriptionManager;
 import org.springframework.context.annotation.Lazy;
@@ -30,10 +32,12 @@ import java.util.Optional;
 public class StockService {
 
     private static final String DEFAULT_LOGO_COLOR = "#4A90D9";
+    private static final BigDecimal INITIAL_TEAM_BALANCE = new BigDecimal("10000000");
 
     private final KisApiService kisApiService;
     private final HoldingRepository holdingRepository;
     private final TeamHoldingRepository teamHoldingRepository;
+    private final TeamAccountRepository teamAccountRepository;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final StockMasterRepository stockMasterRepository;
     private final ManagedStockNewsService managedStockNewsService;
@@ -45,6 +49,7 @@ public class StockService {
     public StockService(KisApiService kisApiService,
                         HoldingRepository holdingRepository,
                         TeamHoldingRepository teamHoldingRepository,
+                        TeamAccountRepository teamAccountRepository,
                         @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
                         StockMasterRepository stockMasterRepository,
                         ManagedStockNewsService managedStockNewsService,
@@ -55,6 +60,7 @@ public class StockService {
         this.kisApiService = kisApiService;
         this.holdingRepository = holdingRepository;
         this.teamHoldingRepository = teamHoldingRepository;
+        this.teamAccountRepository = teamAccountRepository;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.stockMasterRepository = stockMasterRepository;
         this.managedStockNewsService = managedStockNewsService;
@@ -117,6 +123,8 @@ public class StockService {
 
         BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
         Long volume = price.getVolume() != null ? price.getVolume() : 0L;
+        BigDecimal buyableCash = resolveBuyableCash(user);
+        Integer buyableQuantity = resolveBuyableQuantity(buyableCash, currentPrice);
 
         MarketDataDTO marketData = resolveMarketData(price, volume);
 
@@ -156,6 +164,8 @@ public class StockService {
                 .changeRate(price.getChangeRate() != null ? price.getChangeRate() : BigDecimal.ZERO)
                 .logoColor(DEFAULT_LOGO_COLOR)
                 .myHolding(myHolding)
+                .buyableCash(buyableCash)
+                .buyableQuantity(buyableQuantity)
                 .marketData(marketData)
                 .financialData(financialData)
                 .companyInfo(companyInfo)
@@ -163,6 +173,23 @@ public class StockService {
                 .investorSentiment(investorSentiment)
                 .discussionCount(discussionCount)
                 .build();
+    }
+
+    private BigDecimal resolveBuyableCash(User user) {
+        Long teamId = parseTeamId(user);
+        if (teamId == null) {
+            return null;
+        }
+        return teamAccountRepository.findByTeamId(teamId)
+                .map(TeamAccount::getCashBalance)
+                .orElse(INITIAL_TEAM_BALANCE);
+    }
+
+    private Integer resolveBuyableQuantity(BigDecimal buyableCash, BigDecimal currentPrice) {
+        if (buyableCash == null || currentPrice == null || currentPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        return buyableCash.divideToIntegralValue(currentPrice).intValue();
     }
 
     private MyHoldingDTO resolveMyHolding(User user, String code, StockPriceDTO price) {

@@ -26,6 +26,8 @@ public class StockDetailDTO {
     private BigDecimal changeRate;
     private String logoColor;
     private MyHoldingDTO myHolding;           // null if not holding
+    private BigDecimal buyableCash;           // null if team cash is not available
+    private Integer buyableQuantity;          // null if team cash or current price is not available
     private MarketDataDTO marketData;
     private List<FinancialDataItemDTO> financialData;
     private String companyInfo;

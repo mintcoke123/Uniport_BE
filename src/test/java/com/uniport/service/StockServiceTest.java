@@ -6,8 +6,11 @@ import com.uniport.dto.StockPriceDTO;
 import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.ManagedNewsArticle;
 import com.uniport.entity.StockMaster;
+import com.uniport.entity.TeamAccount;
+import com.uniport.entity.User;
 import com.uniport.repository.HoldingRepository;
 import com.uniport.repository.StockMasterRepository;
+import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
 import com.uniport.service.kisws.KisWsSubscriptionManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +31,7 @@ class StockServiceTest {
 
     private KisApiService kisApiService;
     private StockMasterRepository stockMasterRepository;
+    private TeamAccountRepository teamAccountRepository;
     private ManagedStockNewsService managedStockNewsService;
     private CommunityService communityService;
     private StockVisualAssetResolver stockVisualAssetResolver;
@@ -38,6 +42,7 @@ class StockServiceTest {
     void setUp() {
         kisApiService = mock(KisApiService.class);
         stockMasterRepository = mock(StockMasterRepository.class);
+        teamAccountRepository = mock(TeamAccountRepository.class);
         managedStockNewsService = mock(ManagedStockNewsService.class);
         communityService = mock(CommunityService.class);
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
@@ -47,6 +52,7 @@ class StockServiceTest {
                 kisApiService,
                 mock(HoldingRepository.class),
                 mock(TeamHoldingRepository.class),
+                teamAccountRepository,
                 mock(KisWsSubscriptionManager.class),
                 stockMasterRepository,
                 managedStockNewsService,
@@ -241,6 +247,39 @@ class StockServiceTest {
         StockDetailDTO response = stockService.getStockDetail(5930L, null);
 
         assertEquals(introduction, response.getCompanyInfo());
+    }
+
+    @Test
+    void getStockDetail_includesTeamBuyableCashAndQuantityForTeamUser() {
+        StockPriceDTO price = StockPriceDTO.builder()
+                .stockCode("005930")
+                .stockName("삼성전자")
+                .currentPrice(new BigDecimal("70000"))
+                .changeAmount(new BigDecimal("1000"))
+                .changeRate(new BigDecimal("1.45"))
+                .volume(1000L)
+                .build();
+        StockMaster master = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+        User user = User.builder().id(7L).teamId("team-123").build();
+        when(kisApiService.getStockQuote("005930")).thenReturn(price);
+        when(stockMasterRepository.findById("005930")).thenReturn(Optional.of(master));
+        when(teamAccountRepository.findByTeamId(123L)).thenReturn(Optional.of(TeamAccount.builder()
+                .teamId(123L)
+                .cashBalance(new BigDecimal("210000"))
+                .build()));
+        when(managedStockNewsService.getNewsForStock("005930", "삼성전자", 3)).thenReturn(List.of());
+        when(communityService.getInvestorSentiment("005930")).thenReturn(InvestorSentimentDTO.builder().build());
+        when(communityService.getDiscussionCount("005930")).thenReturn(0);
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
+
+        StockDetailDTO response = stockService.getStockDetail(5930L, user);
+
+        assertEquals(new BigDecimal("210000"), response.getBuyableCash());
+        assertEquals(3, response.getBuyableQuantity());
     }
 
     private StockVisualDTO visual(String text) {
