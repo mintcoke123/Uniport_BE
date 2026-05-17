@@ -148,6 +148,47 @@ class MatchingRoomServiceTest {
     }
 
     @Test
+    void listRoomsJoinedBy_excludesEndedRoomsFromActiveMatchingRooms() {
+        User user = persistUser("20263025", "ended-only-user");
+        MatchingRoom endedRoom = persistRoomWithMember("종료된 방", "ended", user);
+        MatchingRoom waitingRoom = persistRoomWithMember("대기 중인 방", "waiting", user);
+        entityManager.flush();
+
+        List<Map<String, Object>> rooms = matchingRoomService.listRoomsJoinedBy(user);
+
+        assertEquals(1, rooms.size());
+        assertEquals("room-" + waitingRoom.getId(), rooms.getFirst().get("id"));
+        assertFalse(rooms.stream().anyMatch(room -> ("room-" + endedRoom.getId()).equals(room.get("id"))));
+    }
+
+    @Test
+    void quickMatchRandomMode_allowsUserWhoseOnlyRoomIsEnded() {
+        User user = persistUser("20263026", "ended-random-user");
+        persistRoomWithMember("종료된 랜덤 방", "ended", user);
+        entityManager.flush();
+
+        Map<String, Object> response = matchingRoomService.quickMatch("RANDOM", "KR", List.of(), user);
+
+        assertEquals("RANDOM", response.get("mode"));
+        assertEquals("Random match waiting room created.", response.get("message"));
+    }
+
+    @Test
+    void quickMatchFriendMode_allowsInviteesWhoseOnlyOtherRoomIsEnded() {
+        User host = persistUser("20263027", "ended-invite-host");
+        User friend = persistUser("20263028", "ended-invite-friend");
+        persistAcceptedFriend(host, friend);
+        persistRoomWithMember("친구의 종료된 방", "ended", friend);
+        entityManager.flush();
+
+        Map<String, Object> response = matchingRoomService.quickMatch("FRIEND", "KR", List.of(friend.getId()), host);
+
+        Map<String, Object> detail = map(response.get("detail"));
+        assertEquals(2, detail.get("memberCount"));
+        assertConfirmedMember(list(detail.get("members")), friend.getId(), "MEMBER");
+    }
+
+    @Test
     void quickMatchFriendMode_rejectsInviteesBeyondRoomCapacity() {
         User host = persistUser("20263007", "capacity-host");
         User friend1 = persistUser("20263008", "capacity-friend-1");
@@ -336,6 +377,15 @@ class MatchingRoomServiceTest {
                 .status("ACCEPTED")
                 .build();
         friendRelationRepository.save(relation);
+    }
+
+    private MatchingRoom persistRoomWithMember(String name, String status, User user) {
+        MatchingRoom room = MatchingRoom.create(name, 3);
+        room.setStatus(status);
+        entityManager.persist(room);
+        entityManager.persist(MatchingRoomMember.of(room, user));
+        room.setMemberCount(1);
+        return room;
     }
 
     private void assertConfirmedMember(List<Map<String, Object>> members, Long userId, String role) {

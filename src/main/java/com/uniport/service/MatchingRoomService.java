@@ -119,7 +119,7 @@ public class MatchingRoomService {
     }
 
     public List<Map<String, Object>> listRoomsJoinedBy(User user) {
-        return matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(user.getId()).stream()
+        return findActiveMemberships(user.getId()).stream()
                 .map(m -> toMap(m.getMatchingRoom()))
                 .collect(Collectors.toList());
     }
@@ -132,8 +132,7 @@ public class MatchingRoomService {
     @Transactional
     public Map<String, Object> create(String name, String visibility, Integer capacity,
                                       String matchType, String marketType, List<Long> inviteeUserIds, User creator) {
-        if (creator != null && creator.getId() != null
-                && !matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(creator.getId()).isEmpty()) {
+        if (creator != null && creator.getId() != null && hasActiveMembership(creator.getId())) {
             throw new ApiException("이미 참여 중인 방이 있습니다. 새 방을 만들려면 먼저 현재 방에서 나가야 합니다.", HttpStatus.BAD_REQUEST);
         }
 
@@ -349,8 +348,7 @@ public class MatchingRoomService {
                 );
             }
             default -> {
-                if (creator != null && creator.getId() != null
-                        && !matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(creator.getId()).isEmpty()) {
+                if (creator != null && creator.getId() != null && hasActiveMembership(creator.getId())) {
                     throw new ApiException("You are already participating in another room.", HttpStatus.BAD_REQUEST);
                 }
 
@@ -513,7 +511,7 @@ public class MatchingRoomService {
                 throw new ApiException("방장과 친구 관계인 사용자만 초대할 수 있습니다.", HttpStatus.BAD_REQUEST);
             }
 
-            boolean joinedOtherRoom = matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(invitee.getId()).stream()
+            boolean joinedOtherRoom = findActiveMemberships(invitee.getId()).stream()
                     .anyMatch(member -> !room.getId().equals(member.getMatchingRoom().getId()));
             if (joinedOtherRoom) {
                 throw new ApiException("이미 다른 매칭방에 참가 중인 사용자가 포함되어 있습니다.", HttpStatus.BAD_REQUEST);
@@ -567,6 +565,14 @@ public class MatchingRoomService {
             return room;
         }
         return null;
+    }
+
+    private boolean hasActiveMembership(Long userId) {
+        return !findActiveMemberships(userId).isEmpty();
+    }
+
+    private List<MatchingRoomMember> findActiveMemberships(Long userId) {
+        return matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(userId);
     }
 
     private String generateUniqueInviteCode() {

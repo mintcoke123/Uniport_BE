@@ -19,6 +19,17 @@ public interface MatchingRoomMemberRepository extends JpaRepository<MatchingRoom
     @Query("SELECT m FROM MatchingRoomMember m JOIN FETCH m.matchingRoom WHERE m.user.id = :userId ORDER BY m.joinedAt DESC")
     List<MatchingRoomMember> findByUserIdOrderByJoinedAtDesc(@Param("userId") Long userId);
 
+    /** 내가 참가 중인 활성 방 목록. 종료된 방은 새 매칭 가능 여부에 포함하지 않는다. */
+    @Query("""
+            SELECT m
+            FROM MatchingRoomMember m
+            JOIN FETCH m.matchingRoom
+            WHERE m.user.id = :userId
+              AND LOWER(m.matchingRoom.status) <> 'ended'
+            ORDER BY m.joinedAt DESC
+            """)
+    List<MatchingRoomMember> findActiveByUserIdOrderByJoinedAtDesc(@Param("userId") Long userId);
+
     @Query("SELECT m FROM MatchingRoomMember m JOIN FETCH m.user WHERE m.matchingRoom.id = :roomId ORDER BY m.joinedAt ASC")
     List<MatchingRoomMember> findByMatchingRoomIdWithUser(@Param("roomId") Long roomId);
 
