@@ -56,7 +56,8 @@ class PointSocialDataServiceRewardPlanTest {
                 orderRepository,
                 learningUserStateRepository,
                 pushNotificationService,
-                pointLedgerService
+                pointLedgerService,
+                new ProfileImageUrlService()
         );
         User user = User.builder().id(7L).nickname("고윤서").investmentProfileResult("균형 투자형").build();
         UserMyPagePreference preference = UserMyPagePreference.builder()

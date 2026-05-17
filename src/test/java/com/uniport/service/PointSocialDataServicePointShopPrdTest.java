@@ -113,7 +113,8 @@ class PointSocialDataServicePointShopPrdTest {
                 orderRepository,
                 learningUserStateRepository,
                 pushNotificationService,
-                pointLedgerService
+                pointLedgerService,
+                new ProfileImageUrlService()
         );
     }
 }

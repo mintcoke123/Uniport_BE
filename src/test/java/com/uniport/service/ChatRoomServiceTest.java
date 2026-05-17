@@ -4,6 +4,7 @@ import com.uniport.entity.ChatMessage;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
+import com.uniport.entity.UserMyPagePreference;
 import com.uniport.entity.Vote;
 import com.uniport.entity.VoteParticipant;
 import com.uniport.exception.ApiException;
@@ -12,6 +13,7 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
+import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import org.junit.jupiter.api.Test;
@@ -51,7 +53,9 @@ class ChatRoomServiceTest {
                 teamHoldingRepository,
                 voteRepository,
                 voteParticipantRepository,
-                kisApiService
+                kisApiService,
+                mock(UserMyPagePreferenceRepository.class),
+                new ProfileImageUrlService()
         );
 
         User user = User.builder().id(10L).nickname("tester").build();
@@ -118,7 +122,9 @@ class ChatRoomServiceTest {
                 teamHoldingRepository,
                 voteRepository,
                 voteParticipantRepository,
-                kisApiService
+                kisApiService,
+                mock(UserMyPagePreferenceRepository.class),
+                new ProfileImageUrlService()
         );
 
         User user = User.builder().id(10L).nickname("tester").build();
@@ -177,7 +183,9 @@ class ChatRoomServiceTest {
                 teamHoldingRepository,
                 voteRepository,
                 voteParticipantRepository,
-                kisApiService
+                kisApiService,
+                mock(UserMyPagePreferenceRepository.class),
+                new ProfileImageUrlService()
         );
 
         User user = User.builder()
@@ -285,7 +293,9 @@ class ChatRoomServiceTest {
                 teamHoldingRepository,
                 voteRepository,
                 voteParticipantRepository,
-                kisApiService
+                kisApiService,
+                mock(UserMyPagePreferenceRepository.class),
+                new ProfileImageUrlService()
         );
 
         User user = User.builder().id(10L).nickname("tester").build();
@@ -337,7 +347,9 @@ class ChatRoomServiceTest {
                 teamHoldingRepository,
                 voteRepository,
                 voteParticipantRepository,
-                kisApiService
+                kisApiService,
+                mock(UserMyPagePreferenceRepository.class),
+                new ProfileImageUrlService()
         );
 
         User user = User.builder().id(10L).nickname("tester").build();
@@ -388,7 +400,9 @@ class ChatRoomServiceTest {
                 teamHoldingRepository,
                 voteRepository,
                 voteParticipantRepository,
-                kisApiService
+                kisApiService,
+                mock(UserMyPagePreferenceRepository.class),
+                new ProfileImageUrlService()
         );
 
         User user = User.builder().id(10L).nickname("tester").build();
@@ -427,7 +441,9 @@ class ChatRoomServiceTest {
                 teamHoldingRepository,
                 voteRepository,
                 voteParticipantRepository,
-                kisApiService
+                kisApiService,
+                mock(UserMyPagePreferenceRepository.class),
+                new ProfileImageUrlService()
         );
 
         User user = User.builder().id(10L).nickname("tester").build();
@@ -452,6 +468,7 @@ class ChatRoomServiceTest {
         VoteRepository voteRepository = mock(VoteRepository.class);
         VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
         KisApiService kisApiService = mock(KisApiService.class);
+        UserMyPagePreferenceRepository userMyPagePreferenceRepository = mock(UserMyPagePreferenceRepository.class);
         ChatRoomService service = new ChatRoomService(
                 matchingRoomMemberRepository,
                 matchingRoomRepository,
@@ -460,7 +477,9 @@ class ChatRoomServiceTest {
                 teamHoldingRepository,
                 voteRepository,
                 voteParticipantRepository,
-                kisApiService
+                kisApiService,
+                userMyPagePreferenceRepository,
+                new ProfileImageUrlService()
         );
 
         User currentUser = User.builder()
@@ -504,6 +523,8 @@ class ChatRoomServiceTest {
         when(chatMessageRepository.findTopByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(Optional.empty());
         when(matchingRoomMemberRepository.findByMatchingRoomIdAndUserId(room.getId(), currentUser.getId()))
                 .thenReturn(Optional.of(currentMembership));
+        when(userMyPagePreferenceRepository.findById(currentUser.getId())).thenReturn(Optional.empty());
+        when(userMyPagePreferenceRepository.findById(teammate.getId())).thenReturn(Optional.empty());
 
         Map<String, Object> response = service.getChatRoomSummary(room.getId(), currentUser);
 
@@ -513,6 +534,88 @@ class ChatRoomServiceTest {
         List<Map<String, Object>> members = (List<Map<String, Object>>) roomInfo.get("members");
         assertEquals("https://cdn.example.com/me.png", members.get(0).get("profileImageUrl"));
         assertEquals("https://cdn.example.com/member.png", members.get(1).get("profileImageUrl"));
+    }
+
+    @Test
+    void getChatRoomSummaryPrefersSelectedCharacterProfileImageUrls() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
+        TeamAccountRepository teamAccountRepository = mock(TeamAccountRepository.class);
+        TeamHoldingRepository teamHoldingRepository = mock(TeamHoldingRepository.class);
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        UserMyPagePreferenceRepository userMyPagePreferenceRepository = mock(UserMyPagePreferenceRepository.class);
+        ChatRoomService service = new ChatRoomService(
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatMessageRepository,
+                teamAccountRepository,
+                teamHoldingRepository,
+                voteRepository,
+                voteParticipantRepository,
+                kisApiService,
+                userMyPagePreferenceRepository,
+                new ProfileImageUrlService()
+        );
+
+        User currentUser = User.builder()
+                .id(10L)
+                .nickname("tester")
+                .profileImageUrl("http://k.kakaocdn.net/legacy.jpg")
+                .build();
+        User teammate = User.builder()
+                .id(11L)
+                .nickname("member")
+                .profileImageUrl("")
+                .build();
+        MatchingRoom room = MatchingRoom.builder()
+                .id(3L)
+                .name("테스트방")
+                .capacity(3)
+                .memberCount(2)
+                .status("started")
+                .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
+                .build();
+        MatchingRoomMember currentMembership = MatchingRoomMember.builder()
+                .id(1L)
+                .matchingRoom(room)
+                .user(currentUser)
+                .joinedAt(Instant.parse("2026-05-17T00:10:00Z"))
+                .build();
+        MatchingRoomMember teammateMembership = MatchingRoomMember.builder()
+                .id(2L)
+                .matchingRoom(room)
+                .user(teammate)
+                .joinedAt(Instant.parse("2026-05-17T00:11:00Z"))
+                .build();
+
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), currentUser.getId())).thenReturn(true);
+        when(matchingRoomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId()))
+                .thenReturn(List.of(currentMembership, teammateMembership));
+        when(teamAccountRepository.findByTeamId(room.getId())).thenReturn(Optional.empty());
+        when(teamHoldingRepository.findByTeamId(room.getId())).thenReturn(List.of());
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(List.of());
+        when(chatMessageRepository.findTopByRoomIdOrderByCreatedAtDesc(room.getId())).thenReturn(Optional.empty());
+        when(matchingRoomMemberRepository.findByMatchingRoomIdAndUserId(room.getId(), currentUser.getId()))
+                .thenReturn(Optional.of(currentMembership));
+        when(userMyPagePreferenceRepository.findById(currentUser.getId())).thenReturn(Optional.of(
+                UserMyPagePreference.builder().userId(currentUser.getId()).selectedCharacterCode("FOX").build()
+        ));
+        when(userMyPagePreferenceRepository.findById(teammate.getId())).thenReturn(Optional.of(
+                UserMyPagePreference.builder().userId(teammate.getId()).selectedCharacterCode("SEED").build()
+        ));
+
+        Map<String, Object> response = service.getChatRoomSummary(room.getId(), currentUser);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> roomInfo = (Map<String, Object>) response.get("roomInfo");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> members = (List<Map<String, Object>>) roomInfo.get("members");
+        assertEquals("https://uniportbe-production.up.railway.app/assets/mypage/profile-options/fox.png", members.get(0).get("profileImageUrl"));
+        assertEquals("https://uniportbe-production.up.railway.app/assets/mypage/profile-options/seed.png", members.get(1).get("profileImageUrl"));
     }
 
     @Test
@@ -533,7 +636,9 @@ class ChatRoomServiceTest {
                 teamHoldingRepository,
                 voteRepository,
                 voteParticipantRepository,
-                kisApiService
+                kisApiService,
+                mock(UserMyPagePreferenceRepository.class),
+                new ProfileImageUrlService()
         );
 
         User user = User.builder().id(10L).nickname("tester").build();
@@ -629,7 +734,9 @@ class ChatRoomServiceTest {
                 mock(TeamHoldingRepository.class),
                 mock(VoteRepository.class),
                 mock(VoteParticipantRepository.class),
-                mock(KisApiService.class)
+                mock(KisApiService.class),
+                mock(UserMyPagePreferenceRepository.class),
+                new ProfileImageUrlService()
         );
     }
 }

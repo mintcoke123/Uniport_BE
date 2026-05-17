@@ -66,7 +66,6 @@ import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
 import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -97,18 +96,6 @@ public class PointSocialDataService {
     private static final TypeReference<Map<String, Integer>> EDUCATION_CURRENT_DAY_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, Set<Integer>>> EDUCATION_COMPLETED_DAYS_TYPE = new TypeReference<>() {};
     private static final String POINT_SHOP_EXCHANGE_BLOCKED_MESSAGE = "포인트샵 교환은 실제 기프티콘 운영 준비 후 열릴 예정이에요.";
-    private static final String DEFAULT_PUBLIC_BASE_URL = "https://uniportbe-production.up.railway.app";
-    private static final String PROFILE_OPTION_IMAGE_PATH = "/assets/mypage/profile-options/";
-    private static final Map<String, String> PROFILE_OPTION_IMAGE_FILES = Map.of(
-            "SEED", "seed.png",
-            "PANDA", "panda.png",
-            "DOLPHIN", "dolphin.png",
-            "RESEARCHER", "researcher.png",
-            "FOX", "fox.png",
-            "FARMER", "farmer.png",
-            "OWL", "owl.png",
-            "SURFER", "surfer.png"
-    );
 
     private final PointWalletRepository pointWalletRepository;
     private final PointTransactionRepository pointTransactionRepository;
@@ -123,9 +110,7 @@ public class PointSocialDataService {
     private final LearningUserStateRepository learningUserStateRepository;
     private final PushNotificationService pushNotificationService;
     private final PointLedgerService pointLedgerService;
-
-    @Value("${app.public-base-url:https://uniportbe-production.up.railway.app}")
-    private String publicBaseUrl = DEFAULT_PUBLIC_BASE_URL;
+    private final ProfileImageUrlService profileImageUrlService;
 
     public PointSocialDataService(PointWalletRepository pointWalletRepository,
                                   PointTransactionRepository pointTransactionRepository,
@@ -139,7 +124,8 @@ public class PointSocialDataService {
                                   OrderRepository orderRepository,
                                   LearningUserStateRepository learningUserStateRepository,
                                   PushNotificationService pushNotificationService,
-                                  PointLedgerService pointLedgerService) {
+                                  PointLedgerService pointLedgerService,
+                                  ProfileImageUrlService profileImageUrlService) {
         this.pointWalletRepository = pointWalletRepository;
         this.pointTransactionRepository = pointTransactionRepository;
         this.pointShopProductRepository = pointShopProductRepository;
@@ -153,6 +139,7 @@ public class PointSocialDataService {
         this.learningUserStateRepository = learningUserStateRepository;
         this.pushNotificationService = pushNotificationService;
         this.pointLedgerService = pointLedgerService;
+        this.profileImageUrlService = profileImageUrlService;
     }
 
     public MyPageResponseDTO getMyPage(User user) {
@@ -260,7 +247,7 @@ public class PointSocialDataService {
         preference.setSelectedCharacterCode(selected);
         userMyPagePreferenceRepository.save(preference);
         User persisted = userRepository.findById(user.getId()).orElse(user);
-        persisted.setProfileImageUrl(profileOptionImageUrl(selected));
+        persisted.setProfileImageUrl(profileImageUrlService.profileOptionImageUrl(selected));
         userRepository.save(persisted);
         return getMyPage(persisted);
     }
@@ -1088,20 +1075,6 @@ public class PointSocialDataService {
     private String selectedCodeSegment(String code) {
         String safeCode = code == null || code.isBlank() ? "SEED" : code.trim();
         return safeCode.toLowerCase(Locale.ROOT);
-    }
-
-    private String profileOptionImageUrl(String code) {
-        String selectedCode = code == null || code.isBlank() ? "SEED" : code.trim().toUpperCase(Locale.ROOT);
-        String fileName = PROFILE_OPTION_IMAGE_FILES.getOrDefault(selectedCode, PROFILE_OPTION_IMAGE_FILES.get("SEED"));
-        return normalizePublicBaseUrl(publicBaseUrl) + PROFILE_OPTION_IMAGE_PATH + fileName;
-    }
-
-    private String normalizePublicBaseUrl(String value) {
-        String normalized = value == null || value.isBlank() ? DEFAULT_PUBLIC_BASE_URL : value.trim();
-        while (normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
     }
 
     private boolean resolvePushEnabled(User user, UserMyPagePreference preference) {

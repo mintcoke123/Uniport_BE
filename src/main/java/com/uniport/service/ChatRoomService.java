@@ -7,6 +7,7 @@ import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.TeamAccount;
 import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
+import com.uniport.entity.UserMyPagePreference;
 import com.uniport.entity.Vote;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.ChatMessageRepository;
@@ -14,6 +15,7 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
+import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
 import org.springframework.http.HttpStatus;
@@ -46,6 +48,8 @@ public class ChatRoomService {
     private final VoteRepository voteRepository;
     private final VoteParticipantRepository voteParticipantRepository;
     private final KisApiService kisApiService;
+    private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
+    private final ProfileImageUrlService profileImageUrlService;
 
     public ChatRoomService(MatchingRoomMemberRepository matchingRoomMemberRepository,
                            MatchingRoomRepository matchingRoomRepository,
@@ -54,7 +58,9 @@ public class ChatRoomService {
                            TeamHoldingRepository teamHoldingRepository,
                            VoteRepository voteRepository,
                            VoteParticipantRepository voteParticipantRepository,
-                           KisApiService kisApiService) {
+                           KisApiService kisApiService,
+                           UserMyPagePreferenceRepository userMyPagePreferenceRepository,
+                           ProfileImageUrlService profileImageUrlService) {
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.matchingRoomRepository = matchingRoomRepository;
         this.chatMessageRepository = chatMessageRepository;
@@ -63,6 +69,8 @@ public class ChatRoomService {
         this.voteRepository = voteRepository;
         this.voteParticipantRepository = voteParticipantRepository;
         this.kisApiService = kisApiService;
+        this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
+        this.profileImageUrlService = profileImageUrlService;
     }
 
     @Transactional(readOnly = true)
@@ -191,7 +199,7 @@ public class ChatRoomService {
             memberSummaries.add(Map.of(
                     "userId", member.getId(),
                     "nickname", member.getNickname() != null ? member.getNickname() : "",
-                    "profileImageUrl", member.getProfileImageUrl() != null ? member.getProfileImageUrl() : "",
+                    "profileImageUrl", resolveProfileImageUrl(member),
                     "role", i == 0 ? "HOST" : "MEMBER",
                     "roleLabel", i == 0 ? "방장" : "팀원",
                     "isMe", isMe
@@ -204,6 +212,17 @@ public class ChatRoomService {
         roomInfo.put("matchLabel", toMatchLabel(room.getMatchType()));
         roomInfo.put("members", memberSummaries);
         return roomInfo;
+    }
+
+    private String resolveProfileImageUrl(User member) {
+        if (member == null || member.getId() == null) {
+            return "";
+        }
+        Optional<UserMyPagePreference> preference = userMyPagePreferenceRepository.findById(member.getId());
+        if (preference.isPresent() && preference.get().getSelectedCharacterCode() != null && !preference.get().getSelectedCharacterCode().isBlank()) {
+            return profileImageUrlService.profileOptionImageUrl(preference.get().getSelectedCharacterCode());
+        }
+        return member.getProfileImageUrl() != null ? member.getProfileImageUrl() : "";
     }
 
     private Map<String, Object> buildPortfolioSummary(Long roomId) {
