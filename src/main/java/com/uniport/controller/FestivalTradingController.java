@@ -33,6 +33,20 @@ public class FestivalTradingController {
         return ResponseEntity.ok(festivalTradingService.startSession(request));
     }
 
+    @PostMapping("/sessions/{sessionId}/begin")
+    public ResponseEntity<FestivalSessionStartResponseDTO> beginSession(
+            @PathVariable Long sessionId
+    ) {
+        return ResponseEntity.ok(festivalTradingService.beginSession(sessionId));
+    }
+
+    @GetMapping("/sessions/{sessionId}")
+    public ResponseEntity<FestivalSessionStartResponseDTO> getSession(
+            @PathVariable Long sessionId
+    ) {
+        return ResponseEntity.ok(festivalTradingService.getSession(sessionId));
+    }
+
     @PostMapping("/sessions/{sessionId}/complete")
     public ResponseEntity<FestivalSessionCompleteResponseDTO> completeSession(
             @PathVariable Long sessionId,

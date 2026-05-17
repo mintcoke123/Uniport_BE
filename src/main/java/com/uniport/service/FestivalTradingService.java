@@ -61,14 +61,34 @@ public class FestivalTradingService {
                 .tradeCount(0)
                 .unfilledOrderCount(0)
                 .startedAt(LocalDateTime.now())
+                .tradingStartedAt(null)
                 .build());
 
-        return FestivalSessionStartResponseDTO.builder()
-                .sessionId(session.getId())
-                .displayName(session.getDisplayName())
-                .startCash(session.getStartCash())
-                .startedAt(session.getStartedAt())
-                .build();
+        return toSessionState(session);
+    }
+
+    @Transactional
+    public FestivalSessionStartResponseDTO beginSession(Long sessionId) {
+        FestivalTradingSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ApiException("festival session not found", HttpStatus.NOT_FOUND));
+
+        if (session.getEndedAt() != null) {
+            throw new ApiException("festival session already completed", HttpStatus.BAD_REQUEST);
+        }
+        if (session.getTradingStartedAt() != null) {
+            return toSessionState(session);
+        }
+
+        session.setTradingStartedAt(LocalDateTime.now());
+        sessionRepository.save(session);
+        return toSessionState(session);
+    }
+
+    @Transactional(readOnly = true)
+    public FestivalSessionStartResponseDTO getSession(Long sessionId) {
+        FestivalTradingSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ApiException("festival session not found", HttpStatus.NOT_FOUND));
+        return toSessionState(session);
     }
 
     @Transactional
@@ -77,6 +97,9 @@ public class FestivalTradingService {
                 .orElseThrow(() -> new ApiException("festival session not found", HttpStatus.NOT_FOUND));
         if (session.getEndedAt() != null) {
             throw new ApiException("festival session already completed", HttpStatus.BAD_REQUEST);
+        }
+        if (session.getTradingStartedAt() == null) {
+            throw new ApiException("festival session has not started", HttpStatus.BAD_REQUEST);
         }
 
         BigDecimal endCash = requireAmount(request.getEndCash(), "endCash");
@@ -163,12 +186,25 @@ public class FestivalTradingService {
         return FestivalAdminOverviewDTO.builder()
                 .totalParticipants(sessions.size())
                 .completedParticipants(completedSessions.size())
-                .activeParticipants(sessions.size() - completedSessions.size())
+                .activeParticipants((int) sessions.stream().filter(session -> session.getEndedAt() == null).count())
                 .qualifiedParticipants(0)
                 .averageReturnRate(averageReturnRate)
                 .bestReturnRate(bestReturnRate)
                 .lastCompletedAt(lastCompletedAt)
                 .sessions(sessionItems)
+                .build();
+    }
+
+    private FestivalSessionStartResponseDTO toSessionState(FestivalTradingSession session) {
+        String status = resolveStatus(session);
+        return FestivalSessionStartResponseDTO.builder()
+                .sessionId(session.getId())
+                .displayName(session.getDisplayName())
+                .startCash(session.getStartCash())
+                .startedAt(session.getTradingStartedAt())
+                .endedAt(session.getEndedAt())
+                .status(status)
+                .canStart("NOT_STARTED".equals(status))
                 .build();
     }
 
@@ -210,11 +246,21 @@ public class FestivalTradingService {
                 .finalPrize(session.getFinalPrize())
                 .tradeCount(session.getTradeCount())
                 .unfilledOrderCount(session.getUnfilledOrderCount())
-                .startedAt(session.getStartedAt())
+                .startedAt(session.getTradingStartedAt() != null ? session.getTradingStartedAt() : session.getStartedAt())
                 .endedAt(session.getEndedAt())
                 .holdingsSnapshot(readJson(session.getHoldingsSnapshotJson()))
                 .tradeHistory(readJson(session.getTradeHistoryJson()))
                 .build();
+    }
+
+    private String resolveStatus(FestivalTradingSession session) {
+        if (session.getEndedAt() != null) {
+            return "COMPLETED";
+        }
+        if (session.getTradingStartedAt() != null) {
+            return "IN_PROGRESS";
+        }
+        return "NOT_STARTED";
     }
 
     private BigDecimal calculateReturnRate(BigDecimal endTotalValue) {

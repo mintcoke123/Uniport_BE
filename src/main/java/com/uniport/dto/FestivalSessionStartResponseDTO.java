@@ -13,4 +13,7 @@ public class FestivalSessionStartResponseDTO {
     private String displayName;
     private BigDecimal startCash;
     private LocalDateTime startedAt;
+    private LocalDateTime endedAt;
+    private String status;
+    private Boolean canStart;
 }

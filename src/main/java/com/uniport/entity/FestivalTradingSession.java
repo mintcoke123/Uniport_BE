@@ -76,6 +76,9 @@ public class FestivalTradingSession {
     private LocalDateTime startedAt;
 
     @Column
+    private LocalDateTime tradingStartedAt;
+
+    @Column
     private LocalDateTime endedAt;
 
     @Column(nullable = false)
