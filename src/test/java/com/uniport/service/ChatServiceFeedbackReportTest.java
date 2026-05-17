@@ -5,8 +5,11 @@ import com.uniport.repository.ChatMessageRepository;
 import com.uniport.websocket.GroupChatBroadcaster;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
+
+import jakarta.persistence.Column;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,5 +49,13 @@ class ChatServiceFeedbackReportTest {
         Map<String, Object> report = (Map<String, Object>) mapped.get("report");
         assertEquals(7, ((Number) report.get("reportId")).longValue());
         assertEquals(null, mapped.get("message"));
+    }
+
+    @Test
+    void chatMessageColumnSupportsLargeJsonCardPayloads() throws Exception {
+        Field field = ChatMessage.class.getDeclaredField("message");
+        Column column = field.getAnnotation(Column.class);
+
+        assertEquals("TEXT", column.columnDefinition());
     }
 }

@@ -33,7 +33,7 @@ public class ChatMessage {
     @Column(name = "user_nickname", nullable = false, length = 100)
     private String userNickname;
 
-    @Column(nullable = false, length = 2000)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String message;
 
     @Column(name = "created_at", nullable = false, updatable = false)
