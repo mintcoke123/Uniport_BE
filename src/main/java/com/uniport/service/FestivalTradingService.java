@@ -28,7 +28,6 @@ import java.util.Objects;
 public class FestivalTradingService {
 
     private static final BigDecimal START_CASH = new BigDecimal("100000000");
-    private static final BigDecimal KEYRING_THRESHOLD = new BigDecimal("1.5");
 
     private final FestivalTradingSessionRepository sessionRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -39,12 +38,13 @@ public class FestivalTradingService {
 
     @Transactional
     public FestivalSessionStartResponseDTO startSession(FestivalSessionStartRequestDTO request) {
-        String department = requireText(request.getDepartment(), "department");
-        String studentId = requireText(request.getStudentId(), "studentId");
         String participantName = requireText(request.getName(), "name");
-        String phoneNumber = requireText(request.getPhoneNumber(), "phoneNumber");
+        String phoneNumber = normalizePhoneNumber(requireText(request.getPhoneNumber(), "phoneNumber"));
         if (!Boolean.TRUE.equals(request.getPrivacyAgreed())) {
             throw new ApiException("privacy agreement is required", HttpStatus.BAD_REQUEST);
+        }
+        if (sessionRepository.existsByPhoneNumber(phoneNumber)) {
+            throw new ApiException("phone number already registered", HttpStatus.BAD_REQUEST);
         }
 
         long duplicateCount = sessionRepository.countByParticipantName(participantName);
@@ -53,8 +53,8 @@ public class FestivalTradingService {
         FestivalTradingSession session = sessionRepository.save(FestivalTradingSession.builder()
                 .participantName(participantName)
                 .displayName(displayName)
-                .department(department)
-                .studentId(studentId)
+                .department("")
+                .studentId("")
                 .phoneNumber(phoneNumber)
                 .privacyAgreed(true)
                 .startCash(START_CASH)
@@ -95,7 +95,8 @@ public class FestivalTradingService {
         session.setUnfilledOrderCount(request.getUnfilledOrderCount() != null ? Math.max(0, request.getUnfilledOrderCount()) : 0);
         session.setHoldingsSnapshotJson(writeJson(request.getHoldingsSnapshot()));
         session.setTradeHistoryJson(writeJson(request.getTradeHistory()));
-        session.setBasePrize(resolveBasePrize(returnRate));
+        session.setBasePrize(null);
+        session.setFinalPrize(null);
         session.setEndedAt(LocalDateTime.now());
         sessionRepository.save(session);
 
@@ -105,14 +106,6 @@ public class FestivalTradingService {
                 .map(FestivalLeaderboardItemDTO::getRank)
                 .findFirst()
                 .orElse(null);
-        String finalPrize = leaderboard.stream()
-                .filter(item -> item.getSessionId().equals(session.getId()))
-                .map(FestivalLeaderboardItemDTO::getPrize)
-                .findFirst()
-                .orElse(session.getBasePrize());
-
-        session.setFinalPrize(finalPrize);
-        sessionRepository.save(session);
 
         return FestivalSessionCompleteResponseDTO.builder()
                 .sessionId(session.getId())
@@ -120,8 +113,8 @@ public class FestivalTradingService {
                 .startCash(session.getStartCash())
                 .endTotalValue(session.getEndTotalValue())
                 .returnRate(session.getReturnRate())
-                .basePrize(session.getBasePrize())
-                .finalPrize(finalPrize)
+                .basePrize(null)
+                .finalPrize(null)
                 .currentRank(currentRank)
                 .leaderboard(leaderboard)
                 .build();
@@ -163,12 +156,6 @@ public class FestivalTradingService {
                 .max(LocalDateTime::compareTo)
                 .orElse(null);
 
-        int qualifiedParticipants = (int) completedSessions.stream()
-                .map(FestivalTradingSession::getReturnRate)
-                .filter(Objects::nonNull)
-                .filter(rate -> rate.compareTo(KEYRING_THRESHOLD) >= 0)
-                .count();
-
         List<FestivalAdminSessionItemDTO> sessionItems = sessions.stream()
                 .map(this::toAdminSessionItem)
                 .toList();
@@ -177,7 +164,7 @@ public class FestivalTradingService {
                 .totalParticipants(sessions.size())
                 .completedParticipants(completedSessions.size())
                 .activeParticipants(sessions.size() - completedSessions.size())
-                .qualifiedParticipants(qualifiedParticipants)
+                .qualifiedParticipants(0)
                 .averageReturnRate(averageReturnRate)
                 .bestReturnRate(bestReturnRate)
                 .lastCompletedAt(lastCompletedAt)
@@ -190,15 +177,14 @@ public class FestivalTradingService {
         List<FestivalLeaderboardItemDTO> items = new ArrayList<>();
         for (int i = 0; i < sessions.size(); i++) {
             FestivalTradingSession session = sessions.get(i);
-            int rank = i + 1;
             items.add(FestivalLeaderboardItemDTO.builder()
                     .sessionId(session.getId())
-                    .rank(rank)
+                    .rank(i + 1)
                     .displayName(session.getDisplayName())
                     .mainStockName(session.getMainStockName())
                     .endTotalValue(session.getEndTotalValue())
                     .returnRate(session.getReturnRate())
-                    .prize(resolveFinalPrize(rank, session.getBasePrize()))
+                    .prize(null)
                     .endedAt(session.getEndedAt())
                     .build());
         }
@@ -237,23 +223,6 @@ public class FestivalTradingService {
                 .divide(START_CASH, 4, RoundingMode.HALF_UP);
     }
 
-    private String resolveBasePrize(BigDecimal returnRate) {
-        return returnRate.compareTo(KEYRING_THRESHOLD) >= 0 ? "키링" : "간식";
-    }
-
-    private String resolveFinalPrize(int rank, String basePrize) {
-        if (rank == 1) {
-            return "상품권 3만 원";
-        }
-        if (rank == 2) {
-            return "상품권 1만 원";
-        }
-        if (rank == 3) {
-            return "커피 쿠폰";
-        }
-        return basePrize != null && !basePrize.isBlank() ? basePrize : "간식";
-    }
-
     private String requireText(String value, String fieldName) {
         String trimmed = trimToNull(value);
         if (trimmed == null) {
@@ -267,6 +236,14 @@ public class FestivalTradingService {
             throw new ApiException(fieldName + " is required", HttpStatus.BAD_REQUEST);
         }
         return value.setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private String normalizePhoneNumber(String phoneNumber) {
+        String normalized = phoneNumber.replaceAll("\\D", "");
+        if (normalized.length() < 10 || normalized.length() > 11) {
+            throw new ApiException("phoneNumber format is invalid", HttpStatus.BAD_REQUEST);
+        }
+        return normalized;
     }
 
     private String writeJson(JsonNode node) {

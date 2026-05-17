@@ -9,6 +9,8 @@ public interface FestivalTradingSessionRepository extends JpaRepository<Festival
 
     long countByParticipantName(String participantName);
 
+    boolean existsByPhoneNumber(String phoneNumber);
+
     List<FestivalTradingSession> findByEndedAtIsNotNullOrderByEndTotalValueDescEndedAtAsc();
 
     List<FestivalTradingSession> findAllByOrderByStartedAtDesc();
