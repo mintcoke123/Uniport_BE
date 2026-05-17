@@ -224,7 +224,7 @@ public class HomeDataService {
                 .orElseGet(() ->
                         ManagedGroupInsight.builder()
                                 .insightKey(GROUP_INSIGHT_KEY)
-                                .topGroupName("Top Group")
+                                .topGroupName("")
                                 .topPick("")
                                 .comment("")
                                 .consensusJson("[]")

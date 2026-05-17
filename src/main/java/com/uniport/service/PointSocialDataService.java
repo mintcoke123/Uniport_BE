@@ -599,22 +599,32 @@ public class PointSocialDataService {
 
     @Transactional(readOnly = true)
     public FriendsDashboardResponseDTO getFriendsDashboard(User user) {
-        List<User> rankingPool = friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(user.getId(), user.getId()).stream()
-                .filter(relation -> "ACCEPTED".equalsIgnoreCase(relation.getStatus()))
-                .flatMap(relation -> java.util.stream.Stream.of(relation.getRequesterUser(), relation.getAddresseeUser()))
-                .filter(candidate -> !candidate.getId().equals(user.getId()))
-                .distinct()
-                .toList();
-        List<User> withMe = new ArrayList<>(rankingPool);
-        withMe.add(user);
-        List<User> sorted = withMe.stream()
-                .sorted(Comparator.comparingInt((User candidate) -> getLearningProgress(candidate).totalXp()).reversed())
+        List<User> rankingPool = new ArrayList<>(userRepository.findAll());
+        boolean currentUserIncluded = rankingPool.stream()
+                .anyMatch(candidate -> candidate.getId() != null && candidate.getId().equals(user.getId()));
+        if (!currentUserIncluded) {
+            rankingPool.add(user);
+        }
+
+        List<User> sorted = rankingPool.stream()
+                .filter(candidate -> candidate.getId() != null)
+                .sorted(
+                        Comparator.comparingInt((User candidate) -> getLearningProgress(candidate).totalXp())
+                                .reversed()
+                                .thenComparing(User::getId)
+                )
                 .toList();
         List<FriendRankingItemDTO> items = new ArrayList<>();
-        for (int i = 0; i < Math.min(5, sorted.size()); i++) {
+        for (int i = 0; i < sorted.size(); i++) {
             items.add(toRankingItem(i + 1, sorted.get(i)));
         }
-        int myRank = Math.max(1, sorted.indexOf(user) + 1);
+        int myRank = 1;
+        for (int i = 0; i < sorted.size(); i++) {
+            if (sorted.get(i).getId().equals(user.getId())) {
+                myRank = i + 1;
+                break;
+            }
+        }
         return FriendsDashboardResponseDTO.builder()
                 .ranking(FriendRankingSectionDTO.builder().endDay(3).items(items).build())
                 .myRanking(toRankingItem(myRank, user))
