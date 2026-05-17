@@ -47,6 +47,7 @@ public class GroupController {
 
     private static final Logger log = LoggerFactory.getLogger(GroupController.class);
     private static final BigDecimal INITIAL_TEAM_BALANCE = new BigDecimal("10000000");
+    private static final String ROOM_ENDED_READ_ONLY_MESSAGE = "종료된 채팅방은 보기만 할 수 있습니다.";
 
     private final ChatService chatService;
     private final AuthService authService;
@@ -268,6 +269,9 @@ public class GroupController {
         if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(groupId, user.getId())) {
             return ResponseEntity.status(403).body(Map.of("success", false, "message", "해당 채팅방에 대한 접근 권한이 없습니다."));
         }
+        if (isEndedRoom(groupId)) {
+            return readOnlyRoomResponse();
+        }
         if (body != null && "trade".equals(body.get("type")) && body.containsKey("tradeData")) {
             @SuppressWarnings("unchecked")
             Map<String, Object> tradeData = (Map<String, Object>) body.get("tradeData");
@@ -292,6 +296,9 @@ public class GroupController {
         }
         if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(groupId, user.getId())) {
             return ResponseEntity.status(403).body(Map.of("success", false, "message", "해당 채팅방에 대한 접근 권한이 없습니다."));
+        }
+        if (isEndedRoom(groupId)) {
+            return readOnlyRoomResponse();
         }
         var saved = chatService.saveMentionAllMessage(groupId, user.getId(), user.getNickname());
         pushNotificationService.sendChatMentionAll(groupId, user, roomMemberUserIds(groupId));
@@ -318,6 +325,9 @@ public class GroupController {
         }
         if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(groupId, user.getId())) {
             return ResponseEntity.status(403).body(Map.of("success", false, "message", "해당 채팅방에 대한 접근 권한이 없습니다."));
+        }
+        if (isEndedRoom(groupId)) {
+            return readOnlyRoomResponse();
         }
         String type = body != null && body.containsKey("type") ? String.valueOf(body.get("type")) : "매수";
         String stockName = body != null && body.containsKey("stockName") ? String.valueOf(body.get("stockName")) : "";
@@ -413,5 +423,19 @@ public class GroupController {
                 .map(User::getId)
                 .distinct()
                 .toList();
+    }
+
+    private boolean isEndedRoom(Long groupId) {
+        var room = matchingRoomRepository.findById(groupId);
+        return room != null && room
+                .map(value -> "ended".equalsIgnoreCase(value.getStatus()))
+                .orElse(false);
+    }
+
+    private ResponseEntity<Map<String, Object>> readOnlyRoomResponse() {
+        return ResponseEntity.status(403).body(Map.of(
+                "success", false,
+                "message", ROOM_ENDED_READ_ONLY_MESSAGE
+        ));
     }
 }

@@ -32,6 +32,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private static final Pattern MESSAGE = Pattern.compile("\"message\"\\s*:\\s*\"([^\"]*)\"");
 
     private static final String SOLO_ROOM_ERROR = "{\"error\":\"개인방에서는 채팅/투표를 사용할 수 없습니다.\"}";
+    private static final String ROOM_ENDED_READ_ONLY_ERROR = "{\"error\":\"종료된 채팅방은 보기만 할 수 있습니다.\"}";
 
     private final ChatService chatService;
     private final AuthService authService;
@@ -74,6 +75,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
+        if (isEndedRoom(roomId)) {
+            try {
+                if (session.isOpen()) session.sendMessage(new TextMessage(ROOM_ENDED_READ_ONLY_ERROR));
+            } catch (IOException ignored) {}
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
         groupChatBroadcaster.addSession(groupId, session);
     }
 
@@ -85,6 +93,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         if (roomIdLong != null && matchingRoomRepository.findById(roomIdLong).filter(r -> r.getCapacity() == 1).isPresent()) {
             try {
                 if (session.isOpen()) session.sendMessage(new TextMessage(SOLO_ROOM_ERROR));
+            } catch (IOException ignored) {}
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
+        if (roomIdLong != null && isEndedRoom(roomIdLong)) {
+            try {
+                if (session.isOpen()) session.sendMessage(new TextMessage(ROOM_ENDED_READ_ONLY_ERROR));
             } catch (IOException ignored) {}
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
@@ -161,6 +176,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private boolean isEndedRoom(Long roomId) {
+        var room = matchingRoomRepository.findById(roomId);
+        return room != null && room
+                .map(value -> "ended".equalsIgnoreCase(value.getStatus()))
+                .orElse(false);
     }
 
     @Override

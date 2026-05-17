@@ -17,6 +17,7 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.ManagedNewsArticleRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,20 +38,24 @@ public class NewsService {
 
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
     private static final String DEFAULT_SOURCE = "UniPort Markets";
+    private static final String ROOM_ENDED_READ_ONLY_MESSAGE = "종료된 채팅방은 보기만 할 수 있습니다.";
 
     private final ManagedNewsArticleRepository managedNewsArticleRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
+    private final MatchingRoomRepository matchingRoomRepository;
     private final ChatService chatService;
     private final NewsFeedClient newsFeedClient;
     private final NewsSentimentAnalyzer newsSentimentAnalyzer;
 
     public NewsService(ManagedNewsArticleRepository managedNewsArticleRepository,
                        MatchingRoomMemberRepository matchingRoomMemberRepository,
+                       MatchingRoomRepository matchingRoomRepository,
                        ChatService chatService,
                        NewsFeedClient newsFeedClient,
                        NewsSentimentAnalyzer newsSentimentAnalyzer) {
         this.managedNewsArticleRepository = managedNewsArticleRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
+        this.matchingRoomRepository = matchingRoomRepository;
         this.chatService = chatService;
         this.newsFeedClient = newsFeedClient;
         this.newsSentimentAnalyzer = newsSentimentAnalyzer;
@@ -169,6 +174,9 @@ public class NewsService {
         if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(chatRoomId, user.getId())) {
             throw new ApiException("해당 채팅방에 대한 접근 권한이 없습니다.", HttpStatus.FORBIDDEN);
         }
+        if (isEndedRoom(chatRoomId)) {
+            throw new ApiException(ROOM_ENDED_READ_ONLY_MESSAGE, HttpStatus.FORBIDDEN);
+        }
 
         String newsId = request != null ? request.getNewsId() : null;
         RealtimeNewsDetailResponseDTO news = getRealtimeNewsDetail(newsId);
@@ -197,6 +205,16 @@ public class NewsService {
                 .news(preview)
                 .createdAt(saved.getCreatedAt() != null ? saved.getCreatedAt().toString() : null)
                 .build();
+    }
+
+    private boolean isEndedRoom(Long chatRoomId) {
+        if (matchingRoomRepository == null || chatRoomId == null) {
+            return false;
+        }
+        Optional<com.uniport.entity.MatchingRoom> room = matchingRoomRepository.findById(chatRoomId);
+        return room != null && room
+                .map(value -> "ended".equalsIgnoreCase(value.getStatus()))
+                .orElse(false);
     }
 
     private List<NewsArticleView> loadArticles() {

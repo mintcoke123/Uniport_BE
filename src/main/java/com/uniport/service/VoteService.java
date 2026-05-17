@@ -12,6 +12,7 @@ import com.uniport.entity.Vote;
 import com.uniport.entity.VoteParticipant;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.OrderRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.repository.VoteParticipantRepository;
@@ -51,10 +52,12 @@ public class VoteService {
     public static final String STATUS_EXPIRED = "expired";
     public static final String STATUS_CANCELLED = "cancelled";
     private static final int EXECUTION_EXPIRY_DAYS = 60;
+    private static final String ROOM_ENDED_READ_ONLY_MESSAGE = "종료된 채팅방은 보기만 할 수 있습니다.";
 
     private final VoteRepository voteRepository;
     private final VoteParticipantRepository voteParticipantRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
+    private final MatchingRoomRepository matchingRoomRepository;
     private final OrderRepository orderRepository;
     private final TradeService tradeService;
     private final UserRepository userRepository;
@@ -70,6 +73,7 @@ public class VoteService {
     public VoteService(VoteRepository voteRepository,
                        VoteParticipantRepository voteParticipantRepository,
                        MatchingRoomMemberRepository matchingRoomMemberRepository,
+                       MatchingRoomRepository matchingRoomRepository,
                        OrderRepository orderRepository,
                        TradeService tradeService,
                        UserRepository userRepository,
@@ -83,6 +87,7 @@ public class VoteService {
         this.voteRepository = voteRepository;
         this.voteParticipantRepository = voteParticipantRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
+        this.matchingRoomRepository = matchingRoomRepository;
         this.orderRepository = orderRepository;
         this.tradeService = tradeService;
         this.userRepository = userRepository;
@@ -108,6 +113,7 @@ public class VoteService {
         if (proposedPrice == null || proposedPrice.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ApiException("proposedPrice must be positive", HttpStatus.BAD_REQUEST);
         }
+        assertRoomWritable(groupId);
         if (chatService.hasFeedbackMessage(groupId)) {
             throw new ApiException("대회 종료로 비활성화되었습니다.", HttpStatus.FORBIDDEN);
         }
@@ -335,6 +341,7 @@ public class VoteService {
         if (user == null || user.getId() == null) {
             throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
         }
+        assertRoomWritable(groupId);
         if (chatService.hasFeedbackMessage(groupId)) {
             throw new ApiException("대회 종료로 비활성화되었습니다.", HttpStatus.FORBIDDEN);
         }
@@ -445,6 +452,7 @@ public class VoteService {
         if (user == null || user.getId() == null) {
             throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
         }
+        assertRoomWritable(groupId);
         if (chatService.hasFeedbackMessage(groupId)) {
             throw new ApiException("대회 종료로 비활성화되었습니다.", HttpStatus.FORBIDDEN);
         }
@@ -607,6 +615,7 @@ public class VoteService {
         Instant now = Instant.now();
         List<Vote> ongoing = voteRepository.findByStatus("ongoing");
         for (Vote v : ongoing) {
+            if (isEndedRoom(v.getRoomId())) continue;
             if (v.getExpiresAt() != null && !v.getExpiresAt().isAfter(now)) {
                 v.setStatus(STATUS_EXPIRED);
                 voteRepository.save(v);
@@ -621,6 +630,7 @@ public class VoteService {
         Instant now = Instant.now();
         List<Vote> pending = voteRepository.findByStatus(STATUS_PENDING);
         for (Vote v : pending) {
+            if (isEndedRoom(v.getRoomId())) continue;
             if (v.getStockCode() == null || v.getStockCode().isBlank()) continue;
             if (v.getExecutionExpiresAt() != null && !v.getExecutionExpiresAt().isAfter(now)) {
                 v.setStatus(STATUS_EXPIRED);
@@ -680,6 +690,22 @@ public class VoteService {
                 .map(User::getId)
                 .distinct()
                 .toList();
+    }
+
+    private void assertRoomWritable(Long groupId) {
+        if (isEndedRoom(groupId)) {
+            throw new ApiException(ROOM_ENDED_READ_ONLY_MESSAGE, HttpStatus.FORBIDDEN);
+        }
+    }
+
+    private boolean isEndedRoom(Long groupId) {
+        if (matchingRoomRepository == null || groupId == null) {
+            return false;
+        }
+        var room = matchingRoomRepository.findById(groupId);
+        return room != null && room
+                .map(value -> "ended".equalsIgnoreCase(value.getStatus()))
+                .orElse(false);
     }
 
 }

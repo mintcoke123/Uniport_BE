@@ -1,12 +1,14 @@
 package com.uniport.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.User;
 import com.uniport.entity.Vote;
 import com.uniport.entity.VoteParticipant;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.UserRepository;
 import com.uniport.repository.VoteParticipantRepository;
 import com.uniport.repository.VoteRepository;
@@ -29,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -88,6 +91,7 @@ class VoteServiceTest {
                 voteRepository,
                 voteParticipantRepository,
                 matchingRoomMemberRepository,
+                null,
                 null,
                 null,
                 null,
@@ -167,6 +171,7 @@ class VoteServiceTest {
                 null,
                 null,
                 null,
+                null,
                 chatService,
                 null,
                 null,
@@ -226,6 +231,57 @@ class VoteServiceTest {
     }
 
     @Test
+    void createVoteRejectsEndedRoomBeforeSaving() {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatService chatService = mock(ChatService.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                null,
+                null,
+                null,
+                null,
+                null,
+                chatService,
+                null,
+                null,
+                null,
+                null
+        );
+        User proposer = User.builder().id(7L).nickname("제안자").build();
+        MatchingRoom endedRoom = MatchingRoom.builder()
+                .id(123L)
+                .capacity(3)
+                .status("ended")
+                .build();
+        when(matchingRoomRepository.findById(123L)).thenReturn(Optional.of(endedRoom));
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.createVote(
+                123L,
+                proposer,
+                "매수",
+                "삼성전자",
+                "005930",
+                3,
+                BigDecimal.valueOf(70000),
+                "좋아 보여요",
+                VoteService.ORDER_STRATEGY_MARKET,
+                null,
+                null,
+                null
+        ));
+
+        assertEquals("종료된 채팅방은 보기만 할 수 있습니다.", exception.getMessage());
+        verify(voteRepository, never()).save(any(Vote.class));
+        verifyNoInteractions(voteParticipantRepository, matchingRoomMemberRepository, chatService);
+    }
+
+    @Test
     void submitVoteSendsVoteClosedPushWhenMajorityRejectsVote() {
         VoteRepository voteRepository = mock(VoteRepository.class);
         VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
@@ -237,6 +293,7 @@ class VoteServiceTest {
                 voteRepository,
                 voteParticipantRepository,
                 matchingRoomMemberRepository,
+                null,
                 null,
                 null,
                 null,
@@ -277,6 +334,62 @@ class VoteServiceTest {
     }
 
     @Test
+    void processPendingVotesSkipsEndedRooms() {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        TradeService tradeService = mock(TradeService.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        PriceCache priceCache = mock(PriceCache.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatService chatService = mock(ChatService.class);
+        GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                null,
+                tradeService,
+                userRepository,
+                priceCache,
+                kisApiService,
+                chatService,
+                broadcaster,
+                null,
+                null,
+                pushNotificationService
+        );
+        Vote vote = Vote.builder()
+                .id(456L)
+                .roomId(123L)
+                .proposerId(7L)
+                .type("매수")
+                .stockName("삼성전자")
+                .stockCode("005930")
+                .quantity(3)
+                .proposedPrice(BigDecimal.valueOf(70000))
+                .orderStrategy(VoteService.ORDER_STRATEGY_MARKET)
+                .status(VoteService.STATUS_PENDING)
+                .executionExpiresAt(Instant.now().plusSeconds(60))
+                .build();
+        MatchingRoom endedRoom = MatchingRoom.builder()
+                .id(123L)
+                .capacity(3)
+                .status("ended")
+                .build();
+        when(voteRepository.findByStatus(VoteService.STATUS_PENDING)).thenReturn(List.of(vote));
+        when(matchingRoomRepository.findById(123L)).thenReturn(Optional.of(endedRoom));
+
+        service.processPendingVotes();
+
+        verify(voteRepository, never()).findByIdForUpdate(456L);
+        verifyNoInteractions(tradeService, userRepository, priceCache, kisApiService, chatService, pushNotificationService);
+    }
+
+    @Test
     void processExpiredOngoingVotesSendsVoteClosedPush() {
         VoteRepository voteRepository = mock(VoteRepository.class);
         VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
@@ -288,6 +401,7 @@ class VoteServiceTest {
                 voteRepository,
                 voteParticipantRepository,
                 matchingRoomMemberRepository,
+                null,
                 null,
                 null,
                 null,
@@ -334,6 +448,7 @@ class VoteServiceTest {
                 voteRepository,
                 voteParticipantRepository,
                 matchingRoomMemberRepository,
+                null,
                 null,
                 tradeService,
                 userRepository,

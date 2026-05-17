@@ -1,6 +1,7 @@
 package com.uniport.controller;
 
 import com.uniport.entity.ChatMessage;
+import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.repository.MatchingRoomMemberRepository;
@@ -24,9 +25,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -112,6 +115,103 @@ class GroupControllerCallAllTest {
         verify(fixtures.matchingRoomService).assertTeamRoom(260L);
         verify(fixtures.chatService).saveMessage(260L, 1L, "유니포트", "안녕하세요");
         verify(fixtures.pushNotificationService).sendChatMessageCreated(260L, user, "안녕하세요", List.of(1L, 2L));
+    }
+
+    @Test
+    void postChatMessageReturnsForbiddenWhenRoomEnded() throws Exception {
+        Fixtures fixtures = new Fixtures();
+        User user = User.builder()
+                .studentId("20265001")
+                .password("password")
+                .nickname("유니포트")
+                .build();
+        user.setId(1L);
+        MatchingRoom endedRoom = MatchingRoom.builder()
+                .id(260L)
+                .capacity(3)
+                .status("ended")
+                .build();
+
+        when(fixtures.authService.getUserFromTokenOrNull("Bearer test-token")).thenReturn(user);
+        when(fixtures.matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(260L, 1L)).thenReturn(true);
+        when(fixtures.matchingRoomRepository.findById(260L)).thenReturn(Optional.of(endedRoom));
+
+        fixtures.mockMvc.perform(post("/api/groups/260/chat/messages")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType("application/json")
+                        .content("{\"message\":\"안녕하세요\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("종료된 채팅방은 보기만 할 수 있습니다."));
+
+        verify(fixtures.chatService, never()).saveMessage(eq(260L), eq(1L), eq("유니포트"), eq("안녕하세요"));
+    }
+
+    @Test
+    void postCallAllReturnsForbiddenWhenRoomEnded() throws Exception {
+        Fixtures fixtures = new Fixtures();
+        User user = User.builder()
+                .studentId("20265001")
+                .password("password")
+                .nickname("유니포트")
+                .build();
+        user.setId(1L);
+        MatchingRoom endedRoom = MatchingRoom.builder()
+                .id(260L)
+                .capacity(3)
+                .status("ended")
+                .build();
+
+        when(fixtures.authService.getUserFromTokenOrNull("Bearer test-token")).thenReturn(user);
+        when(fixtures.matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(260L, 1L)).thenReturn(true);
+        when(fixtures.matchingRoomRepository.findById(260L)).thenReturn(Optional.of(endedRoom));
+
+        fixtures.mockMvc.perform(post("/api/groups/260/chat/call-all")
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("종료된 채팅방은 보기만 할 수 있습니다."));
+
+        verify(fixtures.chatService, never()).saveMentionAllMessage(260L, 1L, "유니포트");
+    }
+
+    @Test
+    void createVoteReturnsForbiddenWhenRoomEnded() throws Exception {
+        Fixtures fixtures = new Fixtures();
+        User user = User.builder()
+                .studentId("20265001")
+                .password("password")
+                .nickname("유니포트")
+                .build();
+        user.setId(1L);
+        MatchingRoom endedRoom = MatchingRoom.builder()
+                .id(260L)
+                .capacity(3)
+                .status("ended")
+                .build();
+
+        when(fixtures.authService.getUserFromTokenOrNull("Bearer test-token")).thenReturn(user);
+        when(fixtures.matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(260L, 1L)).thenReturn(true);
+        when(fixtures.matchingRoomRepository.findById(260L)).thenReturn(Optional.of(endedRoom));
+
+        fixtures.mockMvc.perform(post("/api/groups/260/votes")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "type":"매수",
+                                  "stockName":"삼성전자",
+                                  "stockCode":"005930",
+                                  "quantity":1,
+                                  "proposedPrice":70000
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("종료된 채팅방은 보기만 할 수 있습니다."));
+
+        verify(fixtures.voteService, never()).createVote(eq(260L), eq(user), eq("매수"), eq("삼성전자"), eq("005930"),
+                eq(1), eq(new java.math.BigDecimal("70000")), eq(""), eq(null), eq(null), eq(null), eq(null));
     }
 
     @Test

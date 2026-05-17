@@ -8,10 +8,12 @@ import com.uniport.dto.RealtimeNewsDetailResponseDTO;
 import com.uniport.dto.RealtimeNewsListResponseDTO;
 import com.uniport.entity.ChatMessage;
 import com.uniport.entity.ManagedNewsArticle;
+import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.ManagedNewsArticleRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -28,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +38,7 @@ class NewsServiceTest {
 
     private ManagedNewsArticleRepository newsRepository;
     private MatchingRoomMemberRepository matchingRoomMemberRepository;
+    private MatchingRoomRepository matchingRoomRepository;
     private ChatService chatService;
     private NewsFeedClient newsFeedClient;
     private NewsService newsService;
@@ -43,12 +47,14 @@ class NewsServiceTest {
     void setUp() {
         newsRepository = mock(ManagedNewsArticleRepository.class);
         matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        matchingRoomRepository = mock(MatchingRoomRepository.class);
         chatService = mock(ChatService.class);
         newsFeedClient = mock(NewsFeedClient.class);
         when(newsFeedClient.fetchLatest()).thenReturn(List.of());
         newsService = new NewsService(
                 newsRepository,
                 matchingRoomMemberRepository,
+                matchingRoomRepository,
                 chatService,
                 newsFeedClient,
                 new KeywordNewsSentimentAnalyzer()
@@ -184,6 +190,7 @@ class NewsServiceTest {
         NewsService modelBackedNewsService = new NewsService(
                 newsRepository,
                 matchingRoomMemberRepository,
+                matchingRoomRepository,
                 chatService,
                 newsFeedClient,
                 input -> NewsSentimentAnalysis.negative(0.93, "FinBERT가 금융 문맥상 부정 신호로 분류했어요.")
@@ -347,6 +354,26 @@ class NewsServiceTest {
                 () -> newsService.shareNews(3L, user, NewsShareRequestDTO.builder().newsId("news_share").build()));
 
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+    }
+
+    @Test
+    void shareNews_rejectsEndedChatRoomBeforeSavingMessage() {
+        User user = User.builder().nickname("뉴스공유러").build();
+        user.setId(7L);
+        MatchingRoom endedRoom = MatchingRoom.builder()
+                .id(3L)
+                .capacity(3)
+                .status("ended")
+                .build();
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(3L, 7L)).thenReturn(true);
+        when(matchingRoomRepository.findById(3L)).thenReturn(Optional.of(endedRoom));
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> newsService.shareNews(3L, user, NewsShareRequestDTO.builder().newsId("news_share").build()));
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+        assertEquals("종료된 채팅방은 보기만 할 수 있습니다.", exception.getMessage());
+        verify(chatService, never()).saveNewsShareMessage(eq(3L), eq(7L), eq("뉴스공유러"), any());
     }
 
     private ManagedNewsArticle article(String key, String category, boolean featured, LocalDateTime publishedAt) {

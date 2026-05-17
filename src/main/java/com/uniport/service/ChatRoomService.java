@@ -37,6 +37,8 @@ import java.util.Optional;
 public class ChatRoomService {
 
     private static final String ROOM_STATUS_STARTED = "started";
+    private static final String ROOM_STATUS_ENDED = "ended";
+    private static final String ROOM_ENDED_READ_ONLY_MESSAGE = "종료된 채팅방은 보기만 할 수 있습니다.";
     private static final BigDecimal INITIAL_TEAM_BALANCE = new BigDecimal("10000000");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -82,13 +84,14 @@ public class ChatRoomService {
             if (room == null || room.getId() == null) {
                 continue;
             }
-            if (!ROOM_STATUS_STARTED.equalsIgnoreCase(room.getStatus())) {
+            if (!isVisibleChatRoomStatus(room.getStatus())) {
                 continue;
             }
             Map<String, Object> roomMap = new HashMap<>();
             roomMap.put("roomId", room.getId());
             roomMap.put("groupId", room.getId());
             roomMap.put("name", room.getName());
+            roomMap.put("status", room.getStatus());
             roomMap.put("modeLabel", deriveModeLabel(room));
             roomMap.put("marketType", room.getMarketType());
             roomMap.put("marketLabel", toMarketLabel(room.getMarketType()));
@@ -106,6 +109,10 @@ public class ChatRoomService {
             result.add(roomMap);
         }
         return result;
+    }
+
+    private boolean isVisibleChatRoomStatus(String status) {
+        return ROOM_STATUS_STARTED.equalsIgnoreCase(status) || ROOM_STATUS_ENDED.equalsIgnoreCase(status);
     }
 
     @Transactional
@@ -165,6 +172,9 @@ public class ChatRoomService {
                 .orElseThrow(() -> new ApiException("Chat room not found", HttpStatus.NOT_FOUND));
         if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(roomId, user.getId())) {
             throw new ApiException("Chat room access denied", HttpStatus.FORBIDDEN);
+        }
+        if (ROOM_STATUS_ENDED.equalsIgnoreCase(room.getStatus())) {
+            throw new ApiException(ROOM_ENDED_READ_ONLY_MESSAGE, HttpStatus.FORBIDDEN);
         }
 
         room.setName(trimmedName);

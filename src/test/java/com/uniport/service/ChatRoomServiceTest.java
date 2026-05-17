@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
 class ChatRoomServiceTest {
 
     @Test
-    void getMyChatRooms_returnsOnlyStartedRooms() {
+    void getMyChatRooms_returnsStartedAndEndedRooms() {
         MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
         MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
         ChatMessageRepository chatMessageRepository = mock(ChatMessageRepository.class);
@@ -75,6 +75,14 @@ class ChatRoomServiceTest {
                 .status("waiting")
                 .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
                 .build();
+        MatchingRoom endedRoom = MatchingRoom.builder()
+                .id(5L)
+                .name("종료된 방")
+                .capacity(3)
+                .memberCount(3)
+                .status("ended")
+                .createdAt(Instant.parse("2026-05-16T00:00:00Z"))
+                .build();
         MatchingRoomMember startedMembership = MatchingRoomMember.builder()
                 .id(1L)
                 .matchingRoom(startedRoom)
@@ -87,18 +95,31 @@ class ChatRoomServiceTest {
                 .user(user)
                 .joinedAt(Instant.parse("2026-05-17T00:20:00Z"))
                 .build();
+        MatchingRoomMember endedMembership = MatchingRoomMember.builder()
+                .id(3L)
+                .matchingRoom(endedRoom)
+                .user(user)
+                .joinedAt(Instant.parse("2026-05-16T00:10:00Z"))
+                .build();
 
         when(matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(user.getId()))
-                .thenReturn(List.of(waitingMembership, startedMembership));
+                .thenReturn(List.of(waitingMembership, startedMembership, endedMembership));
         when(teamAccountRepository.findByTeamId(startedRoom.getId())).thenReturn(Optional.empty());
+        when(teamAccountRepository.findByTeamId(endedRoom.getId())).thenReturn(Optional.empty());
         when(teamHoldingRepository.findByTeamId(startedRoom.getId())).thenReturn(List.of());
+        when(teamHoldingRepository.findByTeamId(endedRoom.getId())).thenReturn(List.of());
         when(chatMessageRepository.findTopByRoomIdOrderByCreatedAtDesc(startedRoom.getId())).thenReturn(Optional.empty());
+        when(chatMessageRepository.findTopByRoomIdOrderByCreatedAtDesc(endedRoom.getId())).thenReturn(Optional.empty());
         when(voteRepository.findByRoomIdOrderByCreatedAtDesc(startedRoom.getId())).thenReturn(List.of());
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(endedRoom.getId())).thenReturn(List.of());
 
         List<Map<String, Object>> rooms = service.getMyChatRooms(user);
 
-        assertEquals(1, rooms.size());
+        assertEquals(2, rooms.size());
         assertEquals(startedRoom.getId(), rooms.get(0).get("roomId"));
+        assertEquals("started", rooms.get(0).get("status"));
+        assertEquals(endedRoom.getId(), rooms.get(1).get("roomId"));
+        assertEquals("ended", rooms.get(1).get("status"));
         verify(teamAccountRepository, never()).findByTeamId(waitingRoom.getId());
         verify(chatMessageRepository, never()).findTopByRoomIdOrderByCreatedAtDesc(waitingRoom.getId());
         verify(voteRepository, never()).findByRoomIdOrderByCreatedAtDesc(waitingRoom.getId());
@@ -722,6 +743,30 @@ class ChatRoomServiceTest {
         );
 
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+        verify(matchingRoomRepository, never()).save(room);
+    }
+
+    @Test
+    void renameChatRoomRejectsEndedRoom() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatRoomService service = createChatRoomService(matchingRoomMemberRepository, matchingRoomRepository);
+        User user = User.builder().id(10L).nickname("tester").build();
+        MatchingRoom room = MatchingRoom.builder()
+                .id(3L)
+                .name("종료된 방")
+                .status("ended")
+                .build();
+        when(matchingRoomRepository.findById(room.getId())).thenReturn(Optional.of(room));
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())).thenReturn(true);
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.renameChatRoom(room.getId(), user, "새 이름")
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+        assertEquals("종료된 채팅방은 보기만 할 수 있습니다.", exception.getMessage());
         verify(matchingRoomRepository, never()).save(room);
     }
 
