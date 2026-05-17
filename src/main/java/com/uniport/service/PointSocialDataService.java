@@ -163,7 +163,7 @@ public class PointSocialDataService {
         return MyPageResponseDTO.builder()
                 .user(MyPageUserDTO.builder()
                         .nickname(user.getNickname())
-                        .profileImageUrl(user.getProfileImageUrl())
+                        .profileImageUrl(resolveProfileImageUrl(user, preference))
                         .level(level)
                         .investmentMbti(defaultString(user.getInvestmentProfileResult(), "균형잡힌 판다형"))
                         .character(resolveSelectedCharacterName(preference))
@@ -210,15 +210,12 @@ public class PointSocialDataService {
         if (request != null && request.getNickname() != null && !request.getNickname().isBlank()) {
             persisted.setNickname(request.getNickname().trim());
         }
-        if (request != null && request.getProfileImageUrl() != null) {
-            persisted.setProfileImageUrl(request.getProfileImageUrl().trim());
-        }
-        userRepository.save(persisted);
-
         UserMyPagePreference preference = getOrCreatePreference(user.getId());
         if (request != null && request.getBio() != null) {
             preference.setBio(request.getBio().trim());
         }
+        persisted.setProfileImageUrl(resolveProfileImageUrl(persisted, preference));
+        userRepository.save(persisted);
         userMyPagePreferenceRepository.save(preference);
         return getMyPage(persisted);
     }
@@ -607,10 +604,16 @@ public class PointSocialDataService {
             rankingPool.add(user);
         }
 
+        List<Long> userIds = rankingPool.stream()
+                .map(User::getId)
+                .filter(id -> id != null)
+                .toList();
+        Map<Long, LearningProgressSnapshot> learningProgressByUserId = learningProgressByUserId(userIds);
+
         List<User> sorted = rankingPool.stream()
                 .filter(candidate -> candidate.getId() != null)
                 .sorted(
-                        Comparator.comparingInt((User candidate) -> getLearningProgress(candidate).totalXp())
+                        Comparator.comparingInt((User candidate) -> getLearningProgress(candidate, learningProgressByUserId).totalXp())
                                 .reversed()
                                 .thenComparing(User::getId)
                 )
@@ -626,12 +629,12 @@ public class PointSocialDataService {
         int endIndex = Math.min(sorted.size(), myIndex + FRIEND_RANKING_WINDOW_SIZE + 1);
         List<FriendRankingItemDTO> items = new ArrayList<>();
         for (int i = startIndex; i < endIndex; i++) {
-            items.add(toRankingItem(i + 1, sorted.get(i)));
+            items.add(toRankingItem(i + 1, sorted.get(i), getLearningProgress(sorted.get(i), learningProgressByUserId)));
         }
         int myRank = myIndex + 1;
         return FriendsDashboardResponseDTO.builder()
                 .ranking(FriendRankingSectionDTO.builder().endDay(3).items(items).build())
-                .myRanking(toRankingItem(myRank, user))
+                .myRanking(toRankingItem(myRank, user, getLearningProgress(user, learningProgressByUserId)))
                 .build();
     }
 
@@ -802,7 +805,7 @@ public class PointSocialDataService {
         return FriendListItemDTO.builder()
                 .userId("USER_" + friend.getId())
                 .nickname(friend.getNickname())
-                .profileImageUrl(friend.getProfileImageUrl())
+                .profileImageUrl(resolveProfileImageUrl(friend))
                 .level(learningProgress.level())
                 .investmentProfileLabel(friend.getInvestmentProfileResult())
                 .currentXp(learningProgress.currentExp())
@@ -818,7 +821,7 @@ public class PointSocialDataService {
                 .requestId(requestId)
                 .userId("USER_" + target.getId())
                 .nickname(target.getNickname())
-                .profileImageUrl(target.getProfileImageUrl())
+                .profileImageUrl(resolveProfileImageUrl(target))
                 .level(learningProgress.level())
                 .investmentProfileLabel(target.getInvestmentProfileResult())
                 .requestedAgoLabel(toAgoLabel(createdAt))
@@ -827,12 +830,15 @@ public class PointSocialDataService {
     }
 
     private FriendRankingItemDTO toRankingItem(int rank, User user) {
-        LearningProgressSnapshot learningProgress = getLearningProgress(user);
+        return toRankingItem(rank, user, getLearningProgress(user));
+    }
+
+    private FriendRankingItemDTO toRankingItem(int rank, User user, LearningProgressSnapshot learningProgress) {
         return FriendRankingItemDTO.builder()
                 .rank(rank)
                 .userId("USER_" + user.getId())
                 .nickname(user.getNickname())
-                .profileImageUrl(user.getProfileImageUrl())
+                .profileImageUrl(resolveProfileImageUrl(user))
                 .level(learningProgress.level())
                 .xp(learningProgress.totalXp())
                 .rankChange(0)
@@ -1151,6 +1157,26 @@ public class PointSocialDataService {
         return learningUserStateRepository.findById(user.getId())
                 .map(this::toLearningProgressSnapshot)
                 .orElseGet(() -> new LearningProgressSnapshot(1, 0, 300, 0, 0, 0));
+    }
+
+    private LearningProgressSnapshot getLearningProgress(User user, Map<Long, LearningProgressSnapshot> learningProgressByUserId) {
+        return learningProgressByUserId.getOrDefault(user.getId(), new LearningProgressSnapshot(1, 0, 300, 0, 0, 0));
+    }
+
+    private Map<Long, LearningProgressSnapshot> learningProgressByUserId(List<Long> userIds) {
+        Map<Long, LearningProgressSnapshot> snapshots = new HashMap<>();
+        learningUserStateRepository.findAllById(userIds)
+                .forEach(state -> snapshots.put(state.getUserId(), toLearningProgressSnapshot(state)));
+        return snapshots;
+    }
+
+    private String resolveProfileImageUrl(User user) {
+        UserMyPagePreference preference = userMyPagePreferenceRepository.findById(user.getId()).orElse(null);
+        return resolveProfileImageUrl(user, preference);
+    }
+
+    private String resolveProfileImageUrl(User user, UserMyPagePreference preference) {
+        return profileImageUrlService.resolveCharacterProfileImageUrl(user, preference);
     }
 
     private LearningProgressSnapshot toLearningProgressSnapshot(LearningUserStateEntity state) {

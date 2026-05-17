@@ -4,6 +4,7 @@ import com.uniport.repository.ManagedCommunityCommentRepository;
 import com.uniport.repository.ManagedCommunityPostLikeRepository;
 import com.uniport.repository.ManagedCommunityPostRepository;
 import com.uniport.repository.ManagedCommunityReportRepository;
+import com.uniport.repository.UserMyPagePreferenceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,6 +34,9 @@ class CommunityServiceTest {
     @Mock
     private StockVisualAssetResolver stockVisualAssetResolver;
 
+    @Mock
+    private UserMyPagePreferenceRepository userMyPagePreferenceRepository;
+
     private CommunityService communityService;
 
     @BeforeEach
@@ -42,7 +46,9 @@ class CommunityServiceTest {
                 managedCommunityCommentRepository,
                 managedCommunityPostLikeRepository,
                 managedCommunityReportRepository,
-                stockVisualAssetResolver
+                stockVisualAssetResolver,
+                userMyPagePreferenceRepository,
+                new ProfileImageUrlService()
         );
     }
 

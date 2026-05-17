@@ -219,10 +219,7 @@ public class ChatRoomService {
             return "";
         }
         Optional<UserMyPagePreference> preference = userMyPagePreferenceRepository.findById(member.getId());
-        if (preference.isPresent() && preference.get().getSelectedCharacterCode() != null && !preference.get().getSelectedCharacterCode().isBlank()) {
-            return profileImageUrlService.profileOptionImageUrl(preference.get().getSelectedCharacterCode());
-        }
-        return member.getProfileImageUrl() != null ? member.getProfileImageUrl() : "";
+        return profileImageUrlService.resolveCharacterProfileImageUrl(member, preference.orElse(null));
     }
 
     private Map<String, Object> buildPortfolioSummary(Long roomId) {

@@ -8,6 +8,7 @@ import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.LearningUserStateRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
+import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,8 @@ public class MatchingRoomService {
     private final FriendRelationRepository friendRelationRepository;
     private final LearningUserStateRepository learningUserStateRepository;
     private final PushNotificationService pushNotificationService;
+    private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
+    private final ProfileImageUrlService profileImageUrlService;
     private final Map<Long, List<Long>> pendingInviteUserIdsByRoomId = new ConcurrentHashMap<>();
 
     public MatchingRoomService(MatchingRoomRepository matchingRoomRepository,
@@ -52,13 +55,17 @@ public class MatchingRoomService {
                                UserRepository userRepository,
                                FriendRelationRepository friendRelationRepository,
                                LearningUserStateRepository learningUserStateRepository,
-                               PushNotificationService pushNotificationService) {
+                               PushNotificationService pushNotificationService,
+                               UserMyPagePreferenceRepository userMyPagePreferenceRepository,
+                               ProfileImageUrlService profileImageUrlService) {
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.userRepository = userRepository;
         this.friendRelationRepository = friendRelationRepository;
         this.learningUserStateRepository = learningUserStateRepository;
         this.pushNotificationService = pushNotificationService;
+        this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
+        this.profileImageUrlService = profileImageUrlService;
     }
 
     public void assertTeamRoom(Long groupId) {
@@ -681,7 +688,7 @@ public class MatchingRoomService {
                     "investmentProfileLabel", user.getInvestmentProfileResult() != null && !user.getInvestmentProfileResult().isBlank()
                             ? user.getInvestmentProfileResult()
                             : "균형잡힌 판다형",
-                    "profileImageUrl", user.getProfileImageUrl() != null ? user.getProfileImageUrl() : "",
+                    "profileImageUrl", resolveCharacterProfileImageUrl(user),
                     "role", i == 0 ? "HOST" : "MEMBER",
                     "roleLabel", i == 0 ? "방장" : "팀원",
                     "isMe", isMe,
@@ -697,7 +704,7 @@ public class MatchingRoomService {
                     "investmentProfileLabel", invitedUser.getInvestmentProfileResult() != null && !invitedUser.getInvestmentProfileResult().isBlank()
                             ? invitedUser.getInvestmentProfileResult()
                             : "균형잡힌 판다형",
-                    "profileImageUrl", invitedUser.getProfileImageUrl() != null ? invitedUser.getProfileImageUrl() : "",
+                    "profileImageUrl", resolveCharacterProfileImageUrl(invitedUser),
                     "role", "INVITED",
                     "roleLabel", "초대 완료",
                     "isMe", false,
@@ -721,6 +728,16 @@ public class MatchingRoomService {
             ));
         }
         return members;
+    }
+
+    private String resolveCharacterProfileImageUrl(User user) {
+        if (user == null || user.getId() == null) {
+            return "";
+        }
+        return profileImageUrlService.resolveCharacterProfileImageUrl(
+                user,
+                userMyPagePreferenceRepository.findById(user.getId()).orElse(null)
+        );
     }
 
     private int resolveUserLevel(User user) {

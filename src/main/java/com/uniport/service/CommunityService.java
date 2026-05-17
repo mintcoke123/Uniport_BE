@@ -26,6 +26,7 @@ import com.uniport.repository.ManagedCommunityCommentRepository;
 import com.uniport.repository.ManagedCommunityPostLikeRepository;
 import com.uniport.repository.ManagedCommunityPostRepository;
 import com.uniport.repository.ManagedCommunityReportRepository;
+import com.uniport.repository.UserMyPagePreferenceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,17 +48,23 @@ public class CommunityService {
     private final ManagedCommunityPostLikeRepository managedCommunityPostLikeRepository;
     private final ManagedCommunityReportRepository managedCommunityReportRepository;
     private final StockVisualAssetResolver stockVisualAssetResolver;
+    private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
+    private final ProfileImageUrlService profileImageUrlService;
 
     public CommunityService(ManagedCommunityPostRepository managedCommunityPostRepository,
                             ManagedCommunityCommentRepository managedCommunityCommentRepository,
                             ManagedCommunityPostLikeRepository managedCommunityPostLikeRepository,
                             ManagedCommunityReportRepository managedCommunityReportRepository,
-                            StockVisualAssetResolver stockVisualAssetResolver) {
+                            StockVisualAssetResolver stockVisualAssetResolver,
+                            UserMyPagePreferenceRepository userMyPagePreferenceRepository,
+                            ProfileImageUrlService profileImageUrlService) {
         this.managedCommunityPostRepository = managedCommunityPostRepository;
         this.managedCommunityCommentRepository = managedCommunityCommentRepository;
         this.managedCommunityPostLikeRepository = managedCommunityPostLikeRepository;
         this.managedCommunityReportRepository = managedCommunityReportRepository;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
+        this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
+        this.profileImageUrlService = profileImageUrlService;
     }
 
     @Transactional(readOnly = true)
@@ -103,7 +110,7 @@ public class CommunityService {
                 .type(normalizeType(request.getType(), true))
                 .authorName(user.getNickname())
                 .authorUserId(user.getId())
-                .authorProfileImageUrl(user.getProfileImageUrl())
+                .authorProfileImageUrl(resolveCharacterProfileImageUrl(user))
                 .title(request.getTitle().trim())
                 .content(request.getContent().trim())
                 .analysisReportId(blankToNull(request.getAnalysisReportId()))
@@ -216,7 +223,7 @@ public class CommunityService {
                 .post(post)
                 .authorUserId(user.getId())
                 .authorName(user.getNickname())
-                .authorProfileImageUrl(user.getProfileImageUrl())
+                .authorProfileImageUrl(resolveCharacterProfileImageUrl(user))
                 .content(request.getContent().trim())
                 .build());
         return CommunityCommentMutationResponseDTO.builder()
@@ -546,6 +553,16 @@ public class CommunityService {
                 .nickname(nickname)
                 .profileImageUrl(profileImageUrl)
                 .build();
+    }
+
+    private String resolveCharacterProfileImageUrl(User user) {
+        if (user == null || user.getId() == null) {
+            return "";
+        }
+        return profileImageUrlService.resolveCharacterProfileImageUrl(
+                user,
+                userMyPagePreferenceRepository.findById(user.getId()).orElse(null)
+        );
     }
 
     private boolean isMine(User viewer, Long authorUserId) {

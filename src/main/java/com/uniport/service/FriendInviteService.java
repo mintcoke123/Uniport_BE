@@ -9,6 +9,7 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.FriendInviteRepository;
 import com.uniport.repository.FriendRelationRepository;
+import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -34,19 +35,25 @@ public class FriendInviteService {
     private final String inviteBaseUrl;
     private final long expirationDays;
     private final PushNotificationService pushNotificationService;
+    private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
+    private final ProfileImageUrlService profileImageUrlService;
 
     public FriendInviteService(FriendInviteRepository friendInviteRepository,
                                FriendRelationRepository friendRelationRepository,
                                UserRepository userRepository,
                                @Value("${app.friend-invite.base-url:https://uniportbe-production.up.railway.app}") String inviteBaseUrl,
                                @Value("${app.friend-invite.expiration-days:7}") long expirationDays,
-                               PushNotificationService pushNotificationService) {
+                               PushNotificationService pushNotificationService,
+                               UserMyPagePreferenceRepository userMyPagePreferenceRepository,
+                               ProfileImageUrlService profileImageUrlService) {
         this.friendInviteRepository = friendInviteRepository;
         this.friendRelationRepository = friendRelationRepository;
         this.userRepository = userRepository;
         this.inviteBaseUrl = trimTrailingSlash(inviteBaseUrl);
         this.expirationDays = expirationDays;
         this.pushNotificationService = pushNotificationService;
+        this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
+        this.profileImageUrlService = profileImageUrlService;
     }
 
     @Transactional
@@ -77,7 +84,10 @@ public class FriendInviteService {
                 .inviteCode(invite.getInviteCode())
                 .inviterUserId("USER_" + inviter.getId())
                 .inviterNickname(inviter.getNickname())
-                .inviterProfileImageUrl(inviter.getProfileImageUrl())
+                .inviterProfileImageUrl(profileImageUrlService.resolveCharacterProfileImageUrl(
+                        inviter,
+                        userMyPagePreferenceRepository.findById(inviter.getId()).orElse(null)
+                ))
                 .status(invite.getStatus())
                 .expiresAt(toUtcString(invite.getExpiresAt()))
                 .build();

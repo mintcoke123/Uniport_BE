@@ -1,5 +1,7 @@
 package com.uniport.service;
 
+import com.uniport.entity.User;
+import com.uniport.entity.UserMyPagePreference;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +23,24 @@ public class ProfileImageUrlService {
             "OWL", "owl.png",
             "SURFER", "surfer.png"
     );
+    private static final Map<String, String> ONBOARDING_CHARACTER_CODES = Map.ofEntries(
+            Map.entry(normalizeCharacterName("조심스러운 거북이"), "SEED"),
+            Map.entry(normalizeCharacterName("조심스러운 거북이형"), "SEED"),
+            Map.entry(normalizeCharacterName("균형 잡힌 판다"), "PANDA"),
+            Map.entry(normalizeCharacterName("균형잡힌 판다형"), "PANDA"),
+            Map.entry(normalizeCharacterName("감각형 돌고래"), "DOLPHIN"),
+            Map.entry(normalizeCharacterName("감각적인 돌고래형"), "DOLPHIN"),
+            Map.entry(normalizeCharacterName("호기심 많은 연구자"), "RESEARCHER"),
+            Map.entry(normalizeCharacterName("호기심 많은 탐구자형"), "RESEARCHER"),
+            Map.entry(normalizeCharacterName("호기심 많은 치타"), "FOX"),
+            Map.entry(normalizeCharacterName("기회를 찾는 여우형"), "FOX"),
+            Map.entry(normalizeCharacterName("성실한 농부"), "FARMER"),
+            Map.entry(normalizeCharacterName("성실한 농부형"), "FARMER"),
+            Map.entry(normalizeCharacterName("전략 짜는 올빼미"), "OWL"),
+            Map.entry(normalizeCharacterName("전략적인 올빼미형"), "OWL"),
+            Map.entry(normalizeCharacterName("파도타는 서퍼"), "SURFER"),
+            Map.entry(normalizeCharacterName("파도타는 서퍼형"), "SURFER")
+    );
 
     @Value("${app.public-base-url:https://uniportbe-production.up.railway.app}")
     private String publicBaseUrl = DEFAULT_PUBLIC_BASE_URL;
@@ -31,11 +51,41 @@ public class ProfileImageUrlService {
         return normalizePublicBaseUrl(publicBaseUrl) + PROFILE_OPTION_IMAGE_PATH + fileName;
     }
 
+    public String profileOptionCodeForCharacterName(String characterName) {
+        return ONBOARDING_CHARACTER_CODES.getOrDefault(normalizeCharacterName(characterName), "SEED");
+    }
+
+    public boolean isProfileOptionImageUrl(String profileImageUrl) {
+        if (profileImageUrl == null || profileImageUrl.isBlank()) {
+            return false;
+        }
+        String normalizedUrl = profileImageUrl.trim().toLowerCase(Locale.ROOT);
+        String normalizedPath = PROFILE_OPTION_IMAGE_PATH.toLowerCase(Locale.ROOT);
+        return normalizedUrl.contains(normalizedPath)
+                && PROFILE_OPTION_IMAGE_FILES.values().stream()
+                .map(fileName -> normalizedPath + fileName.toLowerCase(Locale.ROOT))
+                .anyMatch(normalizedUrl::endsWith);
+    }
+
+    public String resolveCharacterProfileImageUrl(User user, UserMyPagePreference preference) {
+        if (preference != null && preference.getSelectedCharacterCode() != null && !preference.getSelectedCharacterCode().isBlank()) {
+            return profileOptionImageUrl(preference.getSelectedCharacterCode());
+        }
+        if (user != null && isProfileOptionImageUrl(user.getProfileImageUrl())) {
+            return user.getProfileImageUrl().trim();
+        }
+        return profileOptionImageUrl(profileOptionCodeForCharacterName(user == null ? null : user.getInvestmentProfileResult()));
+    }
+
     private String normalizePublicBaseUrl(String value) {
         String normalized = value == null || value.isBlank() ? DEFAULT_PUBLIC_BASE_URL : value.trim();
         while (normalized.endsWith("/")) {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
         return normalized;
+    }
+
+    private static String normalizeCharacterName(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", "").trim();
     }
 }

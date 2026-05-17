@@ -6,6 +6,7 @@ import com.uniport.dto.OnboardingSurveySubmitRequestDTO;
 import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
 import com.uniport.repository.LearningUserStateRepository;
+import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +30,9 @@ class OnboardingServiceTest {
     private UserRepository userRepository;
 
     @Mock
+    private UserMyPagePreferenceRepository userMyPagePreferenceRepository;
+
+    @Mock
     private LearningUserStateRepository learningUserStateRepository;
 
     @Test
@@ -37,7 +41,9 @@ class OnboardingServiceTest {
                 new OnboardingQuestionProvider(),
                 new OnboardingResultProvider(),
                 userRepository,
-                learningUserStateRepository);
+                userMyPagePreferenceRepository,
+                learningUserStateRepository,
+                new ProfileImageUrlService());
 
         User user = User.builder()
                 .id(1L)
@@ -46,6 +52,7 @@ class OnboardingServiceTest {
                 .build();
 
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userMyPagePreferenceRepository.findById(1L)).thenReturn(Optional.empty());
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.empty());
         when(learningUserStateRepository.save(any(LearningUserStateEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -66,6 +73,10 @@ class OnboardingServiceTest {
         assertEquals("조심스러운 거북이", user.getInvestmentProfileResult());
         assertEquals("입문", user.getInvestmentLevel());
         assertEquals("AI 반도체, 양자컴퓨터", user.getInterestSector());
+        assertEquals(
+                "https://uniportbe-production.up.railway.app/assets/mypage/profile-options/seed.png",
+                user.getProfileImageUrl()
+        );
 
         ArgumentCaptor<LearningUserStateEntity> stateCaptor = ArgumentCaptor.forClass(LearningUserStateEntity.class);
         verify(learningUserStateRepository).save(stateCaptor.capture());
@@ -80,7 +91,9 @@ class OnboardingServiceTest {
                 new OnboardingQuestionProvider(),
                 new OnboardingResultProvider(),
                 userRepository,
-                learningUserStateRepository);
+                userMyPagePreferenceRepository,
+                learningUserStateRepository,
+                new ProfileImageUrlService());
 
         User user = User.builder()
                 .id(2L)

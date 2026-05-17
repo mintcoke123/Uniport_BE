@@ -13,8 +13,10 @@ import com.uniport.dto.OnboardingSurveyResultDTO;
 import com.uniport.dto.OnboardingSurveySubmitRequestDTO;
 import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
+import com.uniport.entity.UserMyPagePreference;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.LearningUserStateRepository;
+import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -38,16 +40,22 @@ public class OnboardingService {
     private final OnboardingQuestionProvider onboardingQuestionProvider;
     private final OnboardingResultProvider onboardingResultProvider;
     private final UserRepository userRepository;
+    private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
     private final LearningUserStateRepository learningUserStateRepository;
+    private final ProfileImageUrlService profileImageUrlService;
 
     public OnboardingService(OnboardingQuestionProvider onboardingQuestionProvider,
                              OnboardingResultProvider onboardingResultProvider,
                              UserRepository userRepository,
-                             LearningUserStateRepository learningUserStateRepository) {
+                             UserMyPagePreferenceRepository userMyPagePreferenceRepository,
+                             LearningUserStateRepository learningUserStateRepository,
+                             ProfileImageUrlService profileImageUrlService) {
         this.onboardingQuestionProvider = onboardingQuestionProvider;
         this.onboardingResultProvider = onboardingResultProvider;
         this.userRepository = userRepository;
+        this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
         this.learningUserStateRepository = learningUserStateRepository;
+        this.profileImageUrlService = profileImageUrlService;
     }
 
     public OnboardingSurveyFlowResponseDTO getSurveyFlow(User user) {
@@ -107,10 +115,13 @@ public class OnboardingService {
             throw new ApiException("answers is required", HttpStatus.BAD_REQUEST);
         }
         if (hasResult(user)) {
-            return onboardingResultProvider.getByCharacterName(
+            OnboardingSurveyResultDTO result = onboardingResultProvider.getByCharacterName(
                     user.getInvestmentProfileResult(),
                     user.getInvestmentLevel(),
                     user.getInterestSector());
+            applyCharacterProfile(user, result);
+            userRepository.save(user);
+            return result;
         }
 
         Map<Long, OnboardingSurveyAnswerDTO> answersByQuestion = validateAnswers(request.getAnswers());
@@ -140,6 +151,7 @@ public class OnboardingService {
         user.setInvestmentProfileResult(result.getCharacterName());
         user.setInvestmentLevel(investmentLevel);
         user.setInterestSector(interestSector);
+        applyCharacterProfile(user, result);
         userRepository.save(user);
         persistEducationRoadmapSeed(user, investmentLevel, educationSectorIds);
 
@@ -159,9 +171,18 @@ public class OnboardingService {
                 user.getInterestSector());
     }
 
+    @Transactional
     public OnboardingCompleteResponseDTO complete(User user) {
         if (user == null) {
             throw new ApiException("Authenticated user is required", HttpStatus.UNAUTHORIZED);
+        }
+        if (hasResult(user)) {
+            OnboardingSurveyResultDTO result = onboardingResultProvider.getByCharacterName(
+                    user.getInvestmentProfileResult(),
+                    user.getInvestmentLevel(),
+                    user.getInterestSector());
+            applyCharacterProfile(user, result);
+            userRepository.save(user);
         }
         return OnboardingCompleteResponseDTO.builder()
                 .completed(true)
@@ -169,6 +190,18 @@ public class OnboardingService {
                 .message("첫 투자노트가 생성되었어요")
                 .nextActionLabel("30일 투자공부하러가기")
                 .build();
+    }
+
+    private void applyCharacterProfile(User user, OnboardingSurveyResultDTO result) {
+        String characterCode = profileImageUrlService.profileOptionCodeForCharacterName(result.getCharacterName());
+        UserMyPagePreference preference = userMyPagePreferenceRepository.findById(user.getId())
+                .orElseGet(() -> UserMyPagePreference.builder()
+                        .userId(user.getId())
+                        .pushEnabled(Boolean.TRUE)
+                        .build());
+        preference.setSelectedCharacterCode(characterCode);
+        userMyPagePreferenceRepository.save(preference);
+        user.setProfileImageUrl(profileImageUrlService.profileOptionImageUrl(characterCode));
     }
 
     private Map<Long, OnboardingSurveyAnswerDTO> validateAnswers(List<OnboardingSurveyAnswerDTO> answers) {

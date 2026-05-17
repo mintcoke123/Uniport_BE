@@ -532,8 +532,9 @@ class ChatRoomServiceTest {
         Map<String, Object> roomInfo = (Map<String, Object>) response.get("roomInfo");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> members = (List<Map<String, Object>>) roomInfo.get("members");
-        assertEquals("https://cdn.example.com/me.png", members.get(0).get("profileImageUrl"));
-        assertEquals("https://cdn.example.com/member.png", members.get(1).get("profileImageUrl"));
+        String expectedDefaultProfileImageUrl = "https://uniportbe-production.up.railway.app/assets/mypage/profile-options/seed.png";
+        assertEquals(expectedDefaultProfileImageUrl, members.get(0).get("profileImageUrl"));
+        assertEquals(expectedDefaultProfileImageUrl, members.get(1).get("profileImageUrl"));
     }
 
     @Test
