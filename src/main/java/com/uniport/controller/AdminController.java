@@ -1,6 +1,7 @@
 package com.uniport.controller;
 
 import com.uniport.entity.Competition;
+import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
@@ -293,7 +294,7 @@ public class AdminController {
         requireAdminOrSisuAdmin(authorization);
         Long groupId = parseRoomIdToGroupId(roomId);
         var room = matchingRoomRepository.findById(groupId)
-                .orElseThrow(() -> new ApiException("방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+                .orElseGet(() -> restoreMissingRoomForForceEnd(groupId));
         if (!"ended".equalsIgnoreCase(room.getStatus())) {
             room.setStatus("ended");
         }
@@ -302,6 +303,32 @@ public class AdminController {
         }
         matchingRoomRepository.save(room);
         return ResponseEntity.ok(feedbackReportUseCase.generateForRoom(groupId));
+    }
+
+    private MatchingRoom restoreMissingRoomForForceEnd(Long groupId) {
+        List<User> teamUsers = userRepository.findByTeamId("team-" + groupId);
+        if (teamUsers == null || teamUsers.isEmpty()) {
+            throw new ApiException("방을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+        }
+        var now = java.time.Instant.now();
+        MatchingRoom recovered = MatchingRoom.builder()
+                .id(groupId)
+                .name("복구된 매칭방 room-" + groupId)
+                .capacity(Math.max(3, teamUsers.size()))
+                .memberCount(teamUsers.size())
+                .status("ended")
+                .visibility("PUBLIC")
+                .createdAt(now)
+                .endedAt(now)
+                .build();
+        MatchingRoom saved = matchingRoomRepository.save(recovered);
+        for (User teamUser : teamUsers) {
+            if (teamUser.getId() != null
+                    && !matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(groupId, teamUser.getId())) {
+                matchingRoomMemberRepository.save(MatchingRoomMember.of(saved, teamUser));
+            }
+        }
+        return saved;
     }
 
     private static Long parseRoomIdToGroupId(String roomId) {

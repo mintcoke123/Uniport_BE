@@ -25,5 +25,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByEmail(String email);
 
+    List<User> findByTeamId(String teamId);
+
     List<User> findTop10ByNicknameContainingIgnoreCaseOrStudentIdContaining(String nickname, String studentId);
 }

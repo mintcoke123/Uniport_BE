@@ -26,6 +26,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -111,14 +114,79 @@ class AdminControllerFeedbackReportTest {
         verify(feedbackReportUseCase).generateForRoom(12L);
     }
 
+    @Test
+    void forceEndFeedbackReport_restoresMissingRoomFromUsersTeamId() throws Exception {
+        AuthService authService = mock(AuthService.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase = mock(GenerateGroupInvestmentFeedbackReportUseCase.class);
+        User kakao = User.builder().id(484L).nickname("kakao").teamId("team-328").build();
+        User apple = User.builder().id(486L).nickname("apple").teamId("team-328").build();
+
+        when(authService.getUserFromToken("Bearer sisu"))
+                .thenReturn(User.builder().id(77L).role("sisu_admin").build());
+        when(matchingRoomRepository.findById(328L)).thenReturn(Optional.empty());
+        when(userRepository.findByTeamId("team-328")).thenReturn(java.util.List.of(kakao, apple));
+        when(matchingRoomRepository.save(any(MatchingRoom.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(feedbackReportUseCase.generateForRoom(328L)).thenReturn(Map.of(
+                "reportId", 3280L,
+                "roomId", 328L,
+                "status", "PUBLISHED"
+        ));
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(newController(
+                authService,
+                userRepository,
+                matchingRoomRepository,
+                matchingRoomMemberRepository,
+                feedbackReportUseCase
+        )).build();
+
+        mockMvc.perform(post("/api/admin/matching-rooms/room-328/force-end-feedback-report")
+                        .header("Authorization", "Bearer sisu"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reportId").value(3280))
+                .andExpect(jsonPath("$.roomId").value(328))
+                .andExpect(jsonPath("$.status").value("PUBLISHED"));
+
+        verify(matchingRoomRepository, atLeastOnce()).save(argThat(room ->
+                room.getId().equals(328L)
+                        && "ended".equals(room.getStatus())
+                        && room.getMemberCount() == 2
+        ));
+        verify(matchingRoomMemberRepository).save(argThat(member ->
+                member.getMatchingRoom().getId().equals(328L)
+                        && member.getUser().getId().equals(484L)
+        ));
+        verify(matchingRoomMemberRepository).save(argThat(member ->
+                member.getMatchingRoom().getId().equals(328L)
+                        && member.getUser().getId().equals(486L)
+        ));
+        verify(feedbackReportUseCase).generateForRoom(328L);
+    }
+
     private AdminController newController(AuthService authService,
                                           MatchingRoomRepository matchingRoomRepository,
                                           GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase) {
-        return new AdminController(
+        return newController(
                 authService,
                 mock(UserRepository.class),
                 matchingRoomRepository,
                 mock(MatchingRoomMemberRepository.class),
+                feedbackReportUseCase
+        );
+    }
+
+    private AdminController newController(AuthService authService,
+                                          UserRepository userRepository,
+                                          MatchingRoomRepository matchingRoomRepository,
+                                          MatchingRoomMemberRepository matchingRoomMemberRepository,
+                                          GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase) {
+        return new AdminController(
+                authService,
+                userRepository,
+                matchingRoomRepository,
+                matchingRoomMemberRepository,
                 mock(UserDeletionReferenceCleanupService.class),
                 mock(MatchingRoomService.class),
                 mock(CompetitionService.class),
