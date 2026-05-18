@@ -4,11 +4,15 @@ import com.uniport.entity.FriendRelation;
 import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
+import com.uniport.entity.Competition;
+import com.uniport.entity.CompetitionApplication;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
+import com.uniport.repository.CompetitionApplicationRepository;
+import com.uniport.repository.CompetitionRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -50,6 +54,12 @@ class MatchingRoomServiceTest {
 
     @Autowired
     private FriendRelationRepository friendRelationRepository;
+
+    @Autowired
+    private CompetitionRepository competitionRepository;
+
+    @Autowired
+    private CompetitionApplicationRepository competitionApplicationRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -295,6 +305,45 @@ class MatchingRoomServiceTest {
     }
 
     @Test
+    void quickMatchRandomMode_separatesTournamentWaitingRoomsFromOrdinaryRandomRooms() {
+        User tournamentUser = persistUser("20263029", "tournament-random-user");
+        User ordinaryUser = persistUser("20263030", "ordinary-random-user");
+        Competition competition = persistOngoingCompetition("주간리그 테스트");
+        persistApplication(competition, tournamentUser);
+        entityManager.flush();
+
+        Map<String, Object> tournamentResponse = matchingRoomService.quickMatch(
+                "RANDOM",
+                "KR",
+                List.of(),
+                competition.getId(),
+                tournamentUser
+        );
+        Map<String, Object> ordinaryResponse = matchingRoomService.quickMatch("RANDOM", "KR", List.of(), ordinaryUser);
+
+        String tournamentRoomId = (String) map(tournamentResponse.get("detail")).get("roomId");
+        String ordinaryRoomId = (String) map(ordinaryResponse.get("detail")).get("roomId");
+        assertFalse(tournamentRoomId.equals(ordinaryRoomId));
+        assertEquals(competition.getId(), findRoom(tournamentRoomId).getCompetitionId());
+        assertEquals(null, findRoom(ordinaryRoomId).getCompetitionId());
+    }
+
+    @Test
+    void quickMatchRandomMode_rejectsTournamentMatchingBeforeApplication() {
+        User user = persistUser("20263031", "not-applied-user");
+        Competition competition = persistOngoingCompetition("미신청 대회");
+        entityManager.flush();
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> matchingRoomService.quickMatch("RANDOM", "KR", List.of(), competition.getId(), user)
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("대회 참가 신청 후 매칭을 시작할 수 있습니다.", exception.getMessage());
+    }
+
+    @Test
     void assertTeamRoomForCallAll_rejectsPersonalRoomWithCallAllMessage() {
         MatchingRoom room = MatchingRoom.create("개인방", 1);
         entityManager.persist(room);
@@ -377,6 +426,29 @@ class MatchingRoomServiceTest {
                 .status("ACCEPTED")
                 .build();
         friendRelationRepository.save(relation);
+    }
+
+    private Competition persistOngoingCompetition(String name) {
+        Competition competition = Competition.builder()
+                .name(name)
+                .startDate("2026-01-01T00:00:00")
+                .endDate("2099-12-31T23:59:59")
+                .status("ongoing")
+                .build();
+        return competitionRepository.save(competition);
+    }
+
+    private CompetitionApplication persistApplication(Competition competition, User user) {
+        return competitionApplicationRepository.save(
+                CompetitionApplication.builder()
+                        .competition(competition)
+                        .user(user)
+                        .teamId("solo-" + user.getId())
+                        .teamName(user.getNickname() + " 팀")
+                        .status("APPLIED")
+                        .appliedAt(Instant.now())
+                        .build()
+        );
     }
 
     private MatchingRoom persistRoomWithMember(String name, String status, User user) {

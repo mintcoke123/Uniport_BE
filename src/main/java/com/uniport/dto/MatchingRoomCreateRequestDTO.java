@@ -29,6 +29,9 @@ public class MatchingRoomCreateRequestDTO {
     @Schema(description = "Market type", example = "KR", allowableValues = {"KR", "US"})
     private String marketType;
 
+    @Schema(description = "Competition ID for tournament matching rooms", example = "1")
+    private Long competitionId;
+
     @ArraySchema(schema = @Schema(description = "Invitee user ID", example = "21"))
     private List<Long> inviteeUserIds;
 }

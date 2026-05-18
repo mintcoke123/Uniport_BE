@@ -100,11 +100,23 @@ public class MatchingRoomController {
         String visibility = body != null ? body.getVisibility() : null;
         String matchType = body != null ? body.getMatchType() : null;
         String marketType = body != null ? body.getMarketType() : null;
+        Long competitionId = body != null ? body.getCompetitionId() : null;
         List<Long> inviteeUserIds = body != null && body.getInviteeUserIds() != null ? body.getInviteeUserIds() : List.of();
         Integer capacity = body != null ? body.getCapacity() : null;
 
         User creator = currentUserResolver.resolveRequired(principal, authorization);
-        return ResponseEntity.ok(matchingRoomService.create(name, visibility, capacity, matchType, marketType, inviteeUserIds, creator));
+        return ResponseEntity.ok(
+                matchingRoomService.create(
+                        name,
+                        visibility,
+                        capacity,
+                        matchType,
+                        marketType,
+                        inviteeUserIds,
+                        competitionId,
+                        creator
+                )
+        );
     }
 
     @PostMapping("/join-by-code")
@@ -264,9 +276,10 @@ public class MatchingRoomController {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         String mode = body != null && body.getMode() != null ? body.getMode() : "RANDOM";
         String marketType = body != null && body.getMarketType() != null ? body.getMarketType() : "KR";
+        Long competitionId = body != null ? body.getCompetitionId() : null;
         List<Long> inviteeUserIds = body != null && body.getInviteeUserIds() != null
                 ? body.getInviteeUserIds()
                 : List.of();
-        return ResponseEntity.ok(matchingRoomService.quickMatch(mode, marketType, inviteeUserIds, user));
+        return ResponseEntity.ok(matchingRoomService.quickMatch(mode, marketType, inviteeUserIds, competitionId, user));
     }
 }

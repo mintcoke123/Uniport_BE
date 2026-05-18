@@ -9,5 +9,7 @@ import java.util.Optional;
 public interface CompetitionApplicationRepository extends JpaRepository<CompetitionApplication, Long> {
     Optional<CompetitionApplication> findByCompetition_IdAndUser_Id(Long competitionId, Long userId);
 
+    boolean existsByCompetition_IdAndUser_IdAndStatus(Long competitionId, Long userId, String status);
+
     List<CompetitionApplication> findByUser_IdOrderByAppliedAtDesc(Long userId);
 }

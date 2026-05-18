@@ -28,6 +28,9 @@ public class QuickMatchRequestDTO {
     )
     private String marketType;
 
+    @Schema(description = "Competition ID for tournament random matching", example = "1")
+    private Long competitionId;
+
     @ArraySchema(schema = @Schema(description = "User ID to invite in FRIEND mode", example = "21"))
     private List<Long> inviteeUserIds;
 }

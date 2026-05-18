@@ -49,6 +49,7 @@ public class MatchingRoomService {
     private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
     private final ProfileImageUrlService profileImageUrlService;
     private final CompetitionService competitionService;
+    private final CompetitionParticipationService competitionParticipationService;
     private final Map<Long, List<Long>> pendingInviteUserIdsByRoomId = new ConcurrentHashMap<>();
 
     public MatchingRoomService(MatchingRoomRepository matchingRoomRepository,
@@ -59,7 +60,8 @@ public class MatchingRoomService {
                                PushNotificationService pushNotificationService,
                                UserMyPagePreferenceRepository userMyPagePreferenceRepository,
                                ProfileImageUrlService profileImageUrlService,
-                               CompetitionService competitionService) {
+                               CompetitionService competitionService,
+                               CompetitionParticipationService competitionParticipationService) {
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.userRepository = userRepository;
@@ -69,6 +71,7 @@ public class MatchingRoomService {
         this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
         this.profileImageUrlService = profileImageUrlService;
         this.competitionService = competitionService;
+        this.competitionParticipationService = competitionParticipationService;
     }
 
     public void assertTeamRoom(Long groupId) {
@@ -129,12 +132,19 @@ public class MatchingRoomService {
 
     @Transactional
     public Map<String, Object> create(String name, String visibility, Integer capacity, User creator) {
-        return create(name, visibility, capacity, null, null, null, creator);
+        return create(name, visibility, capacity, null, null, null, null, creator);
     }
 
     @Transactional
     public Map<String, Object> create(String name, String visibility, Integer capacity,
                                       String matchType, String marketType, List<Long> inviteeUserIds, User creator) {
+        return create(name, visibility, capacity, matchType, marketType, inviteeUserIds, null, creator);
+    }
+
+    @Transactional
+    public Map<String, Object> create(String name, String visibility, Integer capacity,
+                                      String matchType, String marketType, List<Long> inviteeUserIds,
+                                      Long competitionId, User creator) {
         if (creator != null && creator.getId() != null && hasActiveMembership(creator.getId())) {
             throw new ApiException("이미 참여 중인 방이 있습니다. 새 방을 만들려면 먼저 현재 방에서 나가야 합니다.", HttpStatus.BAD_REQUEST);
         }
@@ -143,11 +153,13 @@ public class MatchingRoomService {
         int cap = (capacity != null && capacity >= 1 && capacity <= 10) ? capacity : 3;
         String resolvedMatchType = normalizeMatchType(matchType);
         String resolvedMarketType = normalizeMarketType(marketType);
+        Long resolvedCompetitionId = validateTournamentMatchingContext(competitionId, creator, resolvedMatchType, cap);
 
         MatchingRoom room = MatchingRoom.create(name, cap);
         room.setVisibility(vis);
         room.setMatchType(resolvedMatchType);
         room.setMarketType(resolvedMarketType);
+        room.setCompetitionId(resolvedCompetitionId);
         room = matchingRoomRepository.save(room);
 
         room.setInviteCode(generateUniqueInviteCode());
@@ -231,20 +243,12 @@ public class MatchingRoomService {
             throw new ApiException("단체 매칭은 2명 이상 모여야 시작할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
 
-        Long activeCompetitionId = competitionService.findActiveCompetition()
-                .map(com.uniport.entity.Competition::getId)
-                .orElse(null);
-        boolean fullTournamentTeam = activeCompetitionId != null && room.getCapacity() == 3 && memberCount == 3;
-
         boolean waitingRoomStarted = "waiting".equalsIgnoreCase(room.getStatus());
         boolean startedNow = !"started".equals(room.getStatus());
         boolean missingEndTime = room.getEndedAt() == null;
         if (startedNow || missingEndTime) {
             if (startedNow) {
                 room.setStatus("started");
-                if (room.getCompetitionId() == null && fullTournamentTeam) {
-                    room.setCompetitionId(activeCompetitionId);
-                }
             }
             if (missingEndTime) {
                 room.setEndedAt(Instant.now().plus(MOCK_INVESTMENT_SESSION_DURATION));
@@ -334,7 +338,16 @@ public class MatchingRoomService {
 
     @Transactional
     public Map<String, Object> quickMatch(String mode, String marketType, List<Long> inviteeUserIds, User creator) {
+        return quickMatch(mode, marketType, inviteeUserIds, null, creator);
+    }
+
+    @Transactional
+    public Map<String, Object> quickMatch(String mode, String marketType, List<Long> inviteeUserIds,
+                                          Long competitionId, User creator) {
         String normalizedMode = mode != null ? mode.trim().toUpperCase() : "RANDOM";
+        if (competitionId != null && !"RANDOM".equals(normalizedMode)) {
+            throw new ApiException("대회 매칭은 랜덤 매칭만 사용할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
         return switch (normalizedMode) {
             case "SOLO" -> {
                 Map<String, Object> created = create("Solo Room", VISIBILITY_PRIVATE, 1, "RANDOM", marketType, List.of(), creator);
@@ -359,25 +372,39 @@ public class MatchingRoomService {
                 );
             }
             default -> {
+                String resolvedMarketType = normalizeMarketType(marketType);
+                Long resolvedCompetitionId = validateTournamentMatchingContext(
+                        competitionId,
+                        creator,
+                        "RANDOM",
+                        3
+                );
+                MatchingRoom activeTournamentRoom = findActiveTournamentRoom(creator, resolvedCompetitionId);
+                if (activeTournamentRoom != null) {
+                    yield Map.of(
+                            "mode", "RANDOM",
+                            "message", "Existing tournament random match room found.",
+                            "room", toMap(activeTournamentRoom),
+                            "detail", getRoomDetail(toApiId(activeTournamentRoom.getId()), creator)
+                    );
+                }
                 if (creator != null && creator.getId() != null && hasActiveMembership(creator.getId())) {
                     throw new ApiException("You are already participating in another room.", HttpStatus.BAD_REQUEST);
                 }
-
-                String resolvedMarketType = normalizeMarketType(marketType);
-                MatchingRoom joinableRoom = findJoinableRandomRoom(resolvedMarketType);
+                MatchingRoom joinableRoom = findJoinableRandomRoom(resolvedMarketType, resolvedCompetitionId);
                 if (joinableRoom != null) {
                     Map<String, Object> joined = doJoin(joinableRoom, creator);
                     long memberCount = matchingRoomMemberRepository.countByMatchingRoomId(joinableRoom.getId());
                     if (memberCount >= joinableRoom.getCapacity()) {
                         Map<String, Object> started = start(toApiId(joinableRoom.getId()), creator);
-                        yield Map.of(
-                                "mode", "RANDOM",
-                                "message", "Random match completed and started.",
-                                "room", joined.get("room"),
-                                "detail", started.get("detail"),
-                                "teamId", started.get("teamId"),
-                                "competitionId", started.get("competitionId")
-                        );
+                        Map<String, Object> completed = new HashMap<>();
+                        completed.put("mode", "RANDOM");
+                        completed.put("message", "Random match completed and started.");
+                        completed.put("room", joined.get("room"));
+                        completed.put("detail", started.get("detail"));
+                        completed.put("teamId", started.get("teamId"));
+                        completed.put("competitionId", started.get("competitionId"));
+                        yield completed;
                     }
                     yield Map.of(
                             "mode", "RANDOM",
@@ -387,7 +414,16 @@ public class MatchingRoomService {
                     );
                 }
 
-                Map<String, Object> created = create("Random Match Room", VISIBILITY_PUBLIC, 3, "RANDOM", resolvedMarketType, List.of(), creator);
+                Map<String, Object> created = create(
+                        "Random Match Room",
+                        VISIBILITY_PUBLIC,
+                        3,
+                        "RANDOM",
+                        resolvedMarketType,
+                        List.of(),
+                        resolvedCompetitionId,
+                        creator
+                );
                 yield Map.of(
                         "mode", "RANDOM",
                         "message", "Random match waiting room created.",
@@ -407,6 +443,7 @@ public class MatchingRoomService {
         body.put("roomId", toApiId(room.getId()));
         body.put("name", room.getName());
         body.put("createdAt", room.getCreatedAt().toString());
+        body.put("competitionId", room.getCompetitionId());
         body.put("status", resolveMatchingStatus(room, joinedMembers, invitedUserIds));
         body.put("marketType", room.getMarketType() != null ? room.getMarketType() : "KR");
         body.put("marketLabel", marketLabel(room.getMarketType()));
@@ -565,17 +602,50 @@ public class MatchingRoomService {
         return new ArrayList<>(distinctIds);
     }
 
-    private MatchingRoom findJoinableRandomRoom(String marketType) {
+    private MatchingRoom findJoinableRandomRoom(String marketType, Long competitionId) {
         for (MatchingRoom room : matchingRoomRepository.findAllByOrderByCreatedAtDesc()) {
             if (!"waiting".equalsIgnoreCase(room.getStatus())) continue;
             if (!"RANDOM".equalsIgnoreCase(room.getMatchType())) continue;
             if (!VISIBILITY_PUBLIC.equalsIgnoreCase(room.getVisibility())) continue;
             if (!normalizeMarketType(room.getMarketType()).equals(normalizeMarketType(marketType))) continue;
+            if (!Objects.equals(room.getCompetitionId(), competitionId)) continue;
             long currentCount = matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
             if (currentCount >= room.getCapacity()) continue;
             return room;
         }
         return null;
+    }
+
+    private MatchingRoom findActiveTournamentRoom(User user, Long competitionId) {
+        if (competitionId == null || user == null || user.getId() == null) {
+            return null;
+        }
+        return findActiveMemberships(user.getId()).stream()
+                .map(MatchingRoomMember::getMatchingRoom)
+                .filter(Objects::nonNull)
+                .filter(room -> Objects.equals(room.getCompetitionId(), competitionId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Long validateTournamentMatchingContext(Long competitionId, User user, String matchType, int capacity) {
+        if (competitionId == null) {
+            return null;
+        }
+        com.uniport.entity.Competition competition = competitionService.findAll().stream()
+                .filter(candidate -> competitionId.equals(candidate.getId()))
+                .findFirst()
+                .orElseThrow(() -> new ApiException("대회를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
+        if ("ended".equals(competitionService.resolveStatus(competition))) {
+            throw new ApiException("종료된 대회는 매칭을 시작할 수 없습니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (!"RANDOM".equalsIgnoreCase(matchType) || capacity != 3) {
+            throw new ApiException("대회 매칭은 3인 랜덤 매칭만 사용할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+        if (!competitionParticipationService.isApplied(competitionId, user)) {
+            throw new ApiException("대회 참가 신청 후 매칭을 시작할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+        return competitionId;
     }
 
     private boolean hasActiveMembership(Long userId) {
@@ -670,6 +740,7 @@ public class MatchingRoomService {
         map.put("visibility", room.getVisibility() != null ? room.getVisibility() : VISIBILITY_PUBLIC);
         map.put("matchType", room.getMatchType() != null ? room.getMatchType() : "RANDOM");
         map.put("marketType", room.getMarketType() != null ? room.getMarketType() : "KR");
+        map.put("competitionId", room.getCompetitionId());
         map.put("inviteCode", room.getInviteCode());
         map.put("createdAt", room.getCreatedAt().toString());
         return map;

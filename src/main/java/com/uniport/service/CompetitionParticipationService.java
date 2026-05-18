@@ -124,6 +124,13 @@ public class CompetitionParticipationService {
                         && "APPLIED".equals(application.getStatus()));
     }
 
+    public boolean isApplied(Long competitionId, User user) {
+        if (competitionId == null || user == null || user.getId() == null) {
+            return false;
+        }
+        return applicationRepository.existsByCompetition_IdAndUser_IdAndStatus(competitionId, user.getId(), "APPLIED");
+    }
+
     private Competition getCompetition(Long competitionId) {
         return competitionRepository.findById(competitionId)
                 .orElseThrow(() -> new ApiException("대회를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
