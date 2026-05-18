@@ -14,6 +14,7 @@ import com.uniport.service.kisws.KisWsSubscriptionManager;
 import com.uniport.service.kisws.multi.KisRestClient;
 import com.uniport.service.kisws.multi.KeyPool;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -97,6 +98,7 @@ public class KisApiService {
     private final KeyPool keyPool;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
+    private final VirtualStockService virtualStockService;
     /** HTTP 현재가 조회 결과 캐시(종목코드 -> (DTO, 만료시각)). 시장가 고정 구간에서 동일 가격 재사용. */
     private final ConcurrentHashMap<String, CachedHttpPriceEntry> httpPriceCache = new ConcurrentHashMap<>();
 
@@ -127,12 +129,25 @@ public class KisApiService {
                          @Lazy KeyPool keyPool,
                          StockVisualAssetResolver stockVisualAssetResolver,
                          StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
+        this(restTemplate, kisWsSubscriptionManager, priceCache, keyPool,
+                stockVisualAssetResolver, stockSymbolLogoUrlResolver, new VirtualStockService());
+    }
+
+    @Autowired
+    public KisApiService(RestTemplate restTemplate,
+                         @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
+                         PriceCache priceCache,
+                         @Lazy KeyPool keyPool,
+                         StockVisualAssetResolver stockVisualAssetResolver,
+                         StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver,
+                         VirtualStockService virtualStockService) {
         this.restTemplate = restTemplate;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.priceCache = priceCache;
         this.keyPool = keyPool;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
+        this.virtualStockService = virtualStockService;
     }
 
     private String getBaseUrl() {
@@ -406,11 +421,14 @@ public class KisApiService {
         if (stockCode == null || stockCode.isBlank()) {
             throw new ApiException("Stock code is required", HttpStatus.BAD_REQUEST);
         }
+        String code = stockCode.trim();
+        String normalized = code.length() >= 6 ? code : String.format("%6s", code).replace(' ', '0');
+        if (virtualStockService.isVirtualStockCode(normalized)) {
+            return virtualStockService.currentPriceDto();
+        }
         if (!isKisConfigured()) {
             throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);
         }
-        String code = stockCode.trim();
-        String normalized = code.length() >= 6 ? code : String.format("%6s", code).replace(' ', '0');
         kisWsSubscriptionManager.ensureSubscribed(normalized);
         if (allowRealtimeCache) {
             Optional<PriceSnapshot> cached = priceCache.get(normalized);

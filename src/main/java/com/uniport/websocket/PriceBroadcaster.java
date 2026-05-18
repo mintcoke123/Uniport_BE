@@ -1,9 +1,11 @@
 package com.uniport.websocket;
 
+import com.uniport.service.VirtualStockService;
 import com.uniport.service.kisws.KisWsSubscriptionManager;
 import com.uniport.service.kisws.PriceSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
@@ -50,6 +52,7 @@ public class PriceBroadcaster {
     private final ConcurrentHashMap<String, Object> sessionLocks = new ConcurrentHashMap<>();
 
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
+    private final VirtualStockService virtualStockService;
 
     /** Unsubscribe TTL: key=stockCode, value=unsubscribe 예약 시각(ms). 30초 후 실제 KIS unsubscribe. */
     private final ConcurrentHashMap<String, Long> pendingUnsubscribe = new ConcurrentHashMap<>();
@@ -77,7 +80,14 @@ public class PriceBroadcaster {
     private int metricsLastDay = -1;
 
     public PriceBroadcaster(@Lazy KisWsSubscriptionManager kisWsSubscriptionManager) {
+        this(kisWsSubscriptionManager, new VirtualStockService());
+    }
+
+    @Autowired
+    public PriceBroadcaster(@Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
+                            VirtualStockService virtualStockService) {
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
+        this.virtualStockService = virtualStockService;
     }
 
     @PreDestroy
@@ -181,8 +191,14 @@ public class PriceBroadcaster {
 
     /** 전역 구독 집합 변동만 KIS에 반영: toRemove는 30초 TTL로 예약, toAdd는 즉시 subscribe 및 TTL 취소 */
     private void syncKisSubscriptions(Set<String> before, Set<String> after) {
-        Set<String> toRemove = before.stream().filter(c -> !after.contains(c)).collect(Collectors.toSet());
-        Set<String> toAdd = after.stream().filter(c -> !before.contains(c)).collect(Collectors.toSet());
+        Set<String> toRemove = before.stream()
+                .filter(c -> !after.contains(c))
+                .filter(c -> !virtualStockService.isVirtualStockCode(c))
+                .collect(Collectors.toSet());
+        Set<String> toAdd = after.stream()
+                .filter(c -> !before.contains(c))
+                .filter(c -> !virtualStockService.isVirtualStockCode(c))
+                .collect(Collectors.toSet());
 
         log.info("Price WS sync unique={} add={} remove={}", after.size(), toAdd.size(), toRemove.size());
         recordSubscriptionMetrics(after.size(), toAdd.size(), toRemove.size()); // toRemove.size() = pending_remove
@@ -198,6 +214,16 @@ public class PriceBroadcaster {
                 log.debug("Price WS KIS subscribe (/prices client): {}", code);
             } catch (Exception e) {
                 log.debug("Price WS KIS subscribe failed {}: {}", code, e.getMessage());
+            }
+        }
+    }
+
+    @Scheduled(fixedRate = 1000)
+    public void broadcastVirtualStockTicks() {
+        for (String code : virtualStockService.codes()) {
+            Set<WebSocketSession> sessions = codeToSessions.get(code);
+            if (sessions != null && sessions.stream().anyMatch(WebSocketSession::isOpen)) {
+                broadcast(code, virtualStockService.currentSnapshot());
             }
         }
     }

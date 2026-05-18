@@ -112,6 +112,19 @@ class StockMasterSearchServiceTest {
     }
 
     @Test
+    void search_virtualStockKeyword_returnsWaveTechWithoutRepositoryHit() {
+        StockSearchResponseDTO result =
+                stockMasterSearchService.search("웨이브", 0, 10, null, null);
+
+        assertEquals(1, result.getItems().size());
+        assertEquals("KRX_999999", result.getItems().get(0).getStockId());
+        assertEquals("999999", result.getItems().get(0).getSymbol());
+        assertEquals("웨이브테크", result.getItems().get(0).getName());
+        assertEquals("VIRTUAL", result.getItems().get(0).getMarket());
+        verify(stockMasterRepository, never()).findByNameKrIlikeOrderByNameKrAsc(any(), any());
+    }
+
+    @Test
     void search_clampsLegacyLimitToMaxSize() {
         StockMaster samsung = StockMaster.builder()
                 .code("005930")

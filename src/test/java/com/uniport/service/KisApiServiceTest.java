@@ -21,9 +21,39 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class KisApiServiceTest {
+
+    @Test
+    void getStockPrice_virtualStockDoesNotRequireKisConfigurationOrKisSubscription() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        KisWsSubscriptionManager subscriptionManager = mock(KisWsSubscriptionManager.class);
+        KisApiService service = new KisApiService(
+                restTemplate,
+                subscriptionManager,
+                new PriceCache(),
+                null,
+                mock(StockVisualAssetResolver.class),
+                mock(StockSymbolLogoUrlResolver.class),
+                new VirtualStockService()
+        );
+
+        StockPriceDTO result = service.getStockPrice("999999");
+
+        assertEquals("999999", result.getStockCode());
+        assertEquals("웨이브테크", result.getStockName());
+        assertEquals("VIRTUAL", result.getMarket());
+        verify(subscriptionManager, never()).ensureSubscribed(anyString());
+        verify(restTemplate, never()).exchange(
+                anyString(),
+                any(HttpMethod.class),
+                any(HttpEntity.class),
+                any(ParameterizedTypeReference.class)
+        );
+    }
 
     @Test
     void getStockQuote_mapsOhlcFromKisHttpQuoteEvenWhenRealtimeCacheExists() {

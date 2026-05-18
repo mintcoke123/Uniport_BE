@@ -6,6 +6,7 @@ import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.StockMaster;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.StockMasterRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -23,13 +24,23 @@ public class StockMasterSearchService {
     private final StockMasterRepository stockMasterRepository;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
+    private final VirtualStockService virtualStockService;
 
     public StockMasterSearchService(StockMasterRepository stockMasterRepository,
                                     StockVisualAssetResolver stockVisualAssetResolver,
                                     StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
+        this(stockMasterRepository, stockVisualAssetResolver, stockSymbolLogoUrlResolver, new VirtualStockService());
+    }
+
+    @Autowired
+    public StockMasterSearchService(StockMasterRepository stockMasterRepository,
+                                    StockVisualAssetResolver stockVisualAssetResolver,
+                                    StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver,
+                                    VirtualStockService virtualStockService) {
         this.stockMasterRepository = stockMasterRepository;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
+        this.virtualStockService = virtualStockService;
     }
 
     public StockSearchResponseDTO search(String keywordParam,
@@ -44,6 +55,15 @@ public class StockMasterSearchService {
         if (keyword.isBlank()) {
             return StockSearchResponseDTO.builder()
                     .items(List.of())
+                    .page(page)
+                    .size(size)
+                    .hasNext(Boolean.FALSE)
+                    .build();
+        }
+
+        if (virtualStockService.matchesKeyword(keyword)) {
+            return StockSearchResponseDTO.builder()
+                    .items(List.of(virtualStockService.searchItem()))
                     .page(page)
                     .size(size)
                     .hasNext(Boolean.FALSE)

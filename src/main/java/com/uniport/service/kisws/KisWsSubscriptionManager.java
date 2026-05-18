@@ -1,5 +1,7 @@
 package com.uniport.service.kisws;
 
+import com.uniport.service.VirtualStockService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -14,9 +16,16 @@ public class KisWsSubscriptionManager {
     private static final Logger log = LoggerFactory.getLogger(KisWsSubscriptionManager.class);
 
     private final KisWsClient kisWsClient;
+    private final VirtualStockService virtualStockService;
 
     public KisWsSubscriptionManager(KisWsClient kisWsClient) {
+        this(kisWsClient, new VirtualStockService());
+    }
+
+    @Autowired
+    public KisWsSubscriptionManager(KisWsClient kisWsClient, VirtualStockService virtualStockService) {
         this.kisWsClient = kisWsClient;
+        this.virtualStockService = virtualStockService;
     }
 
     /**
@@ -29,6 +38,9 @@ public class KisWsSubscriptionManager {
             return;
         }
         String normalized = normalizeStockCode(stockCode.trim());
+        if (virtualStockService.isVirtualStockCode(normalized)) {
+            return;
+        }
         kisWsClient.sendSubscribe(normalized);
         log.debug("KIS WS subscribe requested: {}", normalized);
     }
@@ -42,6 +54,9 @@ public class KisWsSubscriptionManager {
             return;
         }
         String normalized = normalizeStockCode(stockCode.trim());
+        if (virtualStockService.isVirtualStockCode(normalized)) {
+            return;
+        }
         kisWsClient.removeSubscription(normalized);
         log.debug("KIS WS unsubscribe requested: {}", normalized);
     }
