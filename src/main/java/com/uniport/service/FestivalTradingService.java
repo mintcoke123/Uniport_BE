@@ -28,6 +28,7 @@ import java.util.Objects;
 public class FestivalTradingService {
 
     private static final BigDecimal START_CASH = new BigDecimal("100000000");
+    private static final BigDecimal QUALIFIED_RETURN_RATE = new BigDecimal("2.0");
 
     private final FestivalTradingSessionRepository sessionRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -179,6 +180,12 @@ public class FestivalTradingService {
                 .max(LocalDateTime::compareTo)
                 .orElse(null);
 
+        int qualifiedParticipants = (int) completedSessions.stream()
+                .map(FestivalTradingSession::getReturnRate)
+                .filter(Objects::nonNull)
+                .filter(returnRate -> returnRate.compareTo(QUALIFIED_RETURN_RATE) >= 0)
+                .count();
+
         List<FestivalAdminSessionItemDTO> sessionItems = sessions.stream()
                 .map(this::toAdminSessionItem)
                 .toList();
@@ -187,7 +194,7 @@ public class FestivalTradingService {
                 .totalParticipants(sessions.size())
                 .completedParticipants(completedSessions.size())
                 .activeParticipants((int) sessions.stream().filter(session -> session.getEndedAt() == null).count())
-                .qualifiedParticipants(0)
+                .qualifiedParticipants(qualifiedParticipants)
                 .averageReturnRate(averageReturnRate)
                 .bestReturnRate(bestReturnRate)
                 .lastCompletedAt(lastCompletedAt)
