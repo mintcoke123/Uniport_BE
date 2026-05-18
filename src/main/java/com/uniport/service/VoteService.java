@@ -21,9 +21,15 @@ import com.uniport.service.kisws.PriceCache;
 import com.uniport.service.kisws.PriceSnapshot;
 import com.uniport.websocket.GroupChatBroadcaster;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -39,6 +45,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class VoteService {
+
+    private static final Logger log = LoggerFactory.getLogger(VoteService.class);
 
     public static final String ORDER_STRATEGY_MARKET = "MARKET";
     public static final String ORDER_STRATEGY_LIMIT = "LIMIT";
@@ -69,6 +77,10 @@ public class VoteService {
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
     private final PushNotificationService pushNotificationService;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    @Autowired(required = false)
+    @Lazy
+    private VoteService self;
 
     public VoteService(VoteRepository voteRepository,
                        VoteParticipantRepository voteParticipantRepository,
@@ -630,36 +642,57 @@ public class VoteService {
     }
 
     /** pending 스캔: executionExpiresAt 만료 → expired; 조건 만족 시 executing → execute → executed */
-    @Transactional
     public void processPendingVotes() {
         Instant now = Instant.now();
         List<Vote> pending = voteRepository.findByStatus(STATUS_PENDING);
         for (Vote v : pending) {
-            if (isEndedRoom(v.getRoomId())) continue;
-            if (v.getStockCode() == null || v.getStockCode().isBlank()) continue;
-            if (v.getExecutionExpiresAt() != null && !v.getExecutionExpiresAt().isAfter(now)) {
-                v.setStatus(STATUS_EXPIRED);
-                voteRepository.save(v);
-                sendVoteClosedPush(v.getRoomId(), v);
-                continue;
-            }
-            if (!tradeService.isTradingHoursNow()) continue;
-            BigDecimal currentPrice = resolveCurrentPrice(v.getStockCode(), v.getProposedPrice());
-            if (!shouldExecute(v, currentPrice)) continue;
-            Optional<Vote> lockedOpt = voteRepository.findByIdForUpdate(v.getId());
-            if (lockedOpt.isEmpty()) continue;
-            Vote locked = lockedOpt.get();
-            if (!STATUS_PENDING.equals(locked.getStatus())) continue;
-            locked.setStatus(STATUS_EXECUTING);
-            voteRepository.save(locked);
             try {
-                executeVoteOrderWithPrice(locked, currentPrice);
+                pendingVoteExecutor().processPendingVote(v.getId(), now);
             } catch (Exception e) {
-                locked.setStatus(STATUS_PENDING);
-                voteRepository.save(locked);
-                throw e;
+                log.warn("[vote] Pending vote execution failed voteId={} roomId={} message={}",
+                        v != null ? v.getId() : null,
+                        v != null ? v.getRoomId() : null,
+                        e.getMessage());
             }
         }
+    }
+
+    @Transactional
+    public void processPendingVote(Long voteId, Instant now) {
+        if (voteId == null) return;
+        Optional<Vote> voteOpt = voteRepository.findById(voteId);
+        if (voteOpt.isEmpty()) return;
+        Vote v = voteOpt.get();
+        if (!STATUS_PENDING.equals(v.getStatus())) return;
+        if (isEndedRoom(v.getRoomId())) return;
+        if (v.getStockCode() == null || v.getStockCode().isBlank()) return;
+        Instant referenceTime = now != null ? now : Instant.now();
+        if (v.getExecutionExpiresAt() != null && !v.getExecutionExpiresAt().isAfter(referenceTime)) {
+            v.setStatus(STATUS_EXPIRED);
+            voteRepository.save(v);
+            sendVoteClosedPush(v.getRoomId(), v);
+            return;
+        }
+        if (!tradeService.isTradingHoursNow()) return;
+        BigDecimal currentPrice = resolveCurrentPrice(v.getStockCode(), v.getProposedPrice());
+        if (!shouldExecute(v, currentPrice)) return;
+        Optional<Vote> lockedOpt = voteRepository.findByIdForUpdate(v.getId());
+        if (lockedOpt.isEmpty()) return;
+        Vote locked = lockedOpt.get();
+        if (!STATUS_PENDING.equals(locked.getStatus())) return;
+        locked.setStatus(STATUS_EXECUTING);
+        voteRepository.save(locked);
+        try {
+            executeVoteOrderWithPrice(locked, currentPrice);
+        } catch (Exception e) {
+            locked.setStatus(STATUS_PENDING);
+            voteRepository.save(locked);
+            throw e;
+        }
+    }
+
+    private VoteService pendingVoteExecutor() {
+        return self != null ? self : this;
     }
 
     private void sendVoteClosedPushIfNeeded(Long groupId, Vote vote) {
@@ -683,7 +716,24 @@ public class VoteService {
         if (pushNotificationService == null || groupId == null || vote == null) {
             return;
         }
-        pushNotificationService.sendTradeExecuted(groupId, vote, roomMemberUserIds(groupId));
+        Runnable send = () -> {
+            try {
+                pushNotificationService.sendTradeExecuted(groupId, vote, roomMemberUserIds(groupId));
+            } catch (Exception e) {
+                log.warn("[vote] Trade executed push failed voteId={} roomId={} message={}",
+                        vote.getId(), groupId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
     }
 
     private List<Long> roomMemberUserIds(Long groupId) {

@@ -1,6 +1,7 @@
 package com.uniport.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uniport.dto.PlaceOrderRequestDTO;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.User;
 import com.uniport.entity.Vote;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -448,6 +450,7 @@ class VoteServiceTest {
                 .status("ended")
                 .build();
         when(voteRepository.findByStatus(VoteService.STATUS_PENDING)).thenReturn(List.of(vote));
+        when(voteRepository.findById(456L)).thenReturn(Optional.of(vote));
         when(matchingRoomRepository.findById(123L)).thenReturn(Optional.of(endedRoom));
 
         service.processPendingVotes();
@@ -497,6 +500,7 @@ class VoteServiceTest {
                 .status(VoteService.STATUS_PENDING)
                 .build();
         when(voteRepository.findByStatus(VoteService.STATUS_PENDING)).thenReturn(List.of(vote));
+        when(voteRepository.findById(456L)).thenReturn(Optional.of(vote));
         when(tradeService.isTradingHoursNow()).thenReturn(false);
 
         service.processPendingVotes();
@@ -593,6 +597,7 @@ class VoteServiceTest {
                 .build();
         User proposer = User.builder().id(7L).nickname("제안자").build();
         when(voteRepository.findByStatus(VoteService.STATUS_PENDING)).thenReturn(List.of(vote));
+        when(voteRepository.findById(456L)).thenReturn(Optional.of(vote));
         when(tradeService.isTradingHoursNow()).thenReturn(true);
         when(voteRepository.findByIdForUpdate(456L)).thenReturn(Optional.of(vote));
         when(userRepository.findById(7L)).thenReturn(Optional.of(proposer));
@@ -605,5 +610,90 @@ class VoteServiceTest {
         service.processPendingVotes();
 
         verify(pushNotificationService).sendTradeExecuted(123L, vote, List.of(7L, 8L));
+    }
+
+    @Test
+    void processPendingVotesContinuesWhenOnePendingVoteFails() {
+        VoteRepository voteRepository = mock(VoteRepository.class);
+        VoteParticipantRepository voteParticipantRepository = mock(VoteParticipantRepository.class);
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        TradeService tradeService = mock(TradeService.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        PriceCache priceCache = mock(PriceCache.class);
+        KisApiService kisApiService = mock(KisApiService.class);
+        ChatService chatService = mock(ChatService.class);
+        GroupChatBroadcaster broadcaster = mock(GroupChatBroadcaster.class);
+        PushNotificationService pushNotificationService = mock(PushNotificationService.class);
+        VoteService service = new VoteService(
+                voteRepository,
+                voteParticipantRepository,
+                matchingRoomMemberRepository,
+                null,
+                null,
+                tradeService,
+                userRepository,
+                priceCache,
+                kisApiService,
+                chatService,
+                broadcaster,
+                null,
+                null,
+                pushNotificationService
+        );
+        Vote failingVote = Vote.builder()
+                .id(300L)
+                .roomId(329L)
+                .proposerId(489L)
+                .type("매수")
+                .stockName("KODEX 200선물인버스2X")
+                .stockCode("252670")
+                .quantity(999999)
+                .proposedPrice(BigDecimal.valueOf(118))
+                .orderStrategy(VoteService.ORDER_STRATEGY_MARKET)
+                .status(VoteService.STATUS_PENDING)
+                .build();
+        Vote executableVote = Vote.builder()
+                .id(313L)
+                .roomId(334L)
+                .proposerId(487L)
+                .type("매수")
+                .stockName("웨이브테크")
+                .stockCode("999999")
+                .quantity(2)
+                .proposedPrice(BigDecimal.valueOf(900000))
+                .orderStrategy(VoteService.ORDER_STRATEGY_LIMIT)
+                .limitPrice(BigDecimal.valueOf(900000))
+                .status(VoteService.STATUS_PENDING)
+                .executionExpiresAt(Instant.now().plusSeconds(60))
+                .build();
+        User proposer = User.builder().id(487L).nickname("apple").build();
+        when(voteRepository.findByStatus(VoteService.STATUS_PENDING)).thenReturn(List.of(failingVote, executableVote));
+        when(voteRepository.findById(300L)).thenReturn(Optional.of(failingVote));
+        when(voteRepository.findById(313L)).thenReturn(Optional.of(executableVote));
+        when(voteRepository.findByIdForUpdate(300L)).thenReturn(Optional.of(failingVote));
+        when(voteRepository.findByIdForUpdate(313L)).thenReturn(Optional.of(executableVote));
+        when(tradeService.isTradingHoursNow()).thenReturn(true);
+        when(userRepository.findById(489L)).thenReturn(Optional.of(User.builder().id(489L).nickname("kakao").build()));
+        when(userRepository.findById(487L)).thenReturn(Optional.of(proposer));
+        when(priceCache.get("252670")).thenReturn(Optional.empty());
+        when(priceCache.get("999999")).thenReturn(Optional.empty());
+        when(tradeService.placeOrderForTeam(any(PlaceOrderRequestDTO.class), any(Long.class), any(User.class)))
+                .thenAnswer(invocation -> {
+                    Long teamId = invocation.getArgument(1);
+                    if (Long.valueOf(329L).equals(teamId)) {
+                        throw new ApiException("팀 잔액이 부족합니다.", org.springframework.http.HttpStatus.BAD_REQUEST);
+                    }
+                    return null;
+                });
+        when(matchingRoomMemberRepository.findByMatchingRoomIdWithUser(334L)).thenReturn(List.of(
+                MatchingRoomMember.builder().user(proposer).build(),
+                MatchingRoomMember.builder().user(User.builder().id(489L).nickname("kakao").build()).build()
+        ));
+
+        assertDoesNotThrow(service::processPendingVotes);
+
+        assertEquals(VoteService.STATUS_PENDING, failingVote.getStatus());
+        assertEquals(VoteService.STATUS_EXECUTED, executableVote.getStatus());
+        verify(pushNotificationService).sendTradeExecuted(334L, executableVote, List.of(487L, 489L));
     }
 }
