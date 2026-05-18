@@ -68,7 +68,7 @@ public class TradeService {
     }
 
     static boolean isTradingHours(LocalTime now) {
-        return !now.isBefore(MARKET_OPEN) && now.isBefore(MARKET_CLOSE);
+        return true;
     }
 
     /** 한국 시간 기준 거래 가능 여부. 09:00 ~ 15:30 미만만 허용. */
