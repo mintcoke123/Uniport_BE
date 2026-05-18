@@ -597,21 +597,12 @@ public class PointSocialDataService {
 
     @Transactional(readOnly = true)
     public FriendsDashboardResponseDTO getFriendsDashboard(User user) {
-        List<User> rankingPool = new ArrayList<>();
-        rankingPool.add(user);
-        friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(user.getId(), user.getId()).stream()
-                .filter(relation -> "ACCEPTED".equalsIgnoreCase(relation.getStatus()))
-                .map(relation -> relation.getRequesterUser().getId().equals(user.getId())
-                        ? relation.getAddresseeUser()
-                        : relation.getRequesterUser())
-                .filter(friend -> friend.getId() != null)
-                .filter(friend -> !friend.getId().equals(user.getId()))
-                .distinct()
-                .forEach(rankingPool::add);
+        List<User> rankingPool = userRepository.findAll().stream()
+                .filter(candidate -> candidate.getId() != null)
+                .toList();
 
         List<Long> userIds = rankingPool.stream()
                 .map(User::getId)
-                .filter(id -> id != null)
                 .toList();
         Map<Long, LearningProgressSnapshot> learningProgressByUserId = learningProgressByUserId(userIds);
 

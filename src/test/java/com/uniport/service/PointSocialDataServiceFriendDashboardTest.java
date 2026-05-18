@@ -31,7 +31,7 @@ class PointSocialDataServiceFriendDashboardTest {
     private EntityManager entityManager;
 
     @Test
-    void getFriendsDashboardRanksAcceptedFriendsAndCurrentUserOnly() {
+    void getFriendsDashboardRanksAllUsers() {
         User currentUser = persistUser("20261011", "현재사용자");
         User acceptedFriend = persistUser("20261012", "수락된친구");
         User nonFriend = persistUser("20261013", "친구아닌유저");
@@ -48,12 +48,20 @@ class PointSocialDataServiceFriendDashboardTest {
         FriendsDashboardResponseDTO response = pointSocialDataService.getFriendsDashboard(currentUser);
 
         assertEquals(
-                List.of("수락된친구", "현재사용자"),
+                List.of("친구아닌유저", "요청중유저", "수락된친구", "현재사용자"),
                 response.getRanking().getItems().stream()
                         .map(item -> item.getNickname())
                         .toList()
+                        .subList(0, 4)
         );
-        assertEquals(2, response.getMyRanking().getRank());
+        assertEquals(
+                List.of(1, 2, 3, 4),
+                response.getRanking().getItems().stream()
+                        .map(item -> item.getRank())
+                        .toList()
+                        .subList(0, 4)
+        );
+        assertEquals(4, response.getMyRanking().getRank());
     }
 
     @Test
@@ -93,7 +101,14 @@ class PointSocialDataServiceFriendDashboardTest {
 
         String expectedProfileImageUrl = "https://uniportbe-production.up.railway.app/assets/mypage/profile-options/panda.png";
         assertEquals(expectedProfileImageUrl, response.getMyRanking().getProfileImageUrl());
-        assertEquals(expectedProfileImageUrl, response.getRanking().getItems().getFirst().getProfileImageUrl());
+        assertEquals(
+                expectedProfileImageUrl,
+                response.getRanking().getItems().stream()
+                        .filter(item -> "현재사용자".equals(item.getNickname()))
+                        .findFirst()
+                        .orElseThrow()
+                        .getProfileImageUrl()
+        );
     }
 
     private User persistRankingUsers(int currentUserRank, int userCount) {
