@@ -28,7 +28,7 @@ import static org.mockito.Mockito.when;
 class PointSocialDataServiceCharacterSelectionTest {
 
     @Test
-    void selectCharacterUpdatesProfileImageUrlForSharedAvatarConsumers() {
+    void selectCharacterKeepsProfileImageSeparateFromOnboardingCharacter() {
         Fixture fixture = new Fixture();
         User user = User.builder()
                 .id(7L)
@@ -56,10 +56,47 @@ class PointSocialDataServiceCharacterSelectionTest {
 
         MyPageResponseDTO response = fixture.service.selectCharacter(user, request);
 
-        String expectedProfileImageUrl = "https://uniportbe-production.up.railway.app/assets/mypage/profile-options/fox.png";
         assertEquals("FOX", preference.getSelectedCharacterCode());
+        assertEquals("https://example.com/firebase.png", user.getProfileImageUrl());
+        assertEquals("https://example.com/firebase.png", response.getUser().getProfileImageUrl());
+    }
+
+    @Test
+    void updateProfileUpdatesProfileImageUrlWithoutChangingSelectedCharacterCode() {
+        Fixture fixture = new Fixture();
+        User user = User.builder()
+                .id(7L)
+                .nickname("고윤서")
+                .profileImageUrl("https://example.com/firebase.png")
+                .build();
+        UserMyPagePreference preference = UserMyPagePreference.builder()
+                .userId(7L)
+                .selectedCharacterCode("SEED")
+                .pushEnabled(true)
+                .build();
+
+        when(fixture.userMyPagePreferenceRepository.findById(7L)).thenReturn(Optional.of(preference));
+        when(fixture.userRepository.findById(7L)).thenReturn(Optional.of(user));
+        when(fixture.pointWalletRepository.findByUser_Id(7L)).thenReturn(Optional.empty());
+        when(fixture.pointShopOrderRepository.findByUser_IdOrderByCreatedAtDesc(7L)).thenReturn(List.of());
+        when(fixture.friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(7L, 7L))
+                .thenReturn(List.of());
+        when(fixture.orderRepository.findByUser_IdOrderByOrderDateDesc(7L)).thenReturn(List.of());
+        when(fixture.holdingRepository.findByUser_Id(7L)).thenReturn(List.of());
+        when(fixture.learningUserStateRepository.findById(7L)).thenReturn(Optional.empty());
+
+        MyPageResponseDTO response = fixture.service.updateMyPageProfile(
+                user,
+                com.uniport.dto.MyPageProfileUpdateRequestDTO.builder()
+                        .profileImageUrl("character_fox_stage_1")
+                        .build()
+        );
+
+        String expectedProfileImageUrl = "https://uniportbe-production.up.railway.app/assets/mypage/profile-options/fox.png";
+        assertEquals("SEED", preference.getSelectedCharacterCode());
         assertEquals(expectedProfileImageUrl, user.getProfileImageUrl());
         assertEquals(expectedProfileImageUrl, response.getUser().getProfileImageUrl());
+        assertEquals("조심스러운 거북이형", response.getUser().getCharacter());
         verify(fixture.userRepository).save(user);
     }
 

@@ -214,7 +214,12 @@ public class PointSocialDataService {
         if (request != null && request.getBio() != null) {
             preference.setBio(request.getBio().trim());
         }
-        persisted.setProfileImageUrl(resolveProfileImageUrl(persisted, preference));
+        if (request != null && request.getProfileImageUrl() != null) {
+            persisted.setProfileImageUrl(profileImageUrlService.normalizeProfileImageUrl(request.getProfileImageUrl()));
+        }
+        if (persisted.getProfileImageUrl() == null || persisted.getProfileImageUrl().isBlank()) {
+            persisted.setProfileImageUrl(resolveProfileImageUrl(persisted, preference));
+        }
         userRepository.save(persisted);
         userMyPagePreferenceRepository.save(preference);
         return getMyPage(persisted);
@@ -245,8 +250,6 @@ public class PointSocialDataService {
         preference.setSelectedCharacterCode(selected);
         userMyPagePreferenceRepository.save(preference);
         User persisted = userRepository.findById(user.getId()).orElse(user);
-        persisted.setProfileImageUrl(profileImageUrlService.profileOptionImageUrl(selected));
-        userRepository.save(persisted);
         return getMyPage(persisted);
     }
 

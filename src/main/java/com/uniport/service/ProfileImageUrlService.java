@@ -56,25 +56,51 @@ public class ProfileImageUrlService {
     }
 
     public boolean isProfileOptionImageUrl(String profileImageUrl) {
-        if (profileImageUrl == null || profileImageUrl.isBlank()) {
-            return false;
+        return profileOptionCodeForProfileImageValue(profileImageUrl) != null;
+    }
+
+    public String normalizeProfileImageUrl(String profileImageUrl) {
+        if (profileImageUrl == null) {
+            return null;
         }
-        String normalizedUrl = profileImageUrl.trim().toLowerCase(Locale.ROOT);
-        String normalizedPath = PROFILE_OPTION_IMAGE_PATH.toLowerCase(Locale.ROOT);
-        return normalizedUrl.contains(normalizedPath)
-                && PROFILE_OPTION_IMAGE_FILES.values().stream()
-                .map(fileName -> normalizedPath + fileName.toLowerCase(Locale.ROOT))
-                .anyMatch(normalizedUrl::endsWith);
+        String trimmed = profileImageUrl.trim();
+        if (trimmed.isBlank()) {
+            return null;
+        }
+        String profileOptionCode = profileOptionCodeForProfileImageValue(trimmed);
+        return profileOptionCode == null ? trimmed : profileOptionImageUrl(profileOptionCode);
     }
 
     public String resolveCharacterProfileImageUrl(User user, UserMyPagePreference preference) {
+        if (user != null && user.getProfileImageUrl() != null && !user.getProfileImageUrl().isBlank()) {
+            return normalizeProfileImageUrl(user.getProfileImageUrl());
+        }
         if (preference != null && preference.getSelectedCharacterCode() != null && !preference.getSelectedCharacterCode().isBlank()) {
             return profileOptionImageUrl(preference.getSelectedCharacterCode());
         }
-        if (user != null && isProfileOptionImageUrl(user.getProfileImageUrl())) {
-            return user.getProfileImageUrl().trim();
-        }
         return profileOptionImageUrl(profileOptionCodeForCharacterName(user == null ? null : user.getInvestmentProfileResult()));
+    }
+
+    private String profileOptionCodeForProfileImageValue(String profileImageUrl) {
+        if (profileImageUrl == null || profileImageUrl.isBlank()) {
+            return null;
+        }
+        String normalizedValue = profileImageUrl.trim().toLowerCase(Locale.ROOT);
+        String normalizedPath = PROFILE_OPTION_IMAGE_PATH.toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, String> entry : PROFILE_OPTION_IMAGE_FILES.entrySet()) {
+            String code = entry.getKey();
+            String fileName = entry.getValue().toLowerCase(Locale.ROOT);
+            String segment = fileName.endsWith(".png")
+                    ? fileName.substring(0, fileName.length() - ".png".length())
+                    : fileName;
+            if (normalizedValue.equals(segment)
+                    || normalizedValue.equals(code.toLowerCase(Locale.ROOT))
+                    || normalizedValue.startsWith("character_" + segment)
+                    || normalizedValue.endsWith(normalizedPath + fileName)) {
+                return code;
+            }
+        }
+        return null;
     }
 
     private String normalizePublicBaseUrl(String value) {
