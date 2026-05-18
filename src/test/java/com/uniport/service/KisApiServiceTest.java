@@ -56,6 +56,35 @@ class KisApiServiceTest {
     }
 
     @Test
+    void getStockPrice_additionalVirtualStockUsesRequestedStockAndDoesNotCallKis() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        KisWsSubscriptionManager subscriptionManager = mock(KisWsSubscriptionManager.class);
+        KisApiService service = new KisApiService(
+                restTemplate,
+                subscriptionManager,
+                new PriceCache(),
+                null,
+                mock(StockVisualAssetResolver.class),
+                mock(StockSymbolLogoUrlResolver.class),
+                new VirtualStockService()
+        );
+
+        StockPriceDTO result = service.getStockPrice("999998");
+
+        assertEquals("999998", result.getStockCode());
+        assertEquals("뉴로펄스", result.getStockName());
+        assertEquals(new BigDecimal("425000"), result.getLowPrice());
+        assertEquals(new BigDecimal("575000"), result.getHighPrice());
+        verify(subscriptionManager, never()).ensureSubscribed(anyString());
+        verify(restTemplate, never()).exchange(
+                anyString(),
+                any(HttpMethod.class),
+                any(HttpEntity.class),
+                any(ParameterizedTypeReference.class)
+        );
+    }
+
+    @Test
     void getStockQuote_mapsOhlcFromKisHttpQuoteEvenWhenRealtimeCacheExists() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         KisWsSubscriptionManager subscriptionManager = mock(KisWsSubscriptionManager.class);

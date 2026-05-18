@@ -424,7 +424,7 @@ public class KisApiService {
         String code = stockCode.trim();
         String normalized = code.length() >= 6 ? code : String.format("%6s", code).replace(' ', '0');
         if (virtualStockService.isVirtualStockCode(normalized)) {
-            return virtualStockService.currentPriceDto();
+            return virtualStockService.currentPriceDto(normalized);
         }
         if (!isKisConfigured()) {
             throw new ApiException("KIS API가 설정되지 않았습니다.", HttpStatus.SERVICE_UNAVAILABLE, ERROR_CODE_KIS_NOT_CONFIGURED);

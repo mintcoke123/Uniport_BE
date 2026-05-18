@@ -223,7 +223,7 @@ public class PriceBroadcaster {
         for (String code : virtualStockService.codes()) {
             Set<WebSocketSession> sessions = codeToSessions.get(code);
             if (sessions != null && sessions.stream().anyMatch(WebSocketSession::isOpen)) {
-                broadcast(code, virtualStockService.currentSnapshot());
+                broadcast(code, virtualStockService.currentSnapshot(code));
             }
         }
     }

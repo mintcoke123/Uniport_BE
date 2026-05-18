@@ -61,12 +61,15 @@ public class StockMasterSearchService {
                     .build();
         }
 
-        if (virtualStockService.matchesKeyword(keyword)) {
+        List<StockSearchItemDTO> virtualItems = virtualStockService.searchItemsMatching(keyword);
+        if (!virtualItems.isEmpty()) {
+            int fromIndex = Math.min(page * size, virtualItems.size());
+            int toIndex = Math.min(fromIndex + size, virtualItems.size());
             return StockSearchResponseDTO.builder()
-                    .items(List.of(virtualStockService.searchItem()))
+                    .items(virtualItems.subList(fromIndex, toIndex))
                     .page(page)
                     .size(size)
-                    .hasNext(Boolean.FALSE)
+                    .hasNext(toIndex < virtualItems.size())
                     .build();
         }
 

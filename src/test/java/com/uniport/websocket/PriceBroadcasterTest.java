@@ -23,10 +23,11 @@ class PriceBroadcasterTest {
         when(session.getId()).thenReturn("session-1");
 
         try {
-            broadcaster.subscribe(session, Set.of("999999"));
+            broadcaster.subscribe(session, Set.of("999999", "999998"));
             TimeUnit.MILLISECONDS.sleep(500);
 
             verify(subscriptionManager, never()).ensureSubscribed("999999");
+            verify(subscriptionManager, never()).ensureSubscribed("999998");
         } finally {
             broadcaster.shutdown();
         }

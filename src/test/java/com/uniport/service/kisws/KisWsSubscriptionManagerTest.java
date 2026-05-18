@@ -16,7 +16,9 @@ class KisWsSubscriptionManagerTest {
                 new KisWsSubscriptionManager(kisWsClient, new VirtualStockService());
 
         manager.ensureSubscribed("999999");
+        manager.ensureSubscribed("999998");
 
         verify(kisWsClient, never()).sendSubscribe("999999");
+        verify(kisWsClient, never()).sendSubscribe("999998");
     }
 }

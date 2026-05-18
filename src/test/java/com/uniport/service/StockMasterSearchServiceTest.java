@@ -125,6 +125,19 @@ class StockMasterSearchServiceTest {
     }
 
     @Test
+    void search_genericVirtualKeywordReturnsAllVirtualStocksWithoutRepositoryHit() {
+        StockSearchResponseDTO result =
+                stockMasterSearchService.search("가상", 0, 10, null, null);
+
+        assertEquals(6, result.getItems().size());
+        assertEquals("KRX_999999", result.getItems().get(0).getStockId());
+        assertEquals("KRX_999998", result.getItems().get(1).getStockId());
+        assertEquals("뉴로펄스", result.getItems().get(1).getName());
+        assertEquals(Boolean.FALSE, result.getHasNext());
+        verify(stockMasterRepository, never()).findByNameKrIlikeOrderByNameKrAsc(any(), any());
+    }
+
+    @Test
     void search_clampsLegacyLimitToMaxSize() {
         StockMaster samsung = StockMaster.builder()
                 .code("005930")
