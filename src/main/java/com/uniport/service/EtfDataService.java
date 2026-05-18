@@ -72,6 +72,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -100,15 +101,15 @@ public class EtfDataService {
     private static final TypeReference<List<Map<String, Object>>> MAP_LIST_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final BigDecimal DEFAULT_PRINCIPAL_KRW = BigDecimal.valueOf(100_000_000L);
-    private static final BigDecimal TRANSACTION_FEE_RATE = new BigDecimal("0.0005");
-    private static final BigDecimal SLIPPAGE_RATE = new BigDecimal("0.0003");
+    private static final BigDecimal TRANSACTION_FEE_RATE = BigDecimal.ZERO;
+    private static final BigDecimal SLIPPAGE_RATE = BigDecimal.ZERO;
     private static final String DEFAULT_ANALYSIS_PERIOD = "1Y";
     private static final String DEFAULT_ANALYSIS_BENCHMARK = "SP500";
     private static final String DEFAULT_REBALANCE_POLICY = "MONTHLY";
     private static final List<String> SUPPORTED_REBALANCE_POLICIES = List.of("MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "NONE");
-    private static final String ANALYSIS_VERSION = "backtest-v1.0.0";
-    private static final String MESSAGE_VERSION = "ai-feedback-v1.0.0";
-    private static final String PRICE_SOURCE = "Yahoo Finance chart API with approximate fallback";
+    private static final String ANALYSIS_VERSION = "backtest-v2.0.0";
+    private static final String MESSAGE_VERSION = "ai-feedback-v2.0.0";
+    private static final String PRICE_SOURCE = "Yahoo Finance chart API; approximate fallback only when enabled";
     private static final String PRICE_CACHE_POLICY = "none";
     private static final String FX_CACHE_POLICY = "fx_rate_daily";
     private static final int DEFAULT_ASSET_SEARCH_SIZE = 10;
@@ -118,7 +119,11 @@ public class EtfDataService {
     private static final int MAX_RECOMMENDATION_LIMIT = 10;
     private static final int PRICE_FETCH_POOL_SIZE = 2;
     private static final int PRICE_FETCH_TIMEOUT_SECONDS = 8;
+    private static final double MIN_PERIOD_COVERAGE_RATIO = 0.80d;
     private static final String ASSET_TYPE_STOCK = "STOCK";
+    private static final String ASSET_TYPE_ETF = "ETF";
+    private static final String ASSET_TYPE_LEVERAGED_ETF = "LEVERAGED_ETF";
+    private static final String ASSET_TYPE_INVERSE_ETF = "INVERSE_ETF";
     private static final String ASSET_TYPE_BOND = "BOND";
     private static final String ASSET_TYPE_CASH = "CASH";
     private static final String DATA_STATUS_VERIFIED = "VERIFIED";
@@ -126,7 +131,18 @@ public class EtfDataService {
     private static final String DATA_STATUS_PROXY = "PROXY";
     private static final String DATA_STATUS_PENDING = "PENDING_VERIFICATION";
     private static final String DATA_STATUS_PRICE_UNAVAILABLE = "PRICE_UNAVAILABLE";
-    private static final String FALLBACK_AVAILABLE_MESSAGE = "실가격이 부족하면 추정 가격으로 백테스트합니다.";
+    private static final String FALLBACK_AVAILABLE_MESSAGE = "분석 시점에 실가격을 확인하며, 가격 데이터가 부족하면 분석이 제한됩니다.";
+    private static final String ERROR_CODE_PRICE_DATA_UNAVAILABLE = "ETF_PRICE_DATA_UNAVAILABLE";
+    private static final String ERROR_CODE_BENCHMARK_PRICE_DATA_UNAVAILABLE = "ETF_BENCHMARK_PRICE_DATA_UNAVAILABLE";
+    private static final Set<String> KNOWN_ETF_SYMBOLS = Set.of(
+            "DIA", "GLD", "IWM", "IVV", "QQQ", "SLV", "SOXX", "SPY", "TLT", "VGT", "VOO", "VTI", "XLK"
+    );
+    private static final Set<String> KNOWN_LEVERAGED_ETF_SYMBOLS = Set.of(
+            "FNGU", "QLD", "SOXL", "SPXL", "SSO", "TECL", "TQQQ", "UPRO"
+    );
+    private static final Set<String> KNOWN_INVERSE_ETF_SYMBOLS = Set.of(
+            "PSQ", "QID", "SDS", "SH", "SOXS", "SPXS", "SQQQ", "TZA"
+    );
 
     private final ManagedEtfRepository managedEtfRepository;
     private final ManagedEtfAnalysisReportRepository managedEtfAnalysisReportRepository;
@@ -334,7 +350,7 @@ public class EtfDataService {
                 .reportId(reportId)
                 .ownerUserId(user.getId())
                 .etfCode(etf.getEtfCode())
-                .period(period)
+                .period(response.getPeriod())
                 .benchmark(benchmark)
                 .reportJson(writeValue(response))
                 .build());
@@ -1081,7 +1097,7 @@ public class EtfDataService {
                 stock.getNameKr() != null ? stock.getNameKr() : code,
                 code,
                 market,
-                ASSET_TYPE_STOCK,
+                searchAssetType(ASSET_TYPE_STOCK, code, stock.getNameKr()),
                 isUsMarket(market) ? "USD" : "KRW",
                 false,
                 DATA_STATUS_PENDING,
@@ -1105,7 +1121,7 @@ public class EtfDataService {
                 asset.getName(),
                 asset.getSymbol(),
                 asset.getMarket(),
-                asset.getAssetType(),
+                searchAssetType(asset.getAssetType(), asset.getSymbol(), asset.getName()),
                 asset.getCurrency(),
                 normalizeBacktestEnabled(asset),
                 normalizeDataStatus(asset),
@@ -1146,7 +1162,7 @@ public class EtfDataService {
                 symbol,
                 symbol,
                 "US",
-                ASSET_TYPE_STOCK,
+                searchAssetType(ASSET_TYPE_STOCK, symbol, symbol),
                 "USD",
                 false,
                 DATA_STATUS_PENDING,
@@ -1158,7 +1174,12 @@ public class EtfDataService {
         if (keyword == null || keyword.isBlank()) {
             return List.of();
         }
-        if (!(assetType.isBlank() || ASSET_TYPE_STOCK.equals(assetType))) {
+        if (!assetType.isBlank() && !List.of(
+                ASSET_TYPE_STOCK,
+                ASSET_TYPE_ETF,
+                ASSET_TYPE_LEVERAGED_ETF,
+                ASSET_TYPE_INVERSE_ETF
+        ).contains(assetType)) {
             return List.of();
         }
         if (!market.isBlank() && !"ALL".equals(market) && !"US".equals(market) && !isUsMarket(market)) {
@@ -1170,13 +1191,60 @@ public class EtfDataService {
                         result.name(),
                         result.symbol(),
                         result.market(),
-                        ASSET_TYPE_STOCK,
+                        yahooAssetType(result),
                         result.currency(),
                         false,
                         DATA_STATUS_PENDING,
                         "Price data has not been verified"
                 ))
+                .filter(item -> assetType.isBlank() || assetType.equals(item.assetType()))
                 .toList();
+    }
+
+    private String yahooAssetType(YahooAssetSearchClient.YahooAssetResult result) {
+        if (!"ETF".equals(safeUpper(result.quoteType()))) {
+            return searchAssetType(ASSET_TYPE_STOCK, result.symbol(), result.name());
+        }
+        return searchAssetType(ASSET_TYPE_ETF, result.symbol(), result.name());
+    }
+
+    private String searchAssetType(String assetType, String symbol, String name) {
+        String normalizedType = safeUpper(assetType);
+        if (!ASSET_TYPE_STOCK.equals(normalizedType)
+                && !ASSET_TYPE_ETF.equals(normalizedType)
+                && !ASSET_TYPE_LEVERAGED_ETF.equals(normalizedType)
+                && !ASSET_TYPE_INVERSE_ETF.equals(normalizedType)) {
+            return assetType;
+        }
+        String normalizedSymbol = safeUpper(symbol);
+        String haystack = (normalizedSymbol + " " + safeUpper(name)).trim();
+        boolean inverse = containsAny(haystack, "SHORT", "INVERSE", "BEAR", "ULTRASHORT")
+                || KNOWN_INVERSE_ETF_SYMBOLS.contains(normalizedSymbol);
+        boolean leveraged = containsAny(haystack, "2X", "3X", "ULTRA", "BULL", "LEVERAGED")
+                || KNOWN_LEVERAGED_ETF_SYMBOLS.contains(normalizedSymbol);
+        boolean etf = ASSET_TYPE_ETF.equals(normalizedType)
+                || ASSET_TYPE_LEVERAGED_ETF.equals(normalizedType)
+                || ASSET_TYPE_INVERSE_ETF.equals(normalizedType)
+                || containsAny(haystack, " ETF", " ETN")
+                || KNOWN_ETF_SYMBOLS.contains(normalizedSymbol)
+                || leveraged
+                || inverse;
+        if (inverse) {
+            return ASSET_TYPE_INVERSE_ETF;
+        }
+        if (leveraged) {
+            return ASSET_TYPE_LEVERAGED_ETF;
+        }
+        return etf ? ASSET_TYPE_ETF : ASSET_TYPE_STOCK;
+    }
+
+    private boolean containsAny(String value, String... needles) {
+        for (String needle : needles) {
+            if (value.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private CustomEtfAssetSearchItemDTO toAssetSearchItem(EtfAssetCatalogItem item) {
@@ -1220,11 +1288,13 @@ public class EtfDataService {
     }
 
     private boolean isCustomEtfSelectableAsset(EtfAssetCatalogItem item) {
-        return ASSET_TYPE_STOCK.equals(item.assetType());
+        return isEquityLikeAssetType(item.assetType());
     }
 
     private boolean isBacktestEligible(EtfAssetCatalogItem item) {
-        return Boolean.TRUE.equals(item.backtestEnabled()) || isProxyAssetType(item.assetType());
+        return isEquityLikeAssetType(item.assetType())
+                || Boolean.TRUE.equals(item.backtestEnabled())
+                || isProxyAssetType(item.assetType());
     }
 
     private boolean normalizeBacktestEnabled(AssetMaster asset) {
@@ -1279,12 +1349,21 @@ public class EtfDataService {
     private String normalizeAssetType(String assetTypeParam) {
         String assetType = assetTypeParam == null ? "" : assetTypeParam.trim().toUpperCase(Locale.ROOT);
         if (assetType.isBlank() || "ALL".equals(assetType)) {
-            return ASSET_TYPE_STOCK;
+            return "";
         }
-        if (!ASSET_TYPE_STOCK.equals(assetType)) {
-            throw new ApiException("assetType must be STOCK", HttpStatus.BAD_REQUEST);
+        if (!isEquityLikeAssetType(assetType)) {
+            throw new ApiException("assetType must be STOCK, ETF, LEVERAGED_ETF, or INVERSE_ETF", HttpStatus.BAD_REQUEST);
         }
         return assetType;
+    }
+
+    private boolean isEquityLikeAssetType(String assetType) {
+        return List.of(
+                ASSET_TYPE_STOCK,
+                ASSET_TYPE_ETF,
+                ASSET_TYPE_LEVERAGED_ETF,
+                ASSET_TYPE_INVERSE_ETF
+        ).contains(assetType);
     }
 
     private String buildStockAssetId(String market, String code) {
@@ -1352,7 +1431,7 @@ public class EtfDataService {
         }
         validateBacktestEligibleHoldings(holdings);
         LocalDate endDate = LocalDate.now();
-        LocalDate startDate = startDateForPeriod(period, endDate);
+        LocalDate requestedStartDate = startDateForPeriod(period, endDate);
         List<BacktestHolding> backtestHoldings = holdings.stream()
                 .map(holding -> {
                     StockRef ref = resolveStock(holding.stockId());
@@ -1364,7 +1443,14 @@ public class EtfDataService {
                     );
                 })
                 .toList();
-        BacktestPriceSeries priceSeries = fetchBacktestPriceSeries(holdings, startDate, endDate, benchmark);
+        BacktestPriceSeries priceSeries = fetchBacktestPriceSeries(
+                holdings,
+                requestedStartDate,
+                endDate,
+                period,
+                benchmark
+        );
+        String actualPeriod = priceSeries.actualPeriod();
 
         BacktestResult backtestResult;
         try {
@@ -1373,7 +1459,7 @@ public class EtfDataService {
                     .transactionFeeRate(TRANSACTION_FEE_RATE)
                     .slippageRate(SLIPPAGE_RATE)
                     .rebalancePolicy(rebalancePolicy)
-                    .periodLabel(periodLabel(period))
+                    .periodLabel(periodLabel(actualPeriod))
                     .benchmarkName(benchmarkDisplayName(benchmark))
                     .holdings(backtestHoldings)
                     .priceSeriesBySecurityId(priceSeries.priceSeriesBySecurityId())
@@ -1384,7 +1470,7 @@ public class EtfDataService {
         }
         InsightFacts facts = etfAiFeedbackService.buildInsightFacts(
                 etf.getTitle(),
-                periodLabel(period),
+                periodLabel(actualPeriod),
                 benchmarkDisplayName(benchmark),
                 backtestResult,
                 backtestHoldings,
@@ -1395,7 +1481,7 @@ public class EtfDataService {
         return EtfAnalysisReportResponseDTO.builder()
                 .reportId(reportId)
                 .etfId(etf.getEtfCode())
-                .period(period)
+                .period(actualPeriod)
                 .benchmark(benchmark)
                 .highlights(EtfAnalysisHighlightsDTO.builder()
                         .returnRate(toDouble(backtestResult.totalReturnPercent()))
@@ -1405,6 +1491,14 @@ public class EtfDataService {
                         .annualizedReturn(toDouble(backtestResult.annualizedReturnPercent()))
                         .benchmarkReturn(toDouble(backtestResult.benchmarkReturnPercent()))
                         .sharpeRatio(toDouble(backtestResult.sharpeRatio()))
+                        .sortinoRatio(toDouble(backtestResult.sortinoRatio()))
+                        .beta(toDouble(backtestResult.beta()))
+                        .trackingError(toDouble(backtestResult.trackingErrorPercent()))
+                        .informationRatio(toDouble(backtestResult.informationRatio()))
+                        .winRate(toDouble(backtestResult.winRatePercent()))
+                        .benchmarkAnnualizedReturn(toDouble(backtestResult.benchmarkAnnualizedReturnPercent()))
+                        .benchmarkVolatility(toDouble(backtestResult.benchmarkVolatilityPercent()))
+                        .benchmarkMaxDrawdown(toDouble(backtestResult.benchmarkMaxDrawdownPercent()))
                         .build())
                 .cumulativeProfit(EtfAnalysisCumulativeProfitDTO.builder()
                         .amount(toKrwInt(backtestResult.profitAmountKrw()))
@@ -1444,11 +1538,22 @@ public class EtfDataService {
                         .analysisVersion(ANALYSIS_VERSION)
                         .messageVersion(MESSAGE_VERSION)
                         .rebalancePolicy(rebalancePolicy)
+                        .rebalanceIntervalMonths(rebalanceIntervalMonths(rebalancePolicy))
                         .transactionFeeRate(TRANSACTION_FEE_RATE.doubleValue())
                         .slippageRate(SLIPPAGE_RATE.doubleValue())
                         .principalAmountKrw(principalAmount.setScale(0, RoundingMode.HALF_UP).longValue())
                         .tradingDays(backtestResult.tradingDays())
+                        .priceFrequency("MONTH_END")
+                        .shareRoundingPolicy("INTEGER_FLOOR")
+                        .dividendConsidered(Boolean.FALSE)
+                        .marketScope("GLOBAL_STOCK_AND_ETF")
                         .usedFallbackMessage(feedback.usedFallback())
+                        .requestedPeriod(period)
+                        .actualPeriod(actualPeriod)
+                        .priceDataStartDate(dateToString(priceSeries.commonStartDate()))
+                        .priceDataEndDate(dateToString(priceSeries.commonEndDate()))
+                        .periodDowngraded(priceSeries.periodDowngraded())
+                        .dataWarnings(priceSeries.warnings())
                         .priceSource(PRICE_SOURCE)
                         .priceCachePolicy(PRICE_CACHE_POLICY)
                         .fxCachePolicy(FX_CACHE_POLICY)
@@ -1458,34 +1563,276 @@ public class EtfDataService {
                         .promptVersion(etfAiFeedbackService.promptVersion())
                         .build())
                 .insightFacts(OBJECT_MAPPER.convertValue(facts, MAP_TYPE))
+                .analysisPacket(buildAnalysisPacket(
+                        etf,
+                        actualPeriod,
+                        benchmark,
+                        principalAmount,
+                        rebalancePolicy,
+                        backtestResult,
+                        backtestHoldings,
+                        priceSeries
+                ))
                 .createdAt(java.time.OffsetDateTime.now(ZoneOffset.UTC).toString())
                 .build();
     }
 
+    private Map<String, Object> buildAnalysisPacket(ManagedEtf etf,
+                                                    String actualPeriod,
+                                                    String benchmark,
+                                                    BigDecimal principalAmount,
+                                                    String rebalancePolicy,
+                                                    BacktestResult result,
+                                                    List<BacktestHolding> holdings,
+                                                    BacktestPriceSeries priceSeries) {
+        Map<String, Object> packet = new LinkedHashMap<>();
+        packet.put("portfolio_summary", Map.of(
+                "portfolio_name", Optional.ofNullable(etf.getTitle()).orElse("나만의 ETF"),
+                "analysis_start_date", dateToString(priceSeries.commonStartDate()),
+                "analysis_end_date", dateToString(priceSeries.commonEndDate()),
+                "period", actualPeriod,
+                "rebalance_interval_months", rebalanceIntervalMonths(rebalancePolicy),
+                "benchmark", benchmark,
+                "holding_count", holdings.size(),
+                "initial_capital", principalAmount.setScale(0, RoundingMode.HALF_UP).longValue(),
+                "dividend_considered", false,
+                "market_scope", "GLOBAL_STOCK_AND_ETF"
+        ));
+        packet.put("summary_metrics", nullableMap(
+                "cumulative_return", toRatioDouble(result.totalReturnPercent()),
+                "benchmark_cumulative_return", toRatioDouble(result.benchmarkReturnPercent()),
+                "cagr", toRatioDouble(result.annualizedReturnPercent()),
+                "benchmark_cagr", toRatioDouble(result.benchmarkAnnualizedReturnPercent()),
+                "annualized_volatility", toRatioDouble(result.volatilityPercent()),
+                "benchmark_annualized_volatility", toRatioDouble(result.benchmarkVolatilityPercent()),
+                "sharpe_ratio", toDouble(result.sharpeRatio()),
+                "sortino_ratio", toDouble(result.sortinoRatio()),
+                "max_drawdown", toRatioDouble(result.maxDrawdownPercent()),
+                "benchmark_max_drawdown", toRatioDouble(result.benchmarkMaxDrawdownPercent()),
+                "beta", toDouble(result.beta()),
+                "tracking_error", toRatioDouble(result.trackingErrorPercent()),
+                "information_ratio", toDouble(result.informationRatio()),
+                "win_rate", toRatioDouble(result.winRatePercent())
+        ));
+        packet.put("concentration", nullableMap(
+                "top1_weight", toRatioDouble(result.topHoldingWeightPercent()),
+                "top3_weight", toRatioDouble(result.top3WeightPercent()),
+                "top5_weight", toRatioDouble(result.top5WeightPercent()),
+                "hhi", toDouble(result.hhi()),
+                "effective_holdings", toDouble(result.effectiveHoldings()),
+                "cash_weight", toRatioDouble(result.cashWeightPercent())
+        ));
+        packet.put("latest_holdings", holdings.stream()
+                .map(holding -> nullableMap(
+                        "security_id", holding.securityId(),
+                        "name", holding.name(),
+                        "sector", holding.sector(),
+                        "target_weight", toRatioDouble(holding.weightPercent())
+                ))
+                .toList());
+        packet.put("sector_exposure", sectorExposure(holdings));
+        packet.put("benchmark_comparison", nullableMap(
+                "cagr_gap", ratioGap(result.annualizedReturnPercent(), result.benchmarkAnnualizedReturnPercent()),
+                "volatility_gap", ratioGap(result.volatilityPercent(), result.benchmarkVolatilityPercent()),
+                "max_drawdown_gap", ratioGap(result.maxDrawdownPercent(), result.benchmarkMaxDrawdownPercent())
+        ));
+        packet.put("data_quality", Map.of(
+                "warnings", priceSeries.warnings() != null ? priceSeries.warnings() : List.of(),
+                "price_frequency", "MONTH_END",
+                "share_rounding_policy", "INTEGER_FLOOR"
+        ));
+        return packet;
+    }
+
+    private List<Map<String, Object>> sectorExposure(List<BacktestHolding> holdings) {
+        Map<String, BigDecimal> weightsBySector = holdings.stream()
+                .filter(holding -> holding.sector() != null && !holding.sector().isBlank())
+                .collect(java.util.stream.Collectors.groupingBy(
+                        BacktestHolding::sector,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.reducing(
+                                BigDecimal.ZERO,
+                                holding -> holding.weightPercent() != null ? holding.weightPercent() : BigDecimal.ZERO,
+                                BigDecimal::add
+                        )
+                ));
+        return weightsBySector.entrySet().stream()
+                .map(entry -> nullableMap(
+                        "sector", entry.getKey(),
+                        "weight", toRatioDouble(entry.getValue())
+                ))
+                .toList();
+    }
+
+    private Map<String, Object> nullableMap(Object... keysAndValues) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (int index = 0; index < keysAndValues.length - 1; index += 2) {
+            values.put(String.valueOf(keysAndValues[index]), keysAndValues[index + 1]);
+        }
+        return values;
+    }
+
+    private Double ratioGap(BigDecimal leftPercent, BigDecimal rightPercent) {
+        if (leftPercent == null || rightPercent == null) {
+            return null;
+        }
+        return toRatioDouble(leftPercent.subtract(rightPercent));
+    }
+
+    private Double toRatioDouble(BigDecimal percent) {
+        if (percent == null) {
+            return null;
+        }
+        return percent.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP).doubleValue();
+    }
+
     private BacktestPriceSeries fetchBacktestPriceSeries(List<HoldingPayload> holdings,
-                                                         LocalDate startDate,
+                                                         LocalDate requestedStartDate,
                                                          LocalDate endDate,
+                                                         String requestedPeriod,
                                                          String benchmark) {
         List<CompletableFuture<SecurityPriceSeries>> holdingFutures = holdings.stream()
                 .map(holding -> fetchPriceAsync(() -> new SecurityPriceSeries(
                         holding.stockId(),
-                        historicalPriceProvider.getSecurityPriceSeries(holding.stockId(), startDate, endDate)
+                        historicalPriceProvider.getSecurityPriceSeries(holding.stockId(), requestedStartDate, endDate)
                 )))
                 .toList();
         CompletableFuture<List<BacktestPricePoint>> benchmarkFuture = fetchPriceAsync(
-                () -> historicalPriceProvider.getBenchmarkSeries(benchmark, startDate, endDate));
+                () -> historicalPriceProvider.getBenchmarkSeries(benchmark, requestedStartDate, endDate));
 
         Map<String, List<BacktestPricePoint>> priceSeriesBySecurityId = new LinkedHashMap<>();
         for (CompletableFuture<SecurityPriceSeries> future : holdingFutures) {
             SecurityPriceSeries priceSeries = joinPriceFetch(future);
-            if (priceSeries.series() == null || priceSeries.series().size() < 2) {
+            List<BacktestPricePoint> cleanSeries = cleanPriceSeries(priceSeries.series());
+            if (cleanSeries.size() < 2) {
                 throw new ApiException("ETF asset has insufficient price data for backtest: " + priceSeries.securityId(),
-                        HttpStatus.UNPROCESSABLE_ENTITY);
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        ERROR_CODE_PRICE_DATA_UNAVAILABLE);
             }
             markBacktestDataVerified(priceSeries.securityId());
-            priceSeriesBySecurityId.put(priceSeries.securityId(), priceSeries.series());
+            priceSeriesBySecurityId.put(priceSeries.securityId(), cleanSeries);
         }
-        return new BacktestPriceSeries(priceSeriesBySecurityId, joinPriceFetch(benchmarkFuture));
+        List<BacktestPricePoint> benchmarkSeries = cleanPriceSeries(joinPriceFetch(benchmarkFuture));
+        if (benchmarkSeries.size() < 2) {
+            throw new ApiException("Benchmark has insufficient price data for backtest: " + benchmark,
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    ERROR_CODE_BENCHMARK_PRICE_DATA_UNAVAILABLE);
+        }
+        PriceDataCoverage coverage = resolvePriceDataCoverage(
+                requestedPeriod,
+                endDate,
+                priceSeriesBySecurityId,
+                benchmarkSeries
+        );
+        return new BacktestPriceSeries(
+                priceSeriesBySecurityId,
+                benchmarkSeries,
+                coverage.actualPeriod(),
+                coverage.commonStartDate(),
+                coverage.commonEndDate(),
+                coverage.periodDowngraded(),
+                coverage.warnings()
+        );
+    }
+
+    private List<BacktestPricePoint> cleanPriceSeries(List<BacktestPricePoint> series) {
+        if (series == null) {
+            return List.of();
+        }
+        return series.stream()
+                .filter(point -> point != null && point.date() != null && point.adjustedCloseKrw() != null)
+                .filter(point -> point.adjustedCloseKrw().compareTo(BigDecimal.ZERO) > 0)
+                .sorted(Comparator.comparing(BacktestPricePoint::date))
+                .toList();
+    }
+
+    private PriceDataCoverage resolvePriceDataCoverage(String requestedPeriod,
+                                                       LocalDate endDate,
+                                                       Map<String, List<BacktestPricePoint>> holdingSeriesBySecurityId,
+                                                       List<BacktestPricePoint> benchmarkSeries) {
+        Map<String, List<BacktestPricePoint>> allSeries = new LinkedHashMap<>(holdingSeriesBySecurityId);
+        allSeries.put("__BENCHMARK__", benchmarkSeries);
+        Optional<PriceDataCoverage> coverage = findPriceDataCoverage(requestedPeriod, endDate, allSeries);
+        if (coverage.isPresent()) {
+            return coverage.get();
+        }
+        if (findPriceDataCoverage(requestedPeriod, endDate, holdingSeriesBySecurityId).isPresent()) {
+            throw new ApiException("Benchmark has insufficient price coverage for requested backtest period.",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    ERROR_CODE_BENCHMARK_PRICE_DATA_UNAVAILABLE);
+        }
+        throw new ApiException("ETF assets have insufficient price coverage for requested backtest period.",
+                HttpStatus.UNPROCESSABLE_ENTITY,
+                ERROR_CODE_PRICE_DATA_UNAVAILABLE);
+    }
+
+    private Optional<PriceDataCoverage> findPriceDataCoverage(String requestedPeriod,
+                                                             LocalDate endDate,
+                                                             Map<String, List<BacktestPricePoint>> seriesById) {
+        if (seriesById.isEmpty() || seriesById.values().stream().anyMatch(series -> series == null || series.size() < 2)) {
+            return Optional.empty();
+        }
+        LocalDate commonStartDate = seriesById.values().stream()
+                .map(series -> series.get(0).date())
+                .max(LocalDate::compareTo)
+                .orElse(null);
+        LocalDate commonEndDate = seriesById.values().stream()
+                .map(series -> series.get(series.size() - 1).date())
+                .min(LocalDate::compareTo)
+                .orElse(null);
+        if (commonStartDate == null || commonEndDate == null || commonEndDate.isBefore(commonStartDate)) {
+            return Optional.empty();
+        }
+        if ("1Y".equals(requestedPeriod)) {
+            return Optional.of(priceDataCoverage(requestedPeriod, "1Y", commonStartDate, commonEndDate));
+        }
+        for (String candidatePeriod : candidatePeriodsFor(requestedPeriod)) {
+            LocalDate candidateStartDate = startDateForPeriod(candidatePeriod, endDate);
+            if (coverageRatio(candidateStartDate, endDate, commonStartDate, commonEndDate) >= MIN_PERIOD_COVERAGE_RATIO) {
+                return Optional.of(priceDataCoverage(requestedPeriod, candidatePeriod, commonStartDate, commonEndDate));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private PriceDataCoverage priceDataCoverage(String requestedPeriod,
+                                                String actualPeriod,
+                                                LocalDate commonStartDate,
+                                                LocalDate commonEndDate) {
+        boolean downgraded = !actualPeriod.equals(requestedPeriod);
+        List<String> warnings = downgraded
+                ? List.of("Requested " + requestedPeriod + " but only " + actualPeriod + " common price history was available.")
+                : List.of();
+        return new PriceDataCoverage(
+                commonStartDate,
+                commonEndDate,
+                actualPeriod,
+                downgraded,
+                warnings
+        );
+    }
+
+    private double coverageRatio(LocalDate candidateStartDate,
+                                 LocalDate endDate,
+                                 LocalDate commonStartDate,
+                                 LocalDate commonEndDate) {
+        LocalDate overlapStartDate = commonStartDate.isAfter(candidateStartDate) ? commonStartDate : candidateStartDate;
+        LocalDate overlapEndDate = commonEndDate.isBefore(endDate) ? commonEndDate : endDate;
+        if (overlapEndDate.isBefore(overlapStartDate)) {
+            return 0.0d;
+        }
+        long requiredDays = Math.max(1L, ChronoUnit.DAYS.between(candidateStartDate, endDate));
+        long coveredDays = Math.max(0L, ChronoUnit.DAYS.between(overlapStartDate, overlapEndDate));
+        return coveredDays / (double) requiredDays;
+    }
+
+    private List<String> candidatePeriodsFor(String requestedPeriod) {
+        return switch (requestedPeriod) {
+            case "ALL" -> List.of("ALL", "3Y", "1Y");
+            case "5Y" -> List.of("5Y", "3Y", "1Y");
+            case "3Y" -> List.of("3Y", "1Y");
+            default -> List.of("1Y");
+        };
     }
 
     private EtfNewsExposure newsExposure(List<BacktestHolding> holdings) {
@@ -1545,8 +1892,14 @@ public class EtfDataService {
         String normalized = rebalancePolicy == null || rebalancePolicy.isBlank()
                 ? DEFAULT_REBALANCE_POLICY
                 : rebalancePolicy.trim().toUpperCase(Locale.ROOT);
+        if (normalized.matches("\\d+")) {
+            int months = Integer.parseInt(normalized);
+            if (months >= 1 && months <= 12) {
+                return normalized;
+            }
+        }
         if (!SUPPORTED_REBALANCE_POLICIES.contains(normalized)) {
-            throw new ApiException("rebalancePolicy must be one of MONTHLY, QUARTERLY, SEMI_ANNUAL, NONE", HttpStatus.BAD_REQUEST);
+            throw new ApiException("rebalancePolicy must be one of MONTHLY, QUARTERLY, SEMI_ANNUAL, NONE, or 1-12", HttpStatus.BAD_REQUEST);
         }
         return normalized;
     }
@@ -1563,17 +1916,36 @@ public class EtfDataService {
 
     private List<String> backtestAssumptions(String rebalancePolicy) {
         return List.of(
-                "The backtest starts with the requested principal amount in KRW.",
-                "The portfolio applies the " + rebalancePolicy + " rebalance policy over available trading dates.",
-                "A transaction fee and slippage rate are deducted whenever rebalancing trades are simulated.",
-                "US asset prices are converted to KRW using the FX provider rate for each price date."
+                "월말 기준 가격으로만 포트폴리오 가치를 계산합니다.",
+                "목표 비중 배분은 정수 주식 수 내림 기준이며 남는 금액은 현금으로 보유합니다.",
+                "배당금, 세금, 거래비용은 반영하지 않습니다.",
+                "미국 자산 가격은 가격 일자의 환율 제공자 값을 사용해 KRW로 환산합니다.",
+                "리밸런싱 주기: " + rebalanceIntervalMonths(rebalancePolicy) + "개월."
         );
+    }
+
+    private int rebalanceIntervalMonths(String rebalancePolicy) {
+        String normalized = safeUpper(rebalancePolicy);
+        if ("NONE".equals(normalized)) {
+            return 0;
+        }
+        if ("QUARTERLY".equals(normalized)) {
+            return 3;
+        }
+        if ("SEMI_ANNUAL".equals(normalized)) {
+            return 6;
+        }
+        if (normalized.matches("\\d+")) {
+            int months = Integer.parseInt(normalized);
+            return Math.max(1, Math.min(12, months));
+        }
+        return 1;
     }
 
     private List<String> backtestLimitations() {
         return List.of(
-                "Custom ETF backtests accept stock assets and may use approximate fallback prices when live history is unavailable.",
-                "dividend, split, delisting, tax, and liquidity effects are not separately modeled unless already reflected in the source adjusted price.",
+                "Custom ETF backtests accept stock and ETF-like assets, including leveraged or inverse ETFs when the source provides prices.",
+                "dividend, delisting, tax, liquidity, and intramonth path effects are not modeled separately.",
                 "Past performance simulation does not guarantee future returns."
         );
     }
@@ -1594,6 +1966,10 @@ public class EtfDataService {
             case "ALL" -> "전체";
             default -> "1년";
         };
+    }
+
+    private String dateToString(LocalDate date) {
+        return date != null ? date.toString() : null;
     }
 
     private String benchmarkDisplayName(String benchmark) {
@@ -1739,7 +2115,7 @@ public class EtfDataService {
     private void requireSupportedCustomEtfAsset(String stockId) {
         Optional<EtfAssetCatalogItem> catalogItem = findCatalogItem(stockId);
         if (catalogItem.isPresent()) {
-            if (!ASSET_TYPE_STOCK.equals(catalogItem.get().assetType())) {
+            if (!isEquityLikeAssetType(catalogItem.get().assetType())) {
                 throw unsupportedCustomEtfAssetTypeException(catalogItem.get());
             }
             return;
@@ -1767,7 +2143,7 @@ public class EtfDataService {
         Optional<EtfAssetCatalogItem> catalogItem = findCatalogItem(stockId);
         if (catalogItem.isPresent()) {
             EtfAssetCatalogItem item = catalogItem.get();
-            if (!ASSET_TYPE_STOCK.equals(item.assetType())) {
+            if (!isEquityLikeAssetType(item.assetType())) {
                 throw unsupportedCustomEtfAssetTypeException(item);
             }
             return;
@@ -1796,7 +2172,7 @@ public class EtfDataService {
 
     private void markBacktestDataVerified(String assetId) {
         assetMasterRepository.findByAssetIdAndActiveTrue(assetId).ifPresent(asset -> {
-            if (ASSET_TYPE_STOCK.equals(asset.getAssetType())
+            if (isEquityLikeAssetType(asset.getAssetType())
                     && (!Boolean.TRUE.equals(asset.getBacktestEnabled())
                     || DATA_STATUS_PENDING.equals(asset.getPriceSourceStatus())
                     || asset.getLastPriceError() != null)) {
@@ -1818,7 +2194,7 @@ public class EtfDataService {
     }
 
     private ApiException unsupportedCustomEtfAssetTypeException(EtfAssetCatalogItem item) {
-        return new ApiException("Custom ETF only supports STOCK assets: " + item.assetId(), HttpStatus.BAD_REQUEST);
+        return new ApiException("Custom ETF only supports stock and ETF-like assets: " + item.assetId(), HttpStatus.BAD_REQUEST);
     }
 
     private void validatePeriod(String period) {
@@ -1997,7 +2373,17 @@ public class EtfDataService {
     private record ResolvedStockVisual(String logoUrl, StockVisualDTO visual) {}
     private record SecurityPriceSeries(String securityId, List<BacktestPricePoint> series) {}
     private record BacktestPriceSeries(Map<String, List<BacktestPricePoint>> priceSeriesBySecurityId,
-                                       List<BacktestPricePoint> benchmarkSeries) {}
+                                       List<BacktestPricePoint> benchmarkSeries,
+                                       String actualPeriod,
+                                       LocalDate commonStartDate,
+                                       LocalDate commonEndDate,
+                                       boolean periodDowngraded,
+                                       List<String> warnings) {}
+    private record PriceDataCoverage(LocalDate commonStartDate,
+                                     LocalDate commonEndDate,
+                                     String actualPeriod,
+                                     boolean periodDowngraded,
+                                     List<String> warnings) {}
     private record EtfAssetCatalogItem(String assetId,
                                        String name,
                                        String symbol,

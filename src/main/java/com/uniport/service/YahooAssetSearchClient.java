@@ -85,7 +85,7 @@ public class YahooAssetSearchClient {
                 continue;
             }
             String name = firstNonBlank(text(quote, "longname"), text(quote, "shortname"), symbol);
-            results.add(new YahooAssetResult(symbol, name, market, "USD"));
+            results.add(new YahooAssetResult(symbol, name, market, "USD", normalize(text(quote, "quoteType"))));
         }
         return results;
     }
@@ -145,6 +145,9 @@ public class YahooAssetSearchClient {
         return normalized;
     }
 
-    public record YahooAssetResult(String symbol, String name, String market, String currency) {
+    public record YahooAssetResult(String symbol, String name, String market, String currency, String quoteType) {
+        public YahooAssetResult(String symbol, String name, String market, String currency) {
+            this(symbol, name, market, currency, "EQUITY");
+        }
     }
 }

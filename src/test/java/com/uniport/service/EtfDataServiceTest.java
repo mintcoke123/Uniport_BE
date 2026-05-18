@@ -269,8 +269,29 @@ class EtfDataServiceTest {
         ApiException cash = assertThrows(ApiException.class,
                 () -> etfDataService.searchAssets("현금", "CASH", null, 0, 10));
 
-        assertEquals("assetType must be STOCK", bond.getMessage());
-        assertEquals("assetType must be STOCK", cash.getMessage());
+        assertEquals("assetType must be STOCK, ETF, LEVERAGED_ETF, or INVERSE_ETF", bond.getMessage());
+        assertEquals("assetType must be STOCK, ETF, LEVERAGED_ETF, or INVERSE_ETF", cash.getMessage());
+    }
+
+    @Test
+    void searchAssets_reclassifiesEtfLikeUsAssetsFromStockMasterData() {
+        AssetMaster spy = asset("US_SPY", "STOCK", "State Street SPDR S&P 500 ETF Trust", "SPY", "NYSE", "USD");
+        AssetMaster tqqq = asset("US_TQQQ", "STOCK", "ProShares UltraPro QQQ", "TQQQ", "NASDAQ", "USD");
+        AssetMaster sqqq = asset("US_SQQQ", "STOCK", "ProShares UltraPro Short QQQ", "SQQQ", "NASDAQ", "USD");
+        when(assetMasterRepository.searchActive(eq("SPY"), eq(null), eq(null), any(Pageable.class))).thenReturn(List.of(spy));
+        when(assetMasterRepository.searchActive(eq("TQQQ"), eq(null), eq(null), any(Pageable.class))).thenReturn(List.of(tqqq));
+        when(assetMasterRepository.searchActive(eq("SQQQ"), eq(null), eq(null), any(Pageable.class))).thenReturn(List.of(sqqq));
+        when(stockMasterRepository.searchForEtfAssetCandidates(any(), any(Pageable.class))).thenReturn(List.of());
+        when(stockVisualAssetResolver.resolve(any(), any(), any(), any()))
+                .thenAnswer(invocation -> visual(invocation.getArgument(1)));
+
+        CustomEtfAssetSearchResponseDTO spyResult = etfDataService.searchAssets("SPY", "ALL", "ALL", 0, 10);
+        CustomEtfAssetSearchResponseDTO tqqqResult = etfDataService.searchAssets("TQQQ", "ALL", "ALL", 0, 10);
+        CustomEtfAssetSearchResponseDTO sqqqResult = etfDataService.searchAssets("SQQQ", "ALL", "ALL", 0, 10);
+
+        assertEquals("ETF", spyResult.getItems().get(0).getAssetType());
+        assertEquals("LEVERAGED_ETF", tqqqResult.getItems().get(0).getAssetType());
+        assertEquals("INVERSE_ETF", sqqqResult.getItems().get(0).getAssetType());
     }
 
     @Test
@@ -289,7 +310,7 @@ class EtfDataServiceTest {
         assertEquals("KRX_005930", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
         assertEquals("FALLBACK_AVAILABLE", response.getItems().get(0).getDataStatus());
-        assertEquals("실가격이 부족하면 추정 가격으로 백테스트합니다.",
+        assertEquals("분석 시점에 실가격을 확인하며, 가격 데이터가 부족하면 분석이 제한됩니다.",
                 response.getItems().get(0).getDataStatusMessage());
         assertEquals(1, response.getTotalCount());
     }
@@ -336,7 +357,7 @@ class EtfDataServiceTest {
         assertEquals("US_FAKE", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
         assertEquals("FALLBACK_AVAILABLE", response.getItems().get(0).getDataStatus());
-        assertEquals("실가격이 부족하면 추정 가격으로 백테스트합니다.",
+        assertEquals("분석 시점에 실가격을 확인하며, 가격 데이터가 부족하면 분석이 제한됩니다.",
                 response.getItems().get(0).getDataStatusMessage());
     }
 
@@ -445,7 +466,7 @@ class EtfDataServiceTest {
         for (AssetFlowCase testCase : cases) {
             CustomEtfAssetSearchResponseDTO search = etfDataService.searchAssets(
                     testCase.query(),
-                    "STOCK",
+                    "ALL",
                     testCase.marketFilter(),
                     0,
                     10
@@ -492,7 +513,7 @@ class EtfDataServiceTest {
         assertEquals("KRX_373220", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
         assertEquals("FALLBACK_AVAILABLE", response.getItems().get(0).getDataStatus());
-        assertEquals("실가격이 부족하면 추정 가격으로 백테스트합니다.",
+        assertEquals("분석 시점에 실가격을 확인하며, 가격 데이터가 부족하면 분석이 제한됩니다.",
                 response.getItems().get(0).getDataStatusMessage());
         assertEquals(false, pending.getBacktestEnabled());
         assertEquals("PENDING_VERIFICATION", pending.getPriceSourceStatus());
@@ -619,7 +640,7 @@ class EtfDataServiceTest {
 
         ApiException ex = assertThrows(ApiException.class, () -> etfDataService.createCustomEtf(user, request));
 
-        assertEquals("Custom ETF only supports STOCK assets: BOND_KR_GOV_3Y", ex.getMessage());
+        assertEquals("Custom ETF only supports stock and ETF-like assets: BOND_KR_GOV_3Y", ex.getMessage());
     }
 
     @Test
@@ -758,12 +779,12 @@ class EtfDataServiceTest {
                 .readValue(captor.getValue().getReportJson(), EtfAnalysisReportResponseDTO.class);
         assertEquals("QUARTERLY", report.getMetadata().getRebalancePolicy());
         assertEquals("none", report.getMetadata().getPriceCachePolicy());
-        assertEquals("Yahoo Finance chart API with approximate fallback", report.getMetadata().getPriceSource());
+        assertEquals("Yahoo Finance chart API; approximate fallback only when enabled", report.getMetadata().getPriceSource());
         assertEquals("fx_rate_daily", report.getMetadata().getFxCachePolicy());
         assertEquals(true, report.getMetadata().getAssumptions().stream()
-                .anyMatch(value -> value.contains("transaction fee") && value.contains("slippage")));
+                .anyMatch(value -> value.contains("정수 주식 수") && value.contains("현금")));
         assertEquals(true, report.getMetadata().getLimitations().stream()
-                .anyMatch(value -> value.contains("dividend") && value.contains("split")));
+                .anyMatch(value -> value.contains("dividend") && value.contains("intramonth")));
     }
 
     @Test
@@ -957,6 +978,204 @@ class EtfDataServiceTest {
 
         org.mockito.Mockito.verify(historicalPriceProvider)
                 .getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class));
+    }
+
+    @Test
+    void analyze_downgradesFiveYearRequestToThreeYearsWhenOnlyThreeYearsAreAvailable() throws Exception {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("분석 ETF")
+                .theme("테크")
+                .holdingsJson("[{\"stockId\":\"US_AAPL\",\"weight\":100}]")
+                .build();
+        AssetMaster apple = asset("US_AAPL", "STOCK", "Apple Inc.", "AAPL", "NASDAQ", "USD");
+        LocalDate endDate = LocalDate.now();
+        LocalDate threeYearStart = endDate.minusYears(3).plusDays(3);
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_AAPL")).thenReturn(Optional.of(apple));
+        when(historicalPriceProvider.getSecurityPriceSeries(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(
+                        point(threeYearStart.toString(), "100"),
+                        point(endDate.minusDays(1).toString(), "120")
+                ));
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(
+                        point(threeYearStart.toString(), "100"),
+                        point(endDate.minusDays(1).toString(), "115")
+                ));
+        BacktestResult result = backtestResult();
+        when(etfBacktestEngine.run(any())).thenReturn(result);
+        InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("3년"), eq("S&P 500"), eq(result), any(), any()))
+                .thenReturn(facts);
+        when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "3년 기준 백테스트 요약입니다.",
+                List.of(),
+                "BALANCED",
+                "과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.",
+                true
+        ));
+        ArgumentCaptor<BacktestRequest> backtestRequestCaptor = ArgumentCaptor.forClass(BacktestRequest.class);
+        ArgumentCaptor<ManagedEtfAnalysisReport> reportCaptor = ArgumentCaptor.forClass(ManagedEtfAnalysisReport.class);
+
+        etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("5Y").benchmark("SP500").build());
+
+        verify(etfBacktestEngine).run(backtestRequestCaptor.capture());
+        assertEquals("3년", backtestRequestCaptor.getValue().getPeriodLabel());
+        verify(managedEtfAnalysisReportRepository).save(reportCaptor.capture());
+        EtfAnalysisReportResponseDTO report = new ObjectMapper()
+                .readValue(reportCaptor.getValue().getReportJson(), EtfAnalysisReportResponseDTO.class);
+        assertEquals("3Y", report.getPeriod());
+        assertEquals("5Y", report.getMetadata().getRequestedPeriod());
+        assertEquals("3Y", report.getMetadata().getActualPeriod());
+        assertEquals(true, report.getMetadata().getPeriodDowngraded());
+        assertEquals(1, report.getMetadata().getDataWarnings().size());
+    }
+
+    @Test
+    void analyze_downgradesThreeYearRequestToOneYearWhenOnlyOneYearIsAvailable() throws Exception {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("분석 ETF")
+                .theme("테크")
+                .holdingsJson("[{\"stockId\":\"US_AAPL\",\"weight\":100}]")
+                .build();
+        AssetMaster apple = asset("US_AAPL", "STOCK", "Apple Inc.", "AAPL", "NASDAQ", "USD");
+        LocalDate endDate = LocalDate.now();
+        LocalDate oneYearStart = endDate.minusYears(1).plusDays(2);
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_AAPL")).thenReturn(Optional.of(apple));
+        when(historicalPriceProvider.getSecurityPriceSeries(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(
+                        point(oneYearStart.toString(), "100"),
+                        point(endDate.minusDays(1).toString(), "112")
+                ));
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(
+                        point(oneYearStart.toString(), "100"),
+                        point(endDate.minusDays(1).toString(), "108")
+                ));
+        BacktestResult result = backtestResult();
+        when(etfBacktestEngine.run(any())).thenReturn(result);
+        InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
+        when(etfAiFeedbackService.buildInsightFacts(eq("분석 ETF"), eq("1년"), eq("S&P 500"), eq(result), any(), any()))
+                .thenReturn(facts);
+        when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "1년 기준 백테스트 요약입니다.",
+                List.of(),
+                "BALANCED",
+                "과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.",
+                true
+        ));
+        ArgumentCaptor<BacktestRequest> backtestRequestCaptor = ArgumentCaptor.forClass(BacktestRequest.class);
+        ArgumentCaptor<ManagedEtfAnalysisReport> reportCaptor = ArgumentCaptor.forClass(ManagedEtfAnalysisReport.class);
+
+        etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("3Y").benchmark("SP500").build());
+
+        verify(etfBacktestEngine).run(backtestRequestCaptor.capture());
+        assertEquals("1년", backtestRequestCaptor.getValue().getPeriodLabel());
+        verify(managedEtfAnalysisReportRepository).save(reportCaptor.capture());
+        EtfAnalysisReportResponseDTO report = new ObjectMapper()
+                .readValue(reportCaptor.getValue().getReportJson(), EtfAnalysisReportResponseDTO.class);
+        assertEquals("1Y", report.getPeriod());
+        assertEquals("3Y", report.getMetadata().getRequestedPeriod());
+        assertEquals("1Y", report.getMetadata().getActualPeriod());
+        assertEquals(true, report.getMetadata().getPeriodDowngraded());
+    }
+
+    @Test
+    void analyze_rejectsWhenRequestedMultiYearPeriodHasLessThanOneYearCoverage() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("분석 ETF")
+                .theme("테크")
+                .holdingsJson("[{\"stockId\":\"US_AAPL\",\"weight\":100}]")
+                .build();
+        AssetMaster apple = asset("US_AAPL", "STOCK", "Apple Inc.", "AAPL", "NASDAQ", "USD");
+        LocalDate endDate = LocalDate.now();
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_AAPL")).thenReturn(Optional.of(apple));
+        when(historicalPriceProvider.getSecurityPriceSeries(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(
+                        point(endDate.minusMonths(4).toString(), "100"),
+                        point(endDate.minusDays(1).toString(), "104")
+                ));
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(
+                        point(endDate.minusMonths(4).toString(), "100"),
+                        point(endDate.minusDays(1).toString(), "102")
+                ));
+
+        ApiException ex = assertThrows(ApiException.class, () -> etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("3Y").benchmark("SP500").build()));
+
+        assertEquals(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, ex.getStatus());
+        assertEquals("ETF_PRICE_DATA_UNAVAILABLE", ex.getErrorCode());
+    }
+
+    @Test
+    void analyze_rejectsWhenHoldingPriceDataIsUnavailable() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("분석 ETF")
+                .theme("테크")
+                .holdingsJson("[{\"stockId\":\"US_AAPL\",\"weight\":100}]")
+                .build();
+        AssetMaster apple = asset("US_AAPL", "STOCK", "Apple Inc.", "AAPL", "NASDAQ", "USD");
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_AAPL")).thenReturn(Optional.of(apple));
+        when(historicalPriceProvider.getSecurityPriceSeries(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of());
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(this::fullCoverageSeries);
+
+        ApiException ex = assertThrows(ApiException.class, () -> etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("1Y").benchmark("SP500").build()));
+
+        assertEquals(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, ex.getStatus());
+        assertEquals("ETF_PRICE_DATA_UNAVAILABLE", ex.getErrorCode());
+    }
+
+    @Test
+    void analyze_rejectsWhenBenchmarkPriceDataIsUnavailable() {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("분석 ETF")
+                .theme("테크")
+                .holdingsJson("[{\"stockId\":\"US_AAPL\",\"weight\":100}]")
+                .build();
+        AssetMaster apple = asset("US_AAPL", "STOCK", "Apple Inc.", "AAPL", "NASDAQ", "USD");
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_AAPL")).thenReturn(Optional.of(apple));
+        when(historicalPriceProvider.getSecurityPriceSeries(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(this::fullCoverageSeries);
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of());
+
+        ApiException ex = assertThrows(ApiException.class, () -> etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("1Y").benchmark("SP500").build()));
+
+        assertEquals(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, ex.getStatus());
+        assertEquals("ETF_BENCHMARK_PRICE_DATA_UNAVAILABLE", ex.getErrorCode());
     }
 
     @Test

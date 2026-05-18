@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -22,7 +23,7 @@ import java.util.Optional;
 public class OpenAiFeedbackClient implements LlmFeedbackClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String PROMPT_VERSION = "etf-feedback-v3";
+    private static final String PROMPT_VERSION = "etf-feedback-v4-analysis-packet";
 
     private final RestTemplate restTemplate;
     private final String apiKey;
@@ -55,7 +56,7 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
                     "model", model,
                     "input", List.of(
                             Map.of("role", "system", "content", systemPrompt()),
-                            Map.of("role", "user", "content", OBJECT_MAPPER.writeValueAsString(facts))
+                            Map.of("role", "user", "content", OBJECT_MAPPER.writeValueAsString(analysisPacketPayload(facts)))
                     ),
                     "text", Map.of("format", responseFormat())
             );
@@ -97,7 +98,8 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
 
     private String systemPrompt() {
         return "You write short Korean ETF backtest feedback. "
-                + "Use only facts in the JSON. Do not invent numbers. "
+                + "The user message is an analysis_packet JSON, not raw prices. "
+                + "Use only facts in analysis_packet. Do not invent numbers. "
                 + "Return title as AI 리스크 진단. "
                 + "Write like a sharp portfolio coach, not a dashboard narrator. "
                 + "Use plain, subjective, intuitive Korean that a beginner immediately understands. "
@@ -120,6 +122,59 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
                 + "Do not give investment advice, buy/sell calls, guarantees, or predictions. "
                 + "Do not mention OpenAI, LLM, FinBERT, model, or sentiment classifier. "
                 + "Return JSON only.";
+    }
+
+    private Map<String, Object> analysisPacketPayload(InsightFacts facts) {
+        Map<String, Object> packet = new LinkedHashMap<>();
+        packet.put("portfolio_summary", nullableMap(
+                "portfolio_name", facts.portfolioLabel(),
+                "period", facts.periodLabel(),
+                "benchmark", facts.benchmarkName(),
+                "initial_capital", facts.principalAmountKrw()
+        ));
+        packet.put("summary_metrics", nullableMap(
+                "cumulative_return", facts.totalReturnPercent(),
+                "expected_profit", facts.expectedProfitAmountKrw(),
+                "annualized_volatility", facts.volatilityPercent(),
+                "max_drawdown", facts.maxDrawdownPercent(),
+                "benchmark_cumulative_return", facts.benchmarkReturnPercent(),
+                "excess_return", facts.excessReturnPercent()
+        ));
+        packet.put("risk_profile", nullableMap(
+                "risk_grade", facts.riskGrade(),
+                "risk_grade_label", facts.riskGradeLabel(),
+                "top1_weight", facts.topHoldingWeightPercent(),
+                "top3_weight", facts.top3WeightPercent(),
+                "dominant_sector", facts.dominantSector(),
+                "dominant_sector_weight", facts.dominantSectorWeightPercent()
+        ));
+        packet.put("latest_holdings", holdingsPacket(facts));
+        return Map.of("analysis_packet", packet);
+    }
+
+    private List<Map<String, Object>> holdingsPacket(InsightFacts facts) {
+        if (facts.holdings() == null) {
+            return List.of();
+        }
+        return facts.holdings().stream()
+                .map(holding -> nullableMap(
+                        "security_id", holding.securityId(),
+                        "name", holding.name(),
+                        "sector", holding.sector(),
+                        "target_weight", holding.weightPercent()
+                ))
+                .toList();
+    }
+
+    private Map<String, Object> nullableMap(Object... keysAndValues) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (int index = 0; index < keysAndValues.length - 1; index += 2) {
+            Object value = keysAndValues[index + 1];
+            if (value != null) {
+                values.put(String.valueOf(keysAndValues[index]), value);
+            }
+        }
+        return values;
     }
 
     private Map<String, Object> responseFormat() {

@@ -33,4 +33,28 @@ public class EtfAnalysisHighlightsDTO {
 
     @Schema(example = "0.74", description = "무위험 수익률 0% 기준 샤프 비율")
     private Double sharpeRatio;
+
+    @Schema(example = "0.81", description = "하방위험 기준 소르티노 비율")
+    private Double sortinoRatio;
+
+    @Schema(example = "1.13", description = "벤치마크 월간 수익률 대비 베타")
+    private Double beta;
+
+    @Schema(example = "9.4", description = "월간 초과수익률 표준편차의 연환산 추적오차")
+    private Double trackingError;
+
+    @Schema(example = "0.24", description = "월간 초과수익률 기준 정보비율")
+    private Double informationRatio;
+
+    @Schema(example = "57.0", description = "월간 벤치마크 초과 달성 비율")
+    private Double winRate;
+
+    @Schema(example = "8.3", description = "벤치마크 CAGR")
+    private Double benchmarkAnnualizedReturn;
+
+    @Schema(example = "17.6", description = "벤치마크 연환산 변동성")
+    private Double benchmarkVolatility;
+
+    @Schema(example = "-27.0", description = "벤치마크 최대낙폭")
+    private Double benchmarkMaxDrawdown;
 }

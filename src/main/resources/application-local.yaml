@@ -12,5 +12,5 @@ kis:
 
 backtest:
   price-fallback:
-    # 로컬에서 KIS 키가 없더라도 나만의 ETF 분석 플로우를 개발할 수 있도록 합성 가격 시계열 사용.
-    enabled: true
+    # 실제 지표 검증을 위해 기본값은 비활성화. 필요 시 BACKTEST_PRICE_FALLBACK_ENABLED=true 로만 합성 가격 사용.
+    enabled: ${BACKTEST_PRICE_FALLBACK_ENABLED:false}

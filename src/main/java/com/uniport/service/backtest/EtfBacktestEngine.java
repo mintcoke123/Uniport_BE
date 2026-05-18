@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 @Service
 public class EtfBacktestEngine {
 
+    private final MonthlyBacktestCalculator monthlyBacktestCalculator = new MonthlyBacktestCalculator();
+
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
     private static final double SQRT_TRADING_DAYS = Math.sqrt(252.0);
     private static final String REBALANCE_MONTHLY = "MONTHLY";
@@ -29,6 +31,10 @@ public class EtfBacktestEngine {
     private static final String REBALANCE_NONE = "NONE";
 
     public BacktestResult run(BacktestRequest request) {
+        return monthlyBacktestCalculator.run(request);
+    }
+
+    private BacktestResult runDailyFractionalBacktest(BacktestRequest request) {
         validate(request);
         BigDecimal principal = defaultPositive(request.getPrincipalAmountKrw(), BigDecimal.valueOf(100_000_000L));
         BigDecimal costRate = defaultZero(request.getTransactionFeeRate()).add(defaultZero(request.getSlippageRate()));

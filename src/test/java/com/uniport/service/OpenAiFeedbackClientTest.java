@@ -99,6 +99,49 @@ class OpenAiFeedbackClientTest {
         Assertions.assertTrue(prompt.contains("conditions to check before adding"));
     }
 
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void generate_sendsAnalysisPacketShapeInsteadOfRawInsightFacts() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        when(restTemplate.exchange(
+                eq("https://api.openai.com/v1/responses"),
+                eq(HttpMethod.POST),
+                any(HttpEntity.class),
+                any(ParameterizedTypeReference.class)
+        )).thenReturn(ResponseEntity.ok(Map.of(
+                "output_text", """
+                        {"title":"AI 리스크 진단","summary":"한 줄 결론: 테스트 ETF입니다.","tone":"BALANCED","bullets":[]}
+                        """
+        )));
+        OpenAiFeedbackClient client = new OpenAiFeedbackClient(
+                restTemplate,
+                "test-key",
+                "https://api.openai.com",
+                "gpt-4.1-mini",
+                true
+        );
+        ArgumentCaptor<HttpEntity> captor = forClass(HttpEntity.class);
+
+        client.generate(baseFacts());
+
+        verify(restTemplate).exchange(
+                eq("https://api.openai.com/v1/responses"),
+                eq(HttpMethod.POST),
+                captor.capture(),
+                any(ParameterizedTypeReference.class)
+        );
+        Map<?, ?> body = (Map<?, ?>) captor.getValue().getBody();
+        List<?> input = (List<?>) body.get("input");
+        Map<?, ?> userMessage = (Map<?, ?>) input.get(1);
+        String payload = String.valueOf(userMessage.get("content"));
+        Assertions.assertTrue(payload.contains("\"analysis_packet\""));
+        Assertions.assertTrue(payload.contains("\"portfolio_summary\""));
+        Assertions.assertTrue(payload.contains("\"summary_metrics\""));
+        Assertions.assertTrue(payload.contains("\"latest_holdings\""));
+        Assertions.assertFalse(payload.contains("\"totalReturnPercent\""));
+        Assertions.assertFalse(payload.contains("\"positiveFacts\""));
+    }
+
     private InsightFacts baseFacts() {
         return InsightFacts.builder()
                 .portfolioLabel("테스트 ETF")
