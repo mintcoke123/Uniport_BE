@@ -48,6 +48,7 @@ public class MatchingRoomService {
     private final PushNotificationService pushNotificationService;
     private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
     private final ProfileImageUrlService profileImageUrlService;
+    private final CompetitionService competitionService;
     private final Map<Long, List<Long>> pendingInviteUserIdsByRoomId = new ConcurrentHashMap<>();
 
     public MatchingRoomService(MatchingRoomRepository matchingRoomRepository,
@@ -57,7 +58,8 @@ public class MatchingRoomService {
                                LearningUserStateRepository learningUserStateRepository,
                                PushNotificationService pushNotificationService,
                                UserMyPagePreferenceRepository userMyPagePreferenceRepository,
-                               ProfileImageUrlService profileImageUrlService) {
+                               ProfileImageUrlService profileImageUrlService,
+                               CompetitionService competitionService) {
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.userRepository = userRepository;
@@ -66,6 +68,7 @@ public class MatchingRoomService {
         this.pushNotificationService = pushNotificationService;
         this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
         this.profileImageUrlService = profileImageUrlService;
+        this.competitionService = competitionService;
     }
 
     public void assertTeamRoom(Long groupId) {
@@ -228,12 +231,20 @@ public class MatchingRoomService {
             throw new ApiException("단체 매칭은 2명 이상 모여야 시작할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
 
+        Long activeCompetitionId = competitionService.findActiveCompetition()
+                .map(com.uniport.entity.Competition::getId)
+                .orElse(null);
+        boolean fullTournamentTeam = activeCompetitionId != null && room.getCapacity() == 3 && memberCount == 3;
+
         boolean waitingRoomStarted = "waiting".equalsIgnoreCase(room.getStatus());
         boolean startedNow = !"started".equals(room.getStatus());
         boolean missingEndTime = room.getEndedAt() == null;
         if (startedNow || missingEndTime) {
             if (startedNow) {
                 room.setStatus("started");
+                if (room.getCompetitionId() == null && fullTournamentTeam) {
+                    room.setCompetitionId(activeCompetitionId);
+                }
             }
             if (missingEndTime) {
                 room.setEndedAt(Instant.now().plus(MOCK_INVESTMENT_SESSION_DURATION));
@@ -262,13 +273,13 @@ public class MatchingRoomService {
             }
         }
 
-        return Map.of(
-                "success", true,
-                "message", "Started",
-                "teamId", "team-" + room.getId(),
-                "competitionId", 1,
-                "detail", getRoomDetail(toApiId(room.getId()), user)
-        );
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "Started");
+        response.put("teamId", "team-" + room.getId());
+        response.put("competitionId", room.getCompetitionId());
+        response.put("detail", getRoomDetail(toApiId(room.getId()), user));
+        return response;
     }
 
     @Transactional

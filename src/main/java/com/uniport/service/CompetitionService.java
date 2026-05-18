@@ -8,8 +8,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 대회 CRUD 및 진행 중 대회 조회. 어드민에서 설정한 종료일을 홈/대회 API에서 사용.
@@ -28,12 +31,26 @@ public class CompetitionService {
     }
 
     /** 진행 중인 대회 하나 (status=ongoing). 없으면 empty. */
-    public java.util.Optional<Competition> findOngoing() {
-        return competitionRepository.findFirstByStatusOrderByStartDateAsc("ongoing");
+    public Optional<Competition> findOngoing() {
+        return findActiveCompetition();
     }
 
     public List<Competition> findByStatus(String status) {
         return competitionRepository.findByStatusOrderByStartDateAsc(status);
+    }
+
+    public Optional<Competition> findActiveCompetition() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Competition> competitions = competitionRepository.findAll();
+        return competitions.stream()
+                .filter(competition -> !"ended".equals(competition.getStatus()))
+                .filter(competition -> isWithinCompetitionWindow(competition, now))
+                .findFirst()
+                .or(() -> competitionRepository.findFirstByStatusOrderByStartDateAsc("ongoing")
+                        .filter(competition -> {
+                            LocalDateTime end = parseDateTime(competition.getEndDate());
+                            return end == null || now.isBefore(end);
+                        }));
     }
 
     @Transactional
@@ -74,6 +91,23 @@ public class CompetitionService {
                 "endDate", c.getEndDate(),
                 "status", c.getStatus() != null ? c.getStatus() : "upcoming"
         );
+    }
+
+    private boolean isWithinCompetitionWindow(Competition competition, LocalDateTime now) {
+        LocalDateTime start = parseDateTime(competition.getStartDate());
+        LocalDateTime end = parseDateTime(competition.getEndDate());
+        return start != null && end != null && !now.isBefore(start) && now.isBefore(end);
+    }
+
+    private LocalDateTime parseDateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(value);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
     }
 
     /** endDate 문자열에서 날짜만 추출해 남은 일수 계산 (날짜만 비교). */

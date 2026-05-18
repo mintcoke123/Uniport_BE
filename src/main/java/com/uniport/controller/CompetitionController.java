@@ -3,6 +3,7 @@ package com.uniport.controller;
 import com.uniport.entity.User;
 import com.uniport.service.AuthService;
 import com.uniport.service.CompetitionParticipationService;
+import com.uniport.service.CompetitionSettlementService;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.RankingService;
 import org.springframework.http.ResponseEntity;
@@ -33,15 +34,18 @@ public class CompetitionController {
     private final RankingService rankingService;
     private final AuthService authService;
     private final CompetitionParticipationService competitionParticipationService;
+    private final CompetitionSettlementService competitionSettlementService;
 
     public CompetitionController(CompetitionService competitionService,
                                  RankingService rankingService,
                                  AuthService authService,
-                                 CompetitionParticipationService competitionParticipationService) {
+                                 CompetitionParticipationService competitionParticipationService,
+                                 CompetitionSettlementService competitionSettlementService) {
         this.competitionService = competitionService;
         this.rankingService = rankingService;
         this.authService = authService;
         this.competitionParticipationService = competitionParticipationService;
+        this.competitionSettlementService = competitionSettlementService;
     }
 
     @GetMapping("/ongoing")
@@ -77,6 +81,15 @@ public class CompetitionController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
         return ResponseEntity.ok(rankingService.getCompetingTeams(competitionId, user));
+    }
+
+    @GetMapping("/{competitionId}/teams/{teamId}")
+    public ResponseEntity<Map<String, Object>> getCompetitionTeamDetail(
+            @PathVariable Long competitionId,
+            @PathVariable String teamId,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = authService.getUserFromTokenOrNull(authorization != null ? authorization : "");
+        return ResponseEntity.ok(competitionSettlementService.getTeamDetail(competitionId, teamId, user));
     }
 
     @GetMapping("/{competitionId}/summary")
@@ -156,6 +169,18 @@ public class CompetitionController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = authService.getUserFromToken(authorization != null ? authorization : "");
         return ResponseEntity.ok(competitionParticipationService.getMyApplications(user));
+    }
+
+    @GetMapping("/records/me")
+    public ResponseEntity<List<Map<String, Object>>> getMyCompetitionRecords(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        User user = authService.getUserFromToken(authorization != null ? authorization : "");
+        return ResponseEntity.ok(competitionSettlementService.getMyRecords(user));
+    }
+
+    @PostMapping("/{competitionId}/settle")
+    public ResponseEntity<Map<String, Object>> settleCompetition(@PathVariable Long competitionId) {
+        return ResponseEntity.ok(competitionSettlementService.settleCompetition(competitionId));
     }
 
     private Map<String, Object> buildRemainingTime(String endDate) {

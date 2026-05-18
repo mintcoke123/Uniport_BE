@@ -55,6 +55,10 @@ public class MatchingRoom {
     @Column(name = "market_type", length = 20)
     private String marketType;
 
+    /** 참가 중인 대회 ID. null이면 일반 모의투자 방. */
+    @Column(name = "competition_id")
+    private Long competitionId;
+
     /** 6~8자리 Base62 랜덤. UNIQUE. 비공개 방 입장용. */
     @Column(name = "invite_code", unique = true, length = 8)
     private String inviteCode;

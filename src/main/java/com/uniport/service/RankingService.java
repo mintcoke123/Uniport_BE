@@ -62,7 +62,17 @@ public class RankingService {
      * 경쟁 중인 팀 목록.
      */
     public List<Map<String, Object>> getCompetingTeams(Long competitionId, User user) {
-        List<Map<String, Object>> all = getAllGroupsRanking();
+        return getCompetingTeams(competitionId, user, true);
+    }
+
+    public List<Map<String, Object>> getCompetingTeamsSnapshot(Long competitionId, User user) {
+        return getCompetingTeams(competitionId, user, false);
+    }
+
+    private List<Map<String, Object>> getCompetingTeams(Long competitionId, User user, boolean allowNetworkPriceFetch) {
+        List<Map<String, Object>> all = competitionId != null
+                ? buildGroupRankingsForCompetition(competitionId, allowNetworkPriceFetch)
+                : buildGroupRankings(allowNetworkPriceFetch);
         Long myTeamId = user != null ? parseTeamId(user) : null;
         if (myTeamId == null && user != null) {
             myTeamId = findStartedRoomIdByMember(user.getId());
@@ -138,6 +148,18 @@ public class RankingService {
         List<MatchingRoom> started = matchingRoomRepository.findAllByOrderByCreatedAtDesc().stream()
                 .filter(r -> "started".equals(r.getStatus()))
                 .collect(Collectors.toList());
+        return buildGroupRankingsFromRooms(started, allowNetworkPriceFetch, startedAt);
+    }
+
+    private List<Map<String, Object>> buildGroupRankingsForCompetition(Long competitionId, boolean allowNetworkPriceFetch) {
+        long startedAt = System.currentTimeMillis();
+        List<MatchingRoom> started = matchingRoomRepository.findByStatusAndCompetitionIdOrderByCreatedAtDesc("started", competitionId);
+        return buildGroupRankingsFromRooms(started, allowNetworkPriceFetch, startedAt);
+    }
+
+    private List<Map<String, Object>> buildGroupRankingsFromRooms(List<MatchingRoom> started,
+                                                                  boolean allowNetworkPriceFetch,
+                                                                  long startedAt) {
         List<Map<String, Object>> list = new ArrayList<>();
         Map<String, BigDecimal> resolvedPrices = new HashMap<>();
 

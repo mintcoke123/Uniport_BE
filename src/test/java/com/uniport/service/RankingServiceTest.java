@@ -1,6 +1,9 @@
 package com.uniport.service;
 
 import com.uniport.entity.User;
+import com.uniport.entity.MatchingRoom;
+import com.uniport.entity.TeamAccount;
+import com.uniport.repository.CompetitionResultRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.TeamAccountRepository;
@@ -32,6 +35,8 @@ class RankingServiceTest {
     private TeamHoldingRepository teamHoldingRepository;
     @Mock
     private KisApiService kisApiService;
+    @Mock
+    private CompetitionResultRepository competitionResultRepository;
 
     @InjectMocks
     private RankingService rankingService;
@@ -49,5 +54,36 @@ class RankingServiceTest {
         assertThat(result).isNull();
         verify(matchingRoomMemberRepository).findByUserIdOrderByJoinedAtDesc(483L);
         verify(matchingRoomRepository, never()).findAllByOrderByCreatedAtDesc();
+    }
+
+    @Test
+    void getCompetingTeamsOnlyRanksStartedRoomsInRequestedCompetition() {
+        MatchingRoom included = MatchingRoom.create("주간리그 A팀", 3);
+        included.setCompetitionId(7L);
+        included.setStatus("started");
+        included.setId(101L);
+        MatchingRoom otherCompetition = MatchingRoom.create("다른 리그 팀", 3);
+        otherCompetition.setCompetitionId(8L);
+        otherCompetition.setStatus("started");
+        otherCompetition.setId(102L);
+
+        when(matchingRoomRepository.findByStatusAndCompetitionIdOrderByCreatedAtDesc("started", 7L))
+                .thenReturn(List.of(included));
+        when(teamAccountRepository.findByTeamId(101L))
+                .thenReturn(java.util.Optional.of(
+                        TeamAccount.builder()
+                                .teamId(101L)
+                                .cashBalance(new java.math.BigDecimal("12000000"))
+                                .build()
+                ));
+        when(teamHoldingRepository.findByTeamId(101L)).thenReturn(List.of());
+
+        List<Map<String, Object>> result = rankingService.getCompetingTeams(7L, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().get("teamId")).isEqualTo("team-101");
+        assertThat(result.getFirst().get("groupName")).isEqualTo("주간리그 A팀");
+        verify(matchingRoomRepository).findByStatusAndCompetitionIdOrderByCreatedAtDesc("started", 7L);
+        verify(teamAccountRepository, never()).findByTeamId(102L);
     }
 }
