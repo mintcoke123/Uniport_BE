@@ -141,7 +141,7 @@ class MatchingRoomServiceTest {
     }
 
     @Test
-    void quickMatchFriendMode_rejectsInviteesWhoAlreadyParticipateInAnotherRoom() {
+    void quickMatchFriendMode_allowsInviteesWhoAlreadyParticipateInAnotherOrdinaryRoom() {
         User host = persistUser("20263012", "occupied-host");
         User friend = persistUser("20263013", "occupied-friend");
         persistAcceptedFriend(host, friend);
@@ -149,12 +149,11 @@ class MatchingRoomServiceTest {
 
         matchingRoomService.quickMatch("RANDOM", "KR", List.of(), friend);
 
-        ApiException exception = assertThrows(
-                ApiException.class,
-                () -> matchingRoomService.quickMatch("FRIEND", "KR", List.of(friend.getId()), host)
-        );
+        Map<String, Object> response = matchingRoomService.quickMatch("FRIEND", "KR", List.of(friend.getId()), host);
 
-        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        Map<String, Object> detail = map(response.get("detail"));
+        assertEquals(2, detail.get("memberCount"));
+        assertEquals(2, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(friend.getId()).size());
     }
 
     @Test
@@ -341,6 +340,58 @@ class MatchingRoomServiceTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
         assertEquals("대회 참가 신청 후 매칭을 시작할 수 있습니다.", exception.getMessage());
+    }
+
+    @Test
+    void quickMatchRandomMode_allowsOrdinaryAndTournamentRoomsForSameUser() {
+        User user = persistUser("20263032", "multi-room-user");
+        Competition competition = persistOngoingCompetition("동시 참여 대회");
+        persistApplication(competition, user);
+        entityManager.flush();
+
+        Map<String, Object> ordinaryResponse = matchingRoomService.quickMatch("RANDOM", "KR", List.of(), user);
+        Map<String, Object> tournamentResponse = matchingRoomService.quickMatch(
+                "RANDOM",
+                "KR",
+                List.of(),
+                competition.getId(),
+                user
+        );
+
+        String ordinaryRoomId = (String) map(ordinaryResponse.get("detail")).get("roomId");
+        String tournamentRoomId = (String) map(tournamentResponse.get("detail")).get("roomId");
+        assertFalse(ordinaryRoomId.equals(tournamentRoomId));
+        assertEquals(null, findRoom(ordinaryRoomId).getCompetitionId());
+        assertEquals(competition.getId(), findRoom(tournamentRoomId).getCompetitionId());
+        assertEquals(2, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(user.getId()).size());
+    }
+
+    @Test
+    void quickMatchRandomMode_returnsExistingRoomForSameCompetition() {
+        User user = persistUser("20263033", "same-competition-user");
+        Competition competition = persistOngoingCompetition("중복 방지 대회");
+        persistApplication(competition, user);
+        entityManager.flush();
+
+        Map<String, Object> firstResponse = matchingRoomService.quickMatch(
+                "RANDOM",
+                "KR",
+                List.of(),
+                competition.getId(),
+                user
+        );
+        Map<String, Object> secondResponse = matchingRoomService.quickMatch(
+                "RANDOM",
+                "KR",
+                List.of(),
+                competition.getId(),
+                user
+        );
+
+        String firstRoomId = (String) map(firstResponse.get("detail")).get("roomId");
+        String secondRoomId = (String) map(secondResponse.get("detail")).get("roomId");
+        assertEquals(firstRoomId, secondRoomId);
+        assertEquals(1, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(user.getId()).size());
     }
 
     @Test

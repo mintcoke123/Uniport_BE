@@ -43,13 +43,14 @@ public class ApiStockController {
     @GetMapping("/{id}")
     public ResponseEntity<StockDetailDTO> getStockDetail(
             @PathVariable Long id,
+            @RequestParam(value = "roomId", required = false) String roomId,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = null;
         try {
             user = authService.getUserFromToken(authorization != null ? authorization : "");
         } catch (Exception ignored) {
         }
-        StockDetailDTO dto = stockService.getStockDetail(id, user);
+        StockDetailDTO dto = stockService.getStockDetail(id, user, roomId);
         return ResponseEntity.ok(dto);
     }
 }

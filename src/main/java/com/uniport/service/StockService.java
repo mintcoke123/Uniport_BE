@@ -15,6 +15,7 @@ import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.HoldingRepository;
+import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.StockMasterRepository;
 import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
@@ -38,6 +39,7 @@ public class StockService {
     private final HoldingRepository holdingRepository;
     private final TeamHoldingRepository teamHoldingRepository;
     private final TeamAccountRepository teamAccountRepository;
+    private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final StockMasterRepository stockMasterRepository;
     private final ManagedStockNewsService managedStockNewsService;
@@ -50,6 +52,7 @@ public class StockService {
                         HoldingRepository holdingRepository,
                         TeamHoldingRepository teamHoldingRepository,
                         TeamAccountRepository teamAccountRepository,
+                        MatchingRoomMemberRepository matchingRoomMemberRepository,
                         @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
                         StockMasterRepository stockMasterRepository,
                         ManagedStockNewsService managedStockNewsService,
@@ -61,6 +64,7 @@ public class StockService {
         this.holdingRepository = holdingRepository;
         this.teamHoldingRepository = teamHoldingRepository;
         this.teamAccountRepository = teamAccountRepository;
+        this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.stockMasterRepository = stockMasterRepository;
         this.managedStockNewsService = managedStockNewsService;
@@ -107,6 +111,10 @@ public class StockService {
     }
 
     public StockDetailDTO getStockDetail(Long id, User user) {
+        return getStockDetail(id, user, null);
+    }
+
+    public StockDetailDTO getStockDetail(Long id, User user, String roomId) {
         String code = id != null ? String.format("%06d", id) : "000000";
         try {
             kisWsSubscriptionManager.ensureSubscribed(code);
@@ -119,11 +127,12 @@ public class StockService {
         String market = resolveMarket(code, price.getMarket());
         StockVisualDTO visual = stockVisualAssetResolver.resolve(market, code, displayName, null);
         String logoUrl = stockSymbolLogoUrlResolver.resolve(market, code, visual);
-        MyHoldingDTO myHolding = resolveMyHolding(user, code, price);
+        Long teamId = resolveTeamId(user, roomId);
+        MyHoldingDTO myHolding = resolveMyHolding(user, code, price, teamId);
 
         BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
         Long volume = price.getVolume() != null ? price.getVolume() : 0L;
-        BigDecimal buyableCash = resolveBuyableCash(user);
+        BigDecimal buyableCash = resolveBuyableCash(teamId);
         Integer buyableQuantity = resolveBuyableQuantity(buyableCash, currentPrice);
 
         MarketDataDTO marketData = resolveMarketData(price, volume);
@@ -175,8 +184,7 @@ public class StockService {
                 .build();
     }
 
-    private BigDecimal resolveBuyableCash(User user) {
-        Long teamId = parseTeamId(user);
+    private BigDecimal resolveBuyableCash(Long teamId) {
         if (teamId == null) {
             return null;
         }
@@ -192,12 +200,11 @@ public class StockService {
         return buyableCash.divideToIntegralValue(currentPrice).intValue();
     }
 
-    private MyHoldingDTO resolveMyHolding(User user, String code, StockPriceDTO price) {
+    private MyHoldingDTO resolveMyHolding(User user, String code, StockPriceDTO price, Long teamId) {
         if (user == null) {
             return null;
         }
         BigDecimal currentPrice = price.getCurrentPrice() != null ? price.getCurrentPrice() : BigDecimal.ZERO;
-        Long teamId = parseTeamId(user);
         if (teamId != null) {
             Optional<TeamHolding> teamOpt = teamHoldingRepository.findByTeamIdAndStockCode(teamId, code);
             if (teamOpt.isPresent()) {
@@ -207,6 +214,36 @@ public class StockService {
         return holdingRepository.findByUser_IdAndStockCode(user.getId(), code)
                 .map(holding -> toMyHolding(holding.getQuantity(), holding.getAveragePurchasePrice(), currentPrice))
                 .orElse(null);
+    }
+
+    private Long resolveTeamId(User user, String roomId) {
+        Long requestedRoomId = parseRoomId(roomId);
+        if (requestedRoomId != null) {
+            if (user == null || user.getId() == null) {
+                throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
+            }
+            if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(requestedRoomId, user.getId())) {
+                throw new ApiException("해당 방의 참가자만 방 보유 현황을 조회할 수 있습니다.", HttpStatus.FORBIDDEN);
+            }
+            return requestedRoomId;
+        }
+        return parseTeamId(user);
+    }
+
+    private Long parseRoomId(String roomId) {
+        if (roomId == null || roomId.isBlank()) {
+            return null;
+        }
+        String normalized = roomId.trim();
+        if (normalized.startsWith("room-")) {
+            normalized = normalized.substring("room-".length());
+        }
+        try {
+            Long parsed = Long.parseLong(normalized);
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException e) {
+            throw new ApiException("roomId 형식이 올바르지 않습니다.", HttpStatus.BAD_REQUEST);
+        }
     }
 
     private MarketDataDTO resolveMarketData(StockPriceDTO price, Long volume) {

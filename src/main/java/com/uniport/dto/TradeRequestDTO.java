@@ -19,6 +19,8 @@ public class TradeRequestDTO {
     private String side;            // "buy" | "sell"
     private Integer quantity;
     private BigDecimal pricePerShare;
+    /** 매칭방 ID. 여러 방에 참여 중일 때는 이 값으로 투자 컨텍스트를 명시한다. */
+    private String roomId;
     private String reason;
     private List<String> tags;
 }

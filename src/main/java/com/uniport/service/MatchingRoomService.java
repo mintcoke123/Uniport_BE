@@ -145,15 +145,14 @@ public class MatchingRoomService {
     public Map<String, Object> create(String name, String visibility, Integer capacity,
                                       String matchType, String marketType, List<Long> inviteeUserIds,
                                       Long competitionId, User creator) {
-        if (creator != null && creator.getId() != null && hasActiveMembership(creator.getId())) {
-            throw new ApiException("이미 참여 중인 방이 있습니다. 새 방을 만들려면 먼저 현재 방에서 나가야 합니다.", HttpStatus.BAD_REQUEST);
-        }
-
         String vis = normalizeVisibility(visibility);
         int cap = (capacity != null && capacity >= 1 && capacity <= 10) ? capacity : 3;
         String resolvedMatchType = normalizeMatchType(matchType);
         String resolvedMarketType = normalizeMarketType(marketType);
         Long resolvedCompetitionId = validateTournamentMatchingContext(competitionId, creator, resolvedMatchType, cap);
+        if (findActiveTournamentRoom(creator, resolvedCompetitionId) != null) {
+            throw new ApiException("이미 해당 대회에 참여 중인 방이 있습니다.", HttpStatus.BAD_REQUEST);
+        }
 
         MatchingRoom room = MatchingRoom.create(name, cap);
         room.setVisibility(vis);
@@ -214,8 +213,7 @@ public class MatchingRoomService {
         }
 
         matchingRoomMemberRepository.deleteByMatchingRoomIdAndUserId(room.getId(), user.getId());
-        user.setTeamId(null);
-        userRepository.save(user);
+        refreshLegacyTeamId(user);
 
         int newCount = (int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
         room.setMemberCount(newCount);
@@ -388,9 +386,6 @@ public class MatchingRoomService {
                             "detail", getRoomDetail(toApiId(activeTournamentRoom.getId()), creator)
                     );
                 }
-                if (creator != null && creator.getId() != null && hasActiveMembership(creator.getId())) {
-                    throw new ApiException("You are already participating in another room.", HttpStatus.BAD_REQUEST);
-                }
                 MatchingRoom joinableRoom = findJoinableRandomRoom(resolvedMarketType, resolvedCompetitionId);
                 if (joinableRoom != null) {
                     Map<String, Object> joined = doJoin(joinableRoom, creator);
@@ -487,8 +482,8 @@ public class MatchingRoomService {
         matchingRoomMemberRepository.deleteByMatchingRoomIdAndUserId(room.getId(), userId);
         User kickedUser = userRepository.findById(userId).orElse(null);
         if (kickedUser != null) {
-            kickedUser.setTeamId(null);
-            userRepository.saveAndFlush(kickedUser);
+            refreshLegacyTeamId(kickedUser);
+            userRepository.flush();
         }
 
         int newCount = (int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
@@ -505,6 +500,7 @@ public class MatchingRoomService {
         if (matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())) {
             throw new ApiException("이미 참여 중인 방입니다.", HttpStatus.BAD_REQUEST);
         }
+        assertJoinableTournamentRoom(room, user);
 
         long currentCount = matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
         if (currentCount >= room.getCapacity()) {
@@ -559,10 +555,9 @@ public class MatchingRoomService {
                 throw new ApiException("방장과 친구 관계인 사용자만 초대할 수 있습니다.", HttpStatus.BAD_REQUEST);
             }
 
-            boolean joinedOtherRoom = findActiveMemberships(invitee.getId()).stream()
-                    .anyMatch(member -> !room.getId().equals(member.getMatchingRoom().getId()));
-            if (joinedOtherRoom) {
-                throw new ApiException("이미 다른 매칭방에 참가 중인 사용자가 포함되어 있습니다.", HttpStatus.BAD_REQUEST);
+            MatchingRoom activeTournamentRoom = findActiveTournamentRoom(invitee, room.getCompetitionId());
+            if (activeTournamentRoom != null && !room.getId().equals(activeTournamentRoom.getId())) {
+                throw new ApiException("이미 해당 대회에 참여 중인 사용자가 포함되어 있습니다.", HttpStatus.BAD_REQUEST);
             }
 
             usersToAdd.add(invitee);
@@ -648,8 +643,29 @@ public class MatchingRoomService {
         return competitionId;
     }
 
-    private boolean hasActiveMembership(Long userId) {
-        return !findActiveMemberships(userId).isEmpty();
+    private void assertJoinableTournamentRoom(MatchingRoom room, User user) {
+        if (room == null || room.getCompetitionId() == null) {
+            return;
+        }
+        validateTournamentMatchingContext(room.getCompetitionId(), user, room.getMatchType(), room.getCapacity());
+        MatchingRoom activeTournamentRoom = findActiveTournamentRoom(user, room.getCompetitionId());
+        if (activeTournamentRoom != null && !Objects.equals(activeTournamentRoom.getId(), room.getId())) {
+            throw new ApiException("이미 해당 대회에 참여 중인 방이 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private void refreshLegacyTeamId(User user) {
+        if (user == null || user.getId() == null) {
+            return;
+        }
+        String nextTeamId = findActiveMemberships(user.getId()).stream()
+                .map(MatchingRoomMember::getMatchingRoom)
+                .filter(room -> room != null && "started".equalsIgnoreCase(room.getStatus()))
+                .map(room -> "team-" + room.getId())
+                .findFirst()
+                .orElse(null);
+        user.setTeamId(nextTeamId);
+        userRepository.save(user);
     }
 
     private List<MatchingRoomMember> findActiveMemberships(Long userId) {

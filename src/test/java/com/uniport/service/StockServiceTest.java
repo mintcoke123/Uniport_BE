@@ -7,8 +7,10 @@ import com.uniport.dto.StockVisualDTO;
 import com.uniport.entity.ManagedNewsArticle;
 import com.uniport.entity.StockMaster;
 import com.uniport.entity.TeamAccount;
+import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
 import com.uniport.repository.HoldingRepository;
+import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.StockMasterRepository;
 import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
@@ -32,6 +34,8 @@ class StockServiceTest {
     private KisApiService kisApiService;
     private StockMasterRepository stockMasterRepository;
     private TeamAccountRepository teamAccountRepository;
+    private TeamHoldingRepository teamHoldingRepository;
+    private MatchingRoomMemberRepository matchingRoomMemberRepository;
     private ManagedStockNewsService managedStockNewsService;
     private CommunityService communityService;
     private StockVisualAssetResolver stockVisualAssetResolver;
@@ -43,6 +47,8 @@ class StockServiceTest {
         kisApiService = mock(KisApiService.class);
         stockMasterRepository = mock(StockMasterRepository.class);
         teamAccountRepository = mock(TeamAccountRepository.class);
+        teamHoldingRepository = mock(TeamHoldingRepository.class);
+        matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
         managedStockNewsService = mock(ManagedStockNewsService.class);
         communityService = mock(CommunityService.class);
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
@@ -51,8 +57,9 @@ class StockServiceTest {
         stockService = new StockService(
                 kisApiService,
                 mock(HoldingRepository.class),
-                mock(TeamHoldingRepository.class),
+                teamHoldingRepository,
                 teamAccountRepository,
+                matchingRoomMemberRepository,
                 mock(KisWsSubscriptionManager.class),
                 stockMasterRepository,
                 managedStockNewsService,
@@ -90,6 +97,51 @@ class StockServiceTest {
         assertEquals("KOSPI", response.getMarket());
         assertEquals("삼성", response.getVisual().getText());
         assertEquals("FALLBACK_SYMBOL", response.getVisual().getType());
+    }
+
+    @Test
+    void getStockDetail_usesExplicitRoomContextForCashAndHolding() {
+        StockPriceDTO price = StockPriceDTO.builder()
+                .stockCode("005930")
+                .stockName("삼성전자")
+                .currentPrice(new BigDecimal("70000"))
+                .changeAmount(new BigDecimal("1000"))
+                .changeRate(new BigDecimal("1.45"))
+                .volume(1000L)
+                .build();
+        StockMaster master = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+        when(kisApiService.getStockQuote("005930")).thenReturn(price);
+        when(stockMasterRepository.findById("005930")).thenReturn(Optional.of(master));
+        when(managedStockNewsService.getNewsForStock("005930", "삼성전자", 3)).thenReturn(List.of());
+        when(communityService.getInvestorSentiment("005930")).thenReturn(InvestorSentimentDTO.builder().build());
+        when(communityService.getDiscussionCount("005930")).thenReturn(0);
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(77L, 5L)).thenReturn(true);
+        when(teamAccountRepository.findByTeamId(77L)).thenReturn(Optional.of(
+                TeamAccount.builder().teamId(77L).cashBalance(new BigDecimal("700000")).build()
+        ));
+        when(teamHoldingRepository.findByTeamIdAndStockCode(77L, "005930")).thenReturn(Optional.of(
+                TeamHolding.builder()
+                        .teamId(77L)
+                        .stockCode("005930")
+                        .quantity(3)
+                        .averagePurchasePrice(new BigDecimal("65000"))
+                        .build()
+        ));
+
+        StockDetailDTO response = stockService.getStockDetail(
+                5930L,
+                User.builder().id(5L).teamId("team-88").build(),
+                "room-77"
+        );
+
+        assertEquals(new BigDecimal("700000"), response.getBuyableCash());
+        assertEquals(10, response.getBuyableQuantity());
+        assertEquals(3, response.getMyHolding().getQuantity());
     }
 
     @Test

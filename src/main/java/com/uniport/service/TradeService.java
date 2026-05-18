@@ -2,20 +2,23 @@ package com.uniport.service;
 
 import com.uniport.dto.OrderResponseDTO;
 import com.uniport.dto.PlaceOrderRequestDTO;
+import com.uniport.dto.StockVisualDTO;
 import com.uniport.dto.TradeRequestDTO;
 import com.uniport.dto.TradeResponseDTO;
-import com.uniport.dto.StockVisualDTO;
+import com.uniport.entity.MatchingRoom;
+import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.Order;
-import com.uniport.entity.OrderType;
 import com.uniport.entity.OrderStatus;
+import com.uniport.entity.OrderType;
 import com.uniport.entity.TeamAccount;
 import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
-import org.springframework.http.HttpStatus;
+import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.OrderRepository;
 import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +47,7 @@ public class TradeService {
     private final TeamAccountRepository teamAccountRepository;
     private final TeamHoldingRepository teamHoldingRepository;
     private final ChatService chatService;
+    private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
 
@@ -51,6 +55,7 @@ public class TradeService {
                         TeamAccountRepository teamAccountRepository,
                         TeamHoldingRepository teamHoldingRepository,
                         ChatService chatService,
+                        MatchingRoomMemberRepository matchingRoomMemberRepository,
                         StockVisualAssetResolver stockVisualAssetResolver,
                         StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.orderRepository = orderRepository;
@@ -58,6 +63,7 @@ public class TradeService {
         this.teamAccountRepository = teamAccountRepository;
         this.teamHoldingRepository = teamHoldingRepository;
         this.chatService = chatService;
+        this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
@@ -264,7 +270,8 @@ public class TradeService {
                 .price(request.getPricePerShare())
                 .orderType(type)
                 .build();
-        OrderResponseDTO result = placeOrder(place, user);
+        Long roomTeamId = resolveTradeRoomId(request.getRoomId(), user);
+        OrderResponseDTO result = placeOrderForTeam(place, roomTeamId, user);
 
         String executedAt = result.getOrderDate() != null
                 ? result.getOrderDate().format(DateTimeFormatter.ISO_DATE_TIME)
@@ -281,6 +288,58 @@ public class TradeService {
     public List<OrderResponseDTO> getOrders(User user) {
         List<Order> orders = orderRepository.findByUser_IdOrderByOrderDateDesc(user.getId());
         return orders.stream().map(this::toOrderResponseDTO).collect(Collectors.toList());
+    }
+
+    private Long resolveTradeRoomId(String roomId, User user) {
+        Long requestedRoomId = parseRoomId(roomId);
+        if (requestedRoomId != null) {
+            assertRoomMember(requestedRoomId, user);
+            return requestedRoomId;
+        }
+        if (user == null || user.getId() == null) {
+            throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
+        }
+        List<Long> startedRoomIds = matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(user.getId()).stream()
+                .map(MatchingRoomMember::getMatchingRoom)
+                .filter(room -> room != null && "started".equalsIgnoreCase(room.getStatus()))
+                .map(MatchingRoom::getId)
+                .toList();
+        if (startedRoomIds.size() > 1) {
+            throw new ApiException("여러 방에 참여 중입니다. 거래할 roomId를 지정해 주세요.", HttpStatus.BAD_REQUEST);
+        }
+        if (startedRoomIds.size() == 1) {
+            return startedRoomIds.get(0);
+        }
+        Long legacyTeamId = parseTeamId(user);
+        if (legacyTeamId == null) {
+            throw new ApiException("팀에 소속된 후 거래할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+        return legacyTeamId;
+    }
+
+    private void assertRoomMember(Long roomId, User user) {
+        if (user == null || user.getId() == null) {
+            throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
+        }
+        if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(roomId, user.getId())) {
+            throw new ApiException("해당 방의 참가자만 거래할 수 있습니다.", HttpStatus.FORBIDDEN);
+        }
+    }
+
+    private Long parseRoomId(String roomId) {
+        if (roomId == null || roomId.isBlank()) {
+            return null;
+        }
+        String normalized = roomId.trim();
+        if (normalized.startsWith("room-")) {
+            normalized = normalized.substring("room-".length());
+        }
+        try {
+            Long parsed = Long.parseLong(normalized);
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException e) {
+            throw new ApiException("roomId 형식이 올바르지 않습니다.", HttpStatus.BAD_REQUEST);
+        }
     }
 
     @Transactional
