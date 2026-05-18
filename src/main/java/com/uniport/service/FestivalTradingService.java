@@ -29,6 +29,11 @@ public class FestivalTradingService {
 
     private static final BigDecimal START_CASH = new BigDecimal("100000000");
     private static final BigDecimal QUALIFIED_RETURN_RATE = new BigDecimal("2.0");
+    private static final String QUALIFIED_PRIZE = "키링";
+    private static final String PARTICIPATION_PRIZE = "간식";
+    private static final String FIRST_PRIZE = "상품권 3만 원";
+    private static final String SECOND_PRIZE = "상품권 1만 원";
+    private static final String THIRD_PRIZE = "커피 쿠폰";
 
     private final FestivalTradingSessionRepository sessionRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -119,8 +124,8 @@ public class FestivalTradingService {
         session.setUnfilledOrderCount(request.getUnfilledOrderCount() != null ? Math.max(0, request.getUnfilledOrderCount()) : 0);
         session.setHoldingsSnapshotJson(writeJson(request.getHoldingsSnapshot()));
         session.setTradeHistoryJson(writeJson(request.getTradeHistory()));
-        session.setBasePrize(null);
-        session.setFinalPrize(null);
+        session.setBasePrize(resolveBasePrize(returnRate));
+        session.setFinalPrize(session.getBasePrize());
         session.setEndedAt(LocalDateTime.now());
         sessionRepository.save(session);
 
@@ -130,6 +135,9 @@ public class FestivalTradingService {
                 .map(FestivalLeaderboardItemDTO::getRank)
                 .findFirst()
                 .orElse(null);
+        String finalPrize = resolveFinalPrize(currentRank, session.getBasePrize());
+        session.setFinalPrize(finalPrize);
+        sessionRepository.save(session);
 
         return FestivalSessionCompleteResponseDTO.builder()
                 .sessionId(session.getId())
@@ -137,8 +145,8 @@ public class FestivalTradingService {
                 .startCash(session.getStartCash())
                 .endTotalValue(session.getEndTotalValue())
                 .returnRate(session.getReturnRate())
-                .basePrize(null)
-                .finalPrize(null)
+                .basePrize(session.getBasePrize())
+                .finalPrize(finalPrize)
                 .currentRank(currentRank)
                 .leaderboard(leaderboard)
                 .build();
@@ -227,7 +235,7 @@ public class FestivalTradingService {
                     .mainStockName(session.getMainStockName())
                     .endTotalValue(session.getEndTotalValue())
                     .returnRate(session.getReturnRate())
-                    .prize(null)
+                    .prize(resolveFinalPrize(i + 1, resolveBasePrize(session.getReturnRate())))
                     .endedAt(session.getEndedAt())
                     .build());
         }
@@ -274,6 +282,25 @@ public class FestivalTradingService {
         return endTotalValue.subtract(START_CASH)
                 .multiply(BigDecimal.valueOf(100))
                 .divide(START_CASH, 4, RoundingMode.HALF_UP);
+    }
+
+    private String resolveBasePrize(BigDecimal returnRate) {
+        if (returnRate != null && returnRate.compareTo(QUALIFIED_RETURN_RATE) >= 0) {
+            return QUALIFIED_PRIZE;
+        }
+        return PARTICIPATION_PRIZE;
+    }
+
+    private String resolveFinalPrize(Integer rank, String basePrize) {
+        if (rank == null) {
+            return basePrize;
+        }
+        return switch (rank) {
+            case 1 -> FIRST_PRIZE;
+            case 2 -> SECOND_PRIZE;
+            case 3 -> THIRD_PRIZE;
+            default -> basePrize;
+        };
     }
 
     private String requireText(String value, String fieldName) {
