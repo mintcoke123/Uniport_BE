@@ -3,13 +3,17 @@ package com.uniport.service;
 import com.uniport.entity.Competition;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.CompetitionRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,10 +24,19 @@ import java.util.Optional;
 @Service
 public class CompetitionService {
 
-    private final CompetitionRepository competitionRepository;
+    public static final ZoneId COMPETITION_ZONE = ZoneId.of("Asia/Seoul");
 
+    private final CompetitionRepository competitionRepository;
+    private final Clock clock;
+
+    @Autowired
     public CompetitionService(CompetitionRepository competitionRepository) {
+        this(competitionRepository, Clock.system(COMPETITION_ZONE));
+    }
+
+    CompetitionService(CompetitionRepository competitionRepository, Clock clock) {
         this.competitionRepository = competitionRepository;
+        this.clock = clock;
     }
 
     public List<Competition> findAll() {
@@ -36,21 +49,18 @@ public class CompetitionService {
     }
 
     public List<Competition> findByStatus(String status) {
-        return competitionRepository.findByStatusOrderByStartDateAsc(status);
+        String normalizedStatus = normalizeStatus(status);
+        return competitionRepository.findAll().stream()
+                .filter(competition -> normalizedStatus.equals(resolveStatus(competition)))
+                .sorted(Comparator.comparing(
+                        Competition::getStartDate,
+                        Comparator.nullsLast(String::compareTo)
+                ))
+                .toList();
     }
 
     public Optional<Competition> findActiveCompetition() {
-        LocalDateTime now = LocalDateTime.now();
-        List<Competition> competitions = competitionRepository.findAll();
-        return competitions.stream()
-                .filter(competition -> !"ended".equals(competition.getStatus()))
-                .filter(competition -> isWithinCompetitionWindow(competition, now))
-                .findFirst()
-                .or(() -> competitionRepository.findFirstByStatusOrderByStartDateAsc("ongoing")
-                        .filter(competition -> {
-                            LocalDateTime end = parseDateTime(competition.getEndDate());
-                            return end == null || now.isBefore(end);
-                        }));
+        return findByStatus("ongoing").stream().findFirst();
     }
 
     @Transactional
@@ -89,14 +99,32 @@ public class CompetitionService {
                 "name", c.getName(),
                 "startDate", c.getStartDate(),
                 "endDate", c.getEndDate(),
-                "status", c.getStatus() != null ? c.getStatus() : "upcoming"
+                "status", resolveStatus(c)
         );
     }
 
-    private boolean isWithinCompetitionWindow(Competition competition, LocalDateTime now) {
+    public String resolveStatus(Competition competition) {
+        if (competition == null) {
+            return "upcoming";
+        }
+        String storedStatus = normalizeStatus(competition.getStatus());
+        if ("ended".equals(storedStatus)) {
+            return "ended";
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime start = parseDateTime(competition.getStartDate());
         LocalDateTime end = parseDateTime(competition.getEndDate());
-        return start != null && end != null && !now.isBefore(start) && now.isBefore(end);
+        if (end != null && !now.isBefore(end)) {
+            return "ended";
+        }
+        if (start != null && now.isBefore(start)) {
+            return "upcoming";
+        }
+        if (start != null && (end == null || now.isBefore(end))) {
+            return "ongoing";
+        }
+        return storedStatus;
     }
 
     private LocalDateTime parseDateTime(String value) {
@@ -110,13 +138,24 @@ public class CompetitionService {
         }
     }
 
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "upcoming";
+        }
+        String normalized = status.toLowerCase();
+        if ("ongoing".equals(normalized) || "upcoming".equals(normalized) || "ended".equals(normalized)) {
+            return normalized;
+        }
+        return "upcoming";
+    }
+
     /** endDate 문자열에서 날짜만 추출해 남은 일수 계산 (날짜만 비교). */
     public int daysRemaining(String endDate) {
         if (endDate == null || endDate.isBlank()) return 0;
         try {
             String datePart = endDate.length() >= 10 ? endDate.substring(0, 10) : endDate;
             LocalDate end = LocalDate.parse(datePart);
-            return (int) java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), end);
+            return (int) java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(clock), end);
         } catch (Exception e) {
             return 0;
         }

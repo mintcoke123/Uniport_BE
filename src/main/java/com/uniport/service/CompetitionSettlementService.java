@@ -126,7 +126,7 @@ public class CompetitionSettlementService {
 
     @Transactional
     public int settleExpiredCompetitions() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(CompetitionService.COMPETITION_ZONE);
         int settled = 0;
         for (Competition competition : competitionRepository.findAll()) {
             if ("ended".equals(competition.getStatus())) {

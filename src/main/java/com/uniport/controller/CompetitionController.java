@@ -107,7 +107,7 @@ public class CompetitionController {
         Map<String, Object> body = new HashMap<>();
         body.put("competitionId", competition.getId());
         body.put("name", competition.getName());
-        body.put("status", competition.getStatus() != null ? competition.getStatus().toUpperCase() : "UPCOMING");
+        body.put("status", competitionService.resolveStatus(competition).toUpperCase());
         body.put("participantTeamCount", teams.size());
         body.put("remainingTime", buildRemainingTime(competition.getEndDate()));
         body.put("summaryCards", List.of(
@@ -186,7 +186,7 @@ public class CompetitionController {
     private Map<String, Object> buildRemainingTime(String endDate) {
         try {
             LocalDateTime end = LocalDateTime.parse(endDate);
-            Duration duration = Duration.between(LocalDateTime.now(), end);
+            Duration duration = Duration.between(LocalDateTime.now(CompetitionService.COMPETITION_ZONE), end);
             long totalSeconds = Math.max(0, duration.getSeconds());
             long days = totalSeconds / 86400;
             long hours = (totalSeconds % 86400) / 3600;
