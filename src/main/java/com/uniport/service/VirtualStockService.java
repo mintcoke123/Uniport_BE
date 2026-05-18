@@ -20,7 +20,7 @@ public class VirtualStockService {
 
     private static final BigDecimal BASE_PRICE = new BigDecimal("1000000");
     private static final BigDecimal AMPLITUDE = new BigDecimal("200000");
-    private static final long PERIOD_MILLIS = 60_000L;
+    private static final long PERIOD_MILLIS = 5 * 60_000L;
 
     public boolean isVirtualStockCode(String stockCode) {
         return stockCode != null && CODE.equals(normalizeCode(stockCode));

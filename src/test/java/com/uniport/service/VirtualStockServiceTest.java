@@ -10,14 +10,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class VirtualStockServiceTest {
 
     @Test
-    void priceAtMillis_followsOneMinuteSineWaveWithTwoHundredThousandAmplitude() {
+    void priceAtMillis_followsFiveMinuteSineWaveWithTwoHundredThousandAmplitude() {
         VirtualStockService service = new VirtualStockService();
 
         assertEquals(new BigDecimal("1000000"), service.priceAtMillis(0L));
-        assertEquals(new BigDecimal("1200000"), service.priceAtMillis(15_000L));
-        assertEquals(new BigDecimal("1000000"), service.priceAtMillis(30_000L));
-        assertEquals(new BigDecimal("800000"), service.priceAtMillis(45_000L));
-        assertEquals(new BigDecimal("1000000"), service.priceAtMillis(60_000L));
+        assertEquals(new BigDecimal("1190211"), service.priceAtMillis(60_000L));
+        assertEquals(new BigDecimal("1200000"), service.priceAtMillis(75_000L));
+        assertEquals(new BigDecimal("1000000"), service.priceAtMillis(150_000L));
+        assertEquals(new BigDecimal("800000"), service.priceAtMillis(225_000L));
+        assertEquals(new BigDecimal("1000000"), service.priceAtMillis(300_000L));
     }
 
     @Test
