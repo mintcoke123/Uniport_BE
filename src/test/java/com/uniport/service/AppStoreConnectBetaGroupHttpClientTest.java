@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,7 @@ class AppStoreConnectBetaGroupHttpClientTest {
         AppStoreConnectTokenProvider tokenProvider = mock(AppStoreConnectTokenProvider.class);
         when(tokenProvider.createToken()).thenReturn("jwt-token");
         when(restTemplate.exchange(
-                eq("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com"),
+                eq(URI.create("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com")),
                 eq(HttpMethod.GET),
                 org.mockito.ArgumentMatchers.any(HttpEntity.class),
                 eq(Map.class)
@@ -87,7 +88,7 @@ class AppStoreConnectBetaGroupHttpClientTest {
         AppStoreConnectTokenProvider tokenProvider = mock(AppStoreConnectTokenProvider.class);
         when(tokenProvider.createToken()).thenReturn("jwt-token");
         when(restTemplate.exchange(
-                eq("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com"),
+                eq(URI.create("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com")),
                 eq(HttpMethod.GET),
                 org.mockito.ArgumentMatchers.any(HttpEntity.class),
                 eq(Map.class)
@@ -128,7 +129,7 @@ class AppStoreConnectBetaGroupHttpClientTest {
         AppStoreConnectTokenProvider tokenProvider = mock(AppStoreConnectTokenProvider.class);
         when(tokenProvider.createToken()).thenReturn("jwt-token");
         when(restTemplate.exchange(
-                eq("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com"),
+                eq(URI.create("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com")),
                 eq(HttpMethod.GET),
                 org.mockito.ArgumentMatchers.any(HttpEntity.class),
                 eq(Map.class)
@@ -185,7 +186,7 @@ class AppStoreConnectBetaGroupHttpClientTest {
         AppStoreConnectTokenProvider tokenProvider = mock(AppStoreConnectTokenProvider.class);
         when(tokenProvider.createToken()).thenReturn("jwt-token");
         when(restTemplate.exchange(
-                eq("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com"),
+                eq(URI.create("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com")),
                 eq(HttpMethod.GET),
                 org.mockito.ArgumentMatchers.any(HttpEntity.class),
                 eq(Map.class)

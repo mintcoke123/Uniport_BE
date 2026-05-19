@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -58,7 +59,7 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
         try {
             HttpEntity<Void> getEntity = new HttpEntity<>(headers());
             ResponseEntity<Map> testerResponse = restTemplate.exchange(
-                    betaTesterUrl(email),
+                    betaTesterUri(email),
                     HttpMethod.GET,
                     getEntity,
                     Map.class
@@ -211,9 +212,9 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
         return headers;
     }
 
-    private String betaTesterUrl(String email) {
-        return baseUrl + "/v1/betaTesters?filter%5Bemail%5D="
-                + URLEncoder.encode(email, StandardCharsets.UTF_8);
+    private URI betaTesterUri(String email) {
+        return URI.create(baseUrl + "/v1/betaTesters?filter%5Bemail%5D="
+                + URLEncoder.encode(email, StandardCharsets.UTF_8));
     }
 
     private static String trimToEmpty(String value) {
