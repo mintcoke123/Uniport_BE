@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -427,6 +429,50 @@ public class MatchingRoomService {
                 );
             }
         };
+    }
+
+    @Transactional
+    public List<MatchingRoom> createStartedTournamentRooms(com.uniport.entity.Competition competition, List<User> applicants) {
+        if (competition == null || competition.getId() == null || applicants == null || applicants.isEmpty()) {
+            return List.of();
+        }
+
+        List<User> eligibleApplicants = applicants.stream()
+                .filter(Objects::nonNull)
+                .filter(user -> user.getId() != null)
+                .filter(user -> !matchingRoomMemberRepository.existsByUserIdAndMatchingRoom_CompetitionId(
+                        user.getId(),
+                        competition.getId()
+                ))
+                .distinct()
+                .toList();
+
+        List<MatchingRoom> createdRooms = new ArrayList<>();
+        for (int start = 0; start < eligibleApplicants.size(); start += 3) {
+            List<User> members = eligibleApplicants.subList(start, Math.min(start + 3, eligibleApplicants.size()));
+            int capacity = Math.max(1, members.size());
+            MatchingRoom room = MatchingRoom.create(competition.getName() + " 토너먼트", capacity);
+            room.setVisibility(VISIBILITY_PRIVATE);
+            room.setMatchType("RANDOM");
+            room.setMarketType("KR");
+            room.setCompetitionId(competition.getId());
+            room.setStatus("started");
+            room.setEndedAt(resolveTournamentRoomEndAt(competition));
+            room = matchingRoomRepository.save(room);
+
+            room.setInviteCode(generateUniqueInviteCode());
+            room = matchingRoomRepository.save(room);
+
+            for (User member : members) {
+                matchingRoomMemberRepository.save(MatchingRoomMember.of(room, member));
+                member.setTeamId("team-" + room.getId());
+                userRepository.save(member);
+            }
+            room.setMemberCount((int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId()));
+            room = matchingRoomRepository.save(room);
+            createdRooms.add(room);
+        }
+        return createdRooms;
     }
 
     public Map<String, Object> getRoomDetail(String roomId, User currentUser) {
@@ -910,6 +956,19 @@ public class MatchingRoomService {
     private static String normalizeMarketType(String marketType) {
         String resolved = marketType != null ? marketType.trim().toUpperCase() : "KR";
         return ("KR".equals(resolved) || "US".equals(resolved)) ? resolved : "KR";
+    }
+
+    private static Instant resolveTournamentRoomEndAt(com.uniport.entity.Competition competition) {
+        if (competition == null || competition.getEndDate() == null || competition.getEndDate().isBlank()) {
+            return Instant.now().plus(MOCK_INVESTMENT_SESSION_DURATION);
+        }
+        try {
+            return LocalDateTime.parse(competition.getEndDate())
+                    .atZone(CompetitionService.COMPETITION_ZONE)
+                    .toInstant();
+        } catch (DateTimeParseException e) {
+            return Instant.now().plus(MOCK_INVESTMENT_SESSION_DURATION);
+        }
     }
 
     private static String marketLabel(String marketType) {

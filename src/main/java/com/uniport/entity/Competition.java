@@ -25,6 +25,11 @@ import java.time.Instant;
 @Builder
 public class Competition {
 
+    public static final String MATCHING_STATUS_PENDING = "PENDING";
+    public static final String MATCHING_STATUS_PROCESSING = "PROCESSING";
+    public static final String MATCHING_STATUS_COMPLETED = "COMPLETED";
+    public static final String MATCHING_STATUS_FAILED = "FAILED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -44,6 +49,19 @@ public class Competition {
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String status = "upcoming";
+
+    @Column(name = "matching_status", length = 20)
+    @Builder.Default
+    private String matchingStatus = MATCHING_STATUS_PENDING;
+
+    @Column(name = "matching_started_at")
+    private Instant matchingStartedAt;
+
+    @Column(name = "matching_completed_at")
+    private Instant matchingCompletedAt;
+
+    @Column(name = "matching_error_message", length = 1000)
+    private String matchingErrorMessage;
 
     @Column(name = "start_notification_sent_at")
     private Instant startNotificationSentAt;

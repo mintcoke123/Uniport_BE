@@ -60,6 +60,9 @@ public class CompetitionStartNotificationService {
             if (!"ongoing".equals(competitionService.resolveStatus(competition))) {
                 continue;
             }
+            if (!Competition.MATCHING_STATUS_COMPLETED.equals(competition.getMatchingStatus())) {
+                continue;
+            }
 
             List<Long> recipientUserIds = applicationRepository.findByCompetition_IdAndStatus(competition.getId(), "APPLIED")
                     .stream()

@@ -34,6 +34,7 @@ class CompetitionStartNotificationServiceTest {
                 .startDate("2026-05-19T00:00:00")
                 .endDate("2026-05-20T23:59:59")
                 .status("upcoming")
+                .matchingStatus(Competition.MATCHING_STATUS_COMPLETED)
                 .build();
         User first = User.builder().id(7L).build();
         User second = User.builder().id(8L).build();
