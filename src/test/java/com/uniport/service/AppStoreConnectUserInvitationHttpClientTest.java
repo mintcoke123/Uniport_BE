@@ -5,8 +5,10 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -67,5 +69,38 @@ class AppStoreConnectUserInvitationHttpClientTest {
         assertEquals("1234567890", visibleAppData.get(0).get("id"));
         assertTrue(result.sent());
         assertEquals("invitation-1", result.invitationId());
+    }
+
+    @Test
+    void inviteUserTreatsDuplicateInvitationAsSentSoGroupSyncCanContinue() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        AppStoreConnectTokenProvider tokenProvider = mock(AppStoreConnectTokenProvider.class);
+        when(tokenProvider.createToken()).thenReturn("jwt-token");
+        when(restTemplate.exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/userInvitations"),
+                eq(HttpMethod.POST),
+                org.mockito.ArgumentMatchers.any(HttpEntity.class),
+                eq(Map.class)
+        )).thenThrow(new HttpClientErrorException(
+                org.springframework.http.HttpStatus.CONFLICT,
+                "Conflict",
+                "{}".getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8
+        ));
+        AppStoreConnectUserInvitationHttpClient client = new AppStoreConnectUserInvitationHttpClient(
+                restTemplate,
+                tokenProvider,
+                true,
+                "1234567890",
+                "MARKETING",
+                "https://api.appstoreconnect.apple.com"
+        );
+
+        AppStoreConnectUserInvitationResult result = client.inviteUser(
+                new AppStoreConnectUserInvitationRequest("김유니", "ios@example.com")
+        );
+
+        assertTrue(result.sent());
+        assertTrue(result.duplicate());
     }
 }

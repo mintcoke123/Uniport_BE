@@ -64,4 +64,16 @@ public class BetaIosApplication extends AuditableEntity {
 
     @Column(name = "invited_at")
     private LocalDateTime invitedAt;
+
+    @Column(name = "beta_tester_id", length = 120)
+    private String betaTesterId;
+
+    @Column(name = "testflight_group_id", length = 120)
+    private String testflightGroupId;
+
+    @Column(name = "testflight_group_failure_message", length = 1000)
+    private String testflightGroupFailureMessage;
+
+    @Column(name = "testflight_group_added_at")
+    private LocalDateTime testflightGroupAddedAt;
 }

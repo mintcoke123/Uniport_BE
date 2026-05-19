@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -63,6 +64,9 @@ public class AppStoreConnectUserInvitationHttpClient implements AppStoreConnectU
             String invitationId = data != null ? String.valueOf(data.get("id")) : null;
             return AppStoreConnectUserInvitationResult.sent(invitationId);
         } catch (RestClientResponseException e) {
+            if (e.getStatusCode() == HttpStatus.CONFLICT) {
+                return AppStoreConnectUserInvitationResult.duplicate("App Store Connect user invitation already exists.");
+            }
             return AppStoreConnectUserInvitationResult.failed("App Store Connect invitation failed: " + e.getStatusCode());
         } catch (RestClientException | IllegalStateException e) {
             return AppStoreConnectUserInvitationResult.failed("App Store Connect invitation failed: " + e.getMessage());
