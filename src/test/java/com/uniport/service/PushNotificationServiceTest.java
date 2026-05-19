@@ -413,8 +413,8 @@ class PushNotificationServiceTest {
         assertEquals(1, sender.messages.size());
         PushMessage message = sender.messages.getFirst();
         assertEquals("tournament-token", message.getToken());
-        assertEquals("토너먼트가 시작되었습니다!", message.getTitle());
-        assertTrue(message.getBody().contains("세종대 대축제"));
+        assertEquals("토너먼트 팀 배정 완료!", message.getTitle());
+        assertEquals("세종대 대축제 토너먼트가 시작됐어요. 배정된 팀 채팅방으로 이동해 보세요.", message.getBody());
         assertEquals("tournament_started", message.getData().get("type"));
         assertEquals("55", message.getData().get("entityId"));
         assertEquals("55", message.getData().get("competitionId"));

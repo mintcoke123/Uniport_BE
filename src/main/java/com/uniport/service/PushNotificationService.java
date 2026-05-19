@@ -309,8 +309,8 @@ public class PushNotificationService {
         String competitionId = String.valueOf(competition.getId());
         sendToUsers(
                 recipientUserIds,
-                "토너먼트가 시작되었습니다!",
-                competitionName + " 토너먼트가 시작됐어요. 지금 팀 매칭을 시작해 보세요.",
+                "토너먼트 팀 배정 완료!",
+                competitionName + " 토너먼트가 시작됐어요. 배정된 팀 채팅방으로 이동해 보세요.",
                 Map.of(
                         "type", "tournament_started",
                         "deeplink", publicBaseUrl + "/tournament?competitionId=" + competitionId,
