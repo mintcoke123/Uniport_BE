@@ -34,7 +34,7 @@ logging:
 app:
   public-base-url: ${APP_PUBLIC_BASE_URL:${APP_FRIEND_INVITE_BASE_URL:https://uniportbe-production.up.railway.app}}
   beta:
-    android-invite-url: ${APP_BETA_ANDROID_INVITE_URL:}
+    android-invite-url: ${APP_BETA_ANDROID_INVITE_URL:https://appdistribution.firebase.dev/i/94610693e08bce13}
     contact-email: ${APP_BETA_CONTACT_EMAIL:kwakkun2002@gmail.com}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:*}
