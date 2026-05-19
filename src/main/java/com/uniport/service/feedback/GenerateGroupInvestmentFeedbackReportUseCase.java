@@ -200,11 +200,11 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
         Instant now = Instant.now();
         int generated = 0;
         Set<Long> processedRoomIds = new HashSet<>();
-        for (MatchingRoom room : matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc("started", now)) {
+        for (MatchingRoom room : matchingRoomRepository.findByStatusAndCompetitionIdIsNullAndEndedAtLessThanEqualOrderByEndedAtAsc("started", now)) {
             generated += endStartedRoomAndGenerateReport(room, processedRoomIds);
         }
         Instant legacyStartedCutoff = now.minus(MOCK_INVESTMENT_SESSION_DURATION);
-        for (MatchingRoom room : matchingRoomRepository.findByStatusAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc("started", legacyStartedCutoff)) {
+        for (MatchingRoom room : matchingRoomRepository.findByStatusAndCompetitionIdIsNullAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc("started", legacyStartedCutoff)) {
             if (room.getId() == null || processedRoomIds.contains(room.getId())) {
                 continue;
             }
@@ -217,7 +217,7 @@ public class GenerateGroupInvestmentFeedbackReportUseCase {
             room.setEndedAt(inferredEndedAt);
             generated += endStartedRoomAndGenerateReport(room, processedRoomIds);
         }
-        for (MatchingRoom room : matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc("ended", now)) {
+        for (MatchingRoom room : matchingRoomRepository.findByStatusAndCompetitionIdIsNullAndEndedAtLessThanEqualOrderByEndedAtAsc("ended", now)) {
             if (room.getId() == null || processedRoomIds.contains(room.getId()) || reportRepository.existsBySessionId(room.getId())) {
                 continue;
             }

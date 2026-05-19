@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -391,11 +392,11 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 .endedAt(Instant.now().minusSeconds(60))
                 .createdAt(Instant.parse("2026-01-21T13:00:00Z"))
                 .build();
-        when(matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("started"), any(Instant.class)))
+        when(matchingRoomRepository.findByStatusAndCompetitionIdIsNullAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("started"), any(Instant.class)))
                 .thenReturn(List.of(room));
-        when(matchingRoomRepository.findByStatusAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(eq("started"), any(Instant.class)))
+        when(matchingRoomRepository.findByStatusAndCompetitionIdIsNullAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(eq("started"), any(Instant.class)))
                 .thenReturn(List.of());
-        when(matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("ended"), any(Instant.class)))
+        when(matchingRoomRepository.findByStatusAndCompetitionIdIsNullAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("ended"), any(Instant.class)))
                 .thenReturn(List.of());
         when(reportRepository.existsBySessionId(1L)).thenReturn(false);
         when(matchingRoomRepository.findById(1L)).thenReturn(Optional.of(room));
@@ -419,6 +420,8 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         assertEquals(1, generated);
         assertEquals("ended", room.getStatus());
         verify(matchingRoomRepository).save(room);
+        verify(matchingRoomRepository, never()).findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("started"), any(Instant.class));
+        verify(matchingRoomRepository, never()).findByStatusAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(eq("started"), any(Instant.class));
         verify(chatService).saveFeedbackReportMessage(eq(1L), eq(7L), anyMap());
     }
 
@@ -462,11 +465,11 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
                 .status("started")
                 .createdAt(createdAt)
                 .build();
-        when(matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("started"), any(Instant.class)))
+        when(matchingRoomRepository.findByStatusAndCompetitionIdIsNullAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("started"), any(Instant.class)))
                 .thenReturn(List.of());
-        when(matchingRoomRepository.findByStatusAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(eq("started"), any(Instant.class)))
+        when(matchingRoomRepository.findByStatusAndCompetitionIdIsNullAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(eq("started"), any(Instant.class)))
                 .thenReturn(List.of(room));
-        when(matchingRoomRepository.findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("ended"), any(Instant.class)))
+        when(matchingRoomRepository.findByStatusAndCompetitionIdIsNullAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("ended"), any(Instant.class)))
                 .thenReturn(List.of());
         when(reportRepository.existsBySessionId(2L)).thenReturn(false);
         when(matchingRoomRepository.findById(2L)).thenReturn(Optional.of(room));
@@ -491,6 +494,8 @@ class GenerateGroupInvestmentFeedbackReportUseCaseTest {
         assertEquals("ended", room.getStatus());
         assertEquals(createdAt.plus(Duration.ofDays(7)), room.getEndedAt());
         verify(matchingRoomRepository).save(room);
+        verify(matchingRoomRepository, never()).findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(eq("started"), any(Instant.class));
+        verify(matchingRoomRepository, never()).findByStatusAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(eq("started"), any(Instant.class));
         verify(chatService).saveFeedbackReportMessage(eq(2L), eq(8L), anyMap());
     }
 

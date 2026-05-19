@@ -15,7 +15,7 @@ public interface MatchingRoomRepository extends JpaRepository<MatchingRoom, Long
 
     List<MatchingRoom> findAllByOrderByCreatedAtDesc();
 
-    List<MatchingRoom> findByStatusOrderByCreatedAtDesc(String status);
+    List<MatchingRoom> findByStatusAndCompetitionIdIsNullOrderByCreatedAtDesc(String status);
 
     List<MatchingRoom> findByStatusAndCompetitionIdOrderByCreatedAtDesc(String status, Long competitionId);
 
@@ -24,6 +24,10 @@ public interface MatchingRoomRepository extends JpaRepository<MatchingRoom, Long
     List<MatchingRoom> findByStatusAndEndedAtLessThanEqualOrderByEndedAtAsc(String status, Instant endedAt);
 
     List<MatchingRoom> findByStatusAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(String status, Instant createdAt);
+
+    List<MatchingRoom> findByStatusAndCompetitionIdIsNullAndEndedAtLessThanEqualOrderByEndedAtAsc(String status, Instant endedAt);
+
+    List<MatchingRoom> findByStatusAndCompetitionIdIsNullAndEndedAtIsNullAndCreatedAtLessThanEqualOrderByCreatedAtAsc(String status, Instant createdAt);
 
     @Transactional
     @Modifying

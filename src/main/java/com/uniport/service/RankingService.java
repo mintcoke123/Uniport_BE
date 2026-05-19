@@ -23,7 +23,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * 그룹 랭킹 계산 서비스.
@@ -78,9 +77,7 @@ public class RankingService {
     }
 
     private List<MockInvestmentLeaderboardItemDTO> buildActiveTeamGameLeaderboard(int limit, boolean allowNetworkPriceFetch) {
-        List<MatchingRoom> started = matchingRoomRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(this::isStartedAlwaysOnRoom)
-                .collect(Collectors.toList());
+        List<MatchingRoom> started = matchingRoomRepository.findByStatusAndCompetitionIdIsNullOrderByCreatedAtDesc("started");
         Map<String, BigDecimal> resolvedPrices = new HashMap<>();
         List<TeamRankingCandidate> candidates = new ArrayList<>();
 
@@ -203,14 +200,8 @@ public class RankingService {
 
     private List<Map<String, Object>> buildGroupRankings(boolean allowNetworkPriceFetch) {
         long startedAt = System.currentTimeMillis();
-        List<MatchingRoom> started = matchingRoomRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(this::isStartedAlwaysOnRoom)
-                .collect(Collectors.toList());
+        List<MatchingRoom> started = matchingRoomRepository.findByStatusAndCompetitionIdIsNullOrderByCreatedAtDesc("started");
         return buildGroupRankingsFromRooms(started, allowNetworkPriceFetch, startedAt);
-    }
-
-    private boolean isStartedAlwaysOnRoom(MatchingRoom room) {
-        return room != null && "started".equals(room.getStatus()) && room.getCompetitionId() == null;
     }
 
     private List<Map<String, Object>> buildGroupRankingsForCompetition(Long competitionId, boolean allowNetworkPriceFetch) {

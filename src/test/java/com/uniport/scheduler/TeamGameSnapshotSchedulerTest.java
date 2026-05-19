@@ -45,7 +45,7 @@ class TeamGameSnapshotSchedulerTest {
     @Test
     void runCreatesSnapshotForStartedRoomUsingKstSnapshotDateAndPercentReturnRate() {
         MatchingRoom room = room(42L, "수익률 팀", 4, "2026-05-19T01:00:00Z", "2026-05-26T01:00:00Z");
-        when(matchingRoomRepository.findByStatusOrderByCreatedAtDesc("started")).thenReturn(List.of(room));
+        when(matchingRoomRepository.findByStatusAndCompetitionIdIsNullOrderByCreatedAtDesc("started")).thenReturn(List.of(room));
         when(rankingService.evaluateTeam(42L, false))
                 .thenReturn(new RankingService.TeamValuation(
                         new BigDecimal("11240000.0000"),
@@ -68,23 +68,23 @@ class TeamGameSnapshotSchedulerTest {
         assertEquals(Instant.parse("2026-05-19T15:30:00Z"), snapshot.getSnapshotAt());
         assertEquals(LocalDate.of(2026, 5, 20), snapshot.getSnapshotDate());
         verify(rankingService).evaluateTeam(42L, false);
-        verify(matchingRoomRepository).findByStatusOrderByCreatedAtDesc("started");
+        verify(matchingRoomRepository).findByStatusAndCompetitionIdIsNullOrderByCreatedAtDesc("started");
     }
 
     @Test
     void runLoadsOnlyStartedRooms() {
-        when(matchingRoomRepository.findByStatusOrderByCreatedAtDesc("started")).thenReturn(List.of());
+        when(matchingRoomRepository.findByStatusAndCompetitionIdIsNullOrderByCreatedAtDesc("started")).thenReturn(List.of());
 
         scheduler.run();
 
-        verify(matchingRoomRepository).findByStatusOrderByCreatedAtDesc("started");
+        verify(matchingRoomRepository).findByStatusAndCompetitionIdIsNullOrderByCreatedAtDesc("started");
     }
 
     @Test
     void runSkipsThrowingRoomAndStillSavesLaterValidRoom() {
         MatchingRoom throwingRoom = room(1L, "깨진 팀", 2, "2026-05-19T00:00:00Z", "2026-05-26T00:00:00Z");
         MatchingRoom validRoom = room(2L, "정상 팀", 3, "2026-05-19T01:00:00Z", "2026-05-26T01:00:00Z");
-        when(matchingRoomRepository.findByStatusOrderByCreatedAtDesc("started"))
+        when(matchingRoomRepository.findByStatusAndCompetitionIdIsNullOrderByCreatedAtDesc("started"))
                 .thenReturn(List.of(throwingRoom, validRoom));
         when(rankingService.evaluateTeam(1L, false)).thenThrow(new IllegalStateException("valuation failed"));
         when(rankingService.evaluateTeam(2L, false))

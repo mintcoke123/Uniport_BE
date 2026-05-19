@@ -50,7 +50,7 @@ public class TeamGameSnapshotScheduler {
     public void run() {
         Instant snapshotAt = Instant.now(clock);
         LocalDate snapshotDate = snapshotAt.atZone(SNAPSHOT_ZONE).toLocalDate();
-        List<MatchingRoom> rooms = matchingRoomRepository.findByStatusOrderByCreatedAtDesc(STARTED_STATUS);
+        List<MatchingRoom> rooms = matchingRoomRepository.findByStatusAndCompetitionIdIsNullOrderByCreatedAtDesc(STARTED_STATUS);
 
         for (MatchingRoom room : rooms) {
             saveSnapshot(room, snapshotAt, snapshotDate);
