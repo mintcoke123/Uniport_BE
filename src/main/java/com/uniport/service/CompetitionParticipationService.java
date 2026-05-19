@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,21 +40,14 @@ public class CompetitionParticipationService {
             throw new ApiException("시작 전 토너먼트만 참가 신청할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
 
-        String teamId = participantTeamId != null && !participantTeamId.isBlank()
-                ? participantTeamId.trim()
-                : fallbackParticipantTeamId(user);
-        String teamName = participantName != null && !participantName.isBlank()
-                ? participantName.trim()
-                : fallbackParticipantName(user);
-
         CompetitionApplication application = applicationRepository.findByCompetition_IdAndUser_Id(competitionId, user.getId())
                 .orElseGet(() -> CompetitionApplication.builder()
                         .competition(competition)
                         .user(user)
                         .appliedAt(Instant.now())
                         .build());
-        application.setTeamId(teamId);
-        application.setTeamName(teamName);
+        application.setTeamId(null);
+        application.setTeamName(null);
         application.setStatus("APPLIED");
         application.setCancelledAt(null);
         CompetitionApplication saved = applicationRepository.save(application);
@@ -83,22 +77,20 @@ public class CompetitionParticipationService {
 
     public Map<String, Object> getApplicationStatus(Long competitionId, User user, String participantTeamId) {
         Competition competition = getCompetition(competitionId);
-        String teamId = participantTeamId != null && !participantTeamId.isBlank()
-                ? participantTeamId.trim()
-                : fallbackParticipantTeamId(user);
         CompetitionApplication application = user != null && user.getId() != null
                 ? applicationRepository.findByCompetition_IdAndUser_Id(competitionId, user.getId()).orElse(null)
                 : null;
 
         if (application == null || !"APPLIED".equals(application.getStatus())) {
-            return Map.of(
-                    "competitionId", competition.getId(),
-                    "teamId", teamId,
-                    "applied", false,
-                    "status", "NOT_APPLIED",
-                    "statusLabel", "참가 신청",
-                    "message", "아직 참가 신청하지 않았어요."
-            );
+            Map<String, Object> response = new HashMap<>();
+            response.put("competitionId", competition.getId());
+            response.put("teamId", null);
+            response.put("teamName", null);
+            response.put("applied", false);
+            response.put("status", "NOT_APPLIED");
+            response.put("statusLabel", "참가 신청");
+            response.put("message", "아직 참가 신청하지 않았어요.");
+            return response;
         }
 
         return toApplicationMap(competition, application, true, competition.getName() + " 참가 신청이 완료되었어요.");
@@ -111,26 +103,19 @@ public class CompetitionParticipationService {
         return applicationRepository.findByUser_IdOrderByAppliedAtDesc(user.getId()).stream()
                 .map(application -> {
                     Competition competition = application.getCompetition();
-                    return Map.<String, Object>of(
-                            "competitionId", competition.getId(),
-                            "competitionName", competition.getName(),
-                            "teamId", application.getTeamId(),
-                            "teamName", application.getTeamName(),
-                            "status", application.getStatus(),
-                            "statusLabel", "APPLIED".equals(application.getStatus()) ? "신청 완료" : "신청 취소",
-                            "appliedAt", application.getAppliedAt().toString(),
-                            "startDate", competition.getStartDate(),
-                            "endDate", competition.getEndDate()
-                    );
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("competitionId", competition.getId());
+                    response.put("competitionName", competition.getName());
+                    response.put("teamId", null);
+                    response.put("teamName", null);
+                    response.put("status", application.getStatus());
+                    response.put("statusLabel", "APPLIED".equals(application.getStatus()) ? "신청 완료" : "신청 취소");
+                    response.put("appliedAt", application.getAppliedAt().toString());
+                    response.put("startDate", competition.getStartDate());
+                    response.put("endDate", competition.getEndDate());
+                    return response;
                 })
                 .toList();
-    }
-
-    public boolean isApplied(Long competitionId, String participantTeamId) {
-        return applicationRepository.findAll().stream()
-                .anyMatch(application -> application.getCompetition().getId().equals(competitionId)
-                        && application.getTeamId().equals(participantTeamId)
-                        && "APPLIED".equals(application.getStatus()));
     }
 
     public boolean isApplied(Long competitionId, User user) {
@@ -145,33 +130,19 @@ public class CompetitionParticipationService {
                 .orElseThrow(() -> new ApiException("대회를 찾을 수 없습니다.", HttpStatus.NOT_FOUND));
     }
 
-    private String fallbackParticipantTeamId(User user) {
-        if (user != null && user.getId() != null) {
-            return "applicant-" + user.getId();
-        }
-        return "applicant-anonymous";
-    }
-
-    private String fallbackParticipantName(User user) {
-        if (user != null && user.getNickname() != null && !user.getNickname().isBlank()) {
-            return user.getNickname() + " 팀";
-        }
-        return "개인 참가";
-    }
-
     private Map<String, Object> toApplicationMap(Competition competition,
                                                  CompetitionApplication application,
                                                  boolean applied,
                                                  String message) {
-        return Map.of(
-                "competitionId", competition.getId(),
-                "teamId", application.getTeamId(),
-                "teamName", application.getTeamName(),
-                "applied", applied,
-                "status", application.getStatus(),
-                "statusLabel", applied ? "신청 완료" : "신청 취소",
-                "appliedAt", application.getAppliedAt().toString(),
-                "message", message
-        );
+        Map<String, Object> response = new HashMap<>();
+        response.put("competitionId", competition.getId());
+        response.put("teamId", null);
+        response.put("teamName", null);
+        response.put("applied", applied);
+        response.put("status", application.getStatus());
+        response.put("statusLabel", applied ? "신청 완료" : "신청 취소");
+        response.put("appliedAt", application.getAppliedAt().toString());
+        response.put("message", message);
+        return response;
     }
 }

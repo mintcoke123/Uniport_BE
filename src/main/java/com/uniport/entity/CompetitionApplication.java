@@ -40,10 +40,10 @@ public class CompetitionApplication {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "team_id", nullable = false, length = 100)
+    @Column(name = "team_id", length = 100)
     private String teamId;
 
-    @Column(name = "team_name", nullable = false, length = 200)
+    @Column(name = "team_name", length = 200)
     private String teamName;
 
     @Column(nullable = false, length = 20)

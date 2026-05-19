@@ -28,7 +28,7 @@ class CompetitionParticipationServiceTest {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     @Test
-    void applyUsesApplicantScopedFallbackTeamIdInsteadOfCurrentUserTeamId() {
+    void applyIgnoresTeamFieldsAndReturnsNullTeamMetadata() {
         CompetitionRepository competitionRepository = mock(CompetitionRepository.class);
         CompetitionApplicationRepository applicationRepository = mock(CompetitionApplicationRepository.class);
         Competition competition = Competition.builder()
@@ -56,11 +56,80 @@ class CompetitionParticipationServiceTest {
                 competitionService
         );
 
-        var response = service.apply(7L, user, null, null);
+        var response = service.apply(7L, user, "team-337", "기존 팀");
 
-        assertEquals("applicant-10", response.get("teamId"));
+        assertEquals(null, response.get("teamId"));
+        assertEquals(null, response.get("teamName"));
         verify(applicationRepository).findByCompetition_IdAndUser_Id(7L, 10L);
         verify(applicationRepository, never()).existsByCompetition_IdAndUser_IdAndStatus(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void getApplicationStatusDoesNotExposeFallbackTeamIdWhenNotApplied() {
+        CompetitionRepository competitionRepository = mock(CompetitionRepository.class);
+        CompetitionApplicationRepository applicationRepository = mock(CompetitionApplicationRepository.class);
+        Competition competition = Competition.builder()
+                .id(7L)
+                .name("세종대 대축제")
+                .startDate("2026-05-20T00:00:00")
+                .endDate("2026-05-21T23:59:59")
+                .status("upcoming")
+                .build();
+        User user = User.builder().id(10L).nickname("참가자").teamId("team-337").build();
+        when(competitionRepository.findById(7L)).thenReturn(Optional.of(competition));
+        when(applicationRepository.findByCompetition_IdAndUser_Id(7L, 10L)).thenReturn(Optional.empty());
+        CompetitionService competitionService = new CompetitionService(
+                competitionRepository,
+                Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), KST)
+        );
+        CompetitionParticipationService service = new CompetitionParticipationService(
+                competitionRepository,
+                applicationRepository,
+                competitionService
+        );
+
+        var response = service.getApplicationStatus(7L, user, "team-337");
+
+        assertEquals(null, response.get("teamId"));
+        assertEquals(null, response.get("teamName"));
+        assertEquals("NOT_APPLIED", response.get("status"));
+    }
+
+    @Test
+    void myApplicationsReturnNullTeamMetadataForLegacyRows() {
+        CompetitionRepository competitionRepository = mock(CompetitionRepository.class);
+        CompetitionApplicationRepository applicationRepository = mock(CompetitionApplicationRepository.class);
+        Competition competition = Competition.builder()
+                .id(7L)
+                .name("세종대 대축제")
+                .startDate("2026-05-20T00:00:00")
+                .endDate("2026-05-21T23:59:59")
+                .status("upcoming")
+                .build();
+        User user = User.builder().id(10L).nickname("참가자").teamId("team-337").build();
+        CompetitionApplication application = CompetitionApplication.builder()
+                .competition(competition)
+                .user(user)
+                .teamId("team-337")
+                .teamName("기존 팀")
+                .status("APPLIED")
+                .appliedAt(Instant.parse("2026-05-18T00:00:00Z"))
+                .build();
+        when(applicationRepository.findByUser_IdOrderByAppliedAtDesc(10L)).thenReturn(java.util.List.of(application));
+        CompetitionService competitionService = new CompetitionService(
+                competitionRepository,
+                Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), KST)
+        );
+        CompetitionParticipationService service = new CompetitionParticipationService(
+                competitionRepository,
+                applicationRepository,
+                competitionService
+        );
+
+        var response = service.getMyApplications(user).getFirst();
+
+        assertEquals(null, response.get("teamId"));
+        assertEquals(null, response.get("teamName"));
     }
 
     @Test
