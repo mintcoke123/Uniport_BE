@@ -165,6 +165,57 @@ class CompetitionParticipationServiceTest {
     }
 
     @Test
+    void applyRejectsWhenUserAlreadyAppliedToAnotherActiveTournament() {
+        CompetitionRepository competitionRepository = mock(CompetitionRepository.class);
+        CompetitionApplicationRepository applicationRepository = mock(CompetitionApplicationRepository.class);
+        Competition requestedCompetition = Competition.builder()
+                .id(8L)
+                .name("새 토너먼트")
+                .startDate("2026-05-20T00:00:00")
+                .endDate("2026-05-21T23:59:59")
+                .status("upcoming")
+                .build();
+        Competition existingCompetition = Competition.builder()
+                .id(7L)
+                .name("기존 토너먼트")
+                .startDate("2026-05-19T00:00:00")
+                .endDate("2026-05-22T23:59:59")
+                .status("upcoming")
+                .build();
+        User user = User.builder().id(10L).nickname("참가자").build();
+        CompetitionApplication existingApplication = CompetitionApplication.builder()
+                .competition(existingCompetition)
+                .user(user)
+                .status("APPLIED")
+                .appliedAt(Instant.parse("2026-05-18T00:00:00Z"))
+                .build();
+        when(competitionRepository.findById(8L)).thenReturn(Optional.of(requestedCompetition));
+        when(applicationRepository.findByUser_IdOrderByAppliedAtDesc(10L))
+                .thenReturn(java.util.List.of(existingApplication));
+        CompetitionService competitionService = new CompetitionService(
+                competitionRepository,
+                Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), KST)
+        );
+        CompetitionParticipationService service = new CompetitionParticipationService(
+                competitionRepository,
+                applicationRepository,
+                competitionService
+        );
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> service.apply(8L, user, null, null)
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals(
+                "이미 다른 토너먼트를 참여하고 있다면 새로운 토너먼트에 참여할 수 없어요",
+                exception.getMessage()
+        );
+        verify(applicationRepository, never()).save(any());
+    }
+
+    @Test
     void cancelRejectsCompetitionThatAlreadyStarted() {
         CompetitionRepository competitionRepository = mock(CompetitionRepository.class);
         CompetitionApplicationRepository applicationRepository = mock(CompetitionApplicationRepository.class);

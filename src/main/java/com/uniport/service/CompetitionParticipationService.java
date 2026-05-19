@@ -18,6 +18,9 @@ import java.util.Map;
 @Service
 public class CompetitionParticipationService {
 
+    private static final String ACTIVE_TOURNAMENT_APPLICATION_BLOCK_MESSAGE =
+            "이미 다른 토너먼트를 참여하고 있다면 새로운 토너먼트에 참여할 수 없어요";
+
     private final CompetitionRepository competitionRepository;
     private final CompetitionApplicationRepository applicationRepository;
     private final CompetitionService competitionService;
@@ -39,6 +42,7 @@ public class CompetitionParticipationService {
         if (!"upcoming".equals(competitionService.resolveStatus(competition))) {
             throw new ApiException("시작 전 토너먼트만 참가 신청할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
+        assertNoOtherActiveTournamentApplication(competitionId, user);
 
         CompetitionApplication application = applicationRepository.findByCompetition_IdAndUser_Id(competitionId, user.getId())
                 .orElseGet(() -> CompetitionApplication.builder()
@@ -123,6 +127,23 @@ public class CompetitionParticipationService {
             return false;
         }
         return applicationRepository.existsByCompetition_IdAndUser_IdAndStatus(competitionId, user.getId(), "APPLIED");
+    }
+
+    private void assertNoOtherActiveTournamentApplication(Long competitionId, User user) {
+        List<CompetitionApplication> applications = applicationRepository.findByUser_IdOrderByAppliedAtDesc(user.getId());
+        if (applications == null || applications.isEmpty()) {
+            return;
+        }
+        boolean hasOtherActiveApplication = applications.stream()
+                .filter(application -> "APPLIED".equals(application.getStatus()))
+                .map(CompetitionApplication::getCompetition)
+                .anyMatch(competition -> competition != null
+                        && competition.getId() != null
+                        && !competition.getId().equals(competitionId)
+                        && !"ended".equals(competitionService.resolveStatus(competition)));
+        if (hasOtherActiveApplication) {
+            throw new ApiException(ACTIVE_TOURNAMENT_APPLICATION_BLOCK_MESSAGE, HttpStatus.BAD_REQUEST);
+        }
     }
 
     private Competition getCompetition(Long competitionId) {
