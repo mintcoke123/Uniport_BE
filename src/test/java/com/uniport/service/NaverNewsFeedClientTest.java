@@ -15,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class NaverNewsFeedClientTest {
@@ -79,7 +81,7 @@ class NaverNewsFeedClientTest {
     }
 
     @Test
-    void fetchLatest_fetchesOriginalArticleContentWhenAvailable() {
+    void fetchLatest_skipsOriginalArticleContentDuringListRefresh() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         NaverNewsFeedClient client = new NaverNewsFeedClient(
                 restTemplate,
@@ -108,6 +110,30 @@ class NaverNewsFeedClientTest {
                   ]
                 }
                 """));
+
+        List<FetchedNewsArticle> articles = client.fetchLatest();
+
+        assertEquals("", articles.get(0).getContent());
+        verify(restTemplate, never()).exchange(
+                eq(URI.create("https://example.com/full-article")),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(String.class)
+        );
+    }
+
+    @Test
+    void fetchArticleContent_extractsOriginalArticleBodyWhenRequested() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        NaverNewsFeedClient client = new NaverNewsFeedClient(
+                restTemplate,
+                true,
+                "client-id",
+                "client-secret",
+                300,
+                10,
+                List.of(NaverNewsFeedClient.FeedDefinition.market("코스피 시황"))
+        );
         when(restTemplate.exchange(
                 eq(URI.create("https://example.com/full-article")),
                 eq(HttpMethod.GET),
@@ -125,10 +151,10 @@ class NaverNewsFeedClientTest {
                 </html>
                 """));
 
-        List<FetchedNewsArticle> articles = client.fetchLatest();
+        String content = client.fetchArticleContent("https://example.com/full-article");
 
         assertEquals("첫 번째 본문 문단입니다. 시장 흐름을 자세히 설명합니다.\n\n두 번째 본문 문단입니다. 투자자가 확인할 변수를 설명합니다.",
-                articles.get(0).getContent());
+                content);
     }
 
     @Test

@@ -253,7 +253,7 @@ class NewsServiceTest {
     }
 
     @Test
-    void getRealtimeNewsDetail_usesFetchedArticleFullContentWhenAvailable() {
+    void getRealtimeNewsDetail_fetchesFetchedArticleFullContentOnDemand() {
         String fullContent = "첫 번째 원문 본문 문단입니다.\n\n두 번째 원문 본문 문단입니다.";
         when(newsFeedClient.fetchLatest()).thenReturn(List.of(
                 FetchedNewsArticle.builder()
@@ -261,18 +261,20 @@ class NewsServiceTest {
                         .category(NewsCategory.MARKET)
                         .title("코스피 상승 출발")
                         .summary("검색 API 요약입니다.")
-                        .content(fullContent)
+                        .content("")
                         .sourceName("테스트경제")
                         .publishedAt(LocalDateTime.of(2026, 5, 11, 12, 20))
                         .featured(true)
                         .externalUrl("https://example.com/full-text")
                         .build()
         ));
+        when(newsFeedClient.fetchArticleContent("https://example.com/full-text")).thenReturn(fullContent);
 
         RealtimeNewsDetailResponseDTO response = newsService.getRealtimeNewsDetail("naver_full_text");
 
         assertEquals(fullContent, response.getBody());
         assertEquals(fullContent, response.getCoreSummary());
+        verify(newsFeedClient).fetchArticleContent("https://example.com/full-text");
     }
 
     @Test

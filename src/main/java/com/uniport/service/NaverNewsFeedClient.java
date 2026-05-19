@@ -172,13 +172,12 @@ public class NaverNewsFeedClient implements NewsFeedClient {
             if (parsedTitle.title().isBlank() || externalUrl.isBlank()) {
                 continue;
             }
-            String content = fetchOriginalArticleContent(externalUrl);
             articles.add(FetchedNewsArticle.builder()
                     .id(buildId(externalUrl))
                     .category(feed.category())
                     .title(parsedTitle.title())
                     .summary(summary)
-                    .content(content)
+                    .content("")
                     .sourceName(!parsedTitle.source().isBlank() ? parsedTitle.source() : "네이버 뉴스")
                     .publishedAt(parsePublishedAt(stringValue(item.get("pubDate"))))
                     .featured(false)
@@ -188,7 +187,8 @@ public class NaverNewsFeedClient implements NewsFeedClient {
         return articles;
     }
 
-    private String fetchOriginalArticleContent(String externalUrl) {
+    @Override
+    public String fetchArticleContent(String externalUrl) {
         if (externalUrl == null || externalUrl.isBlank()) {
             return "";
         }

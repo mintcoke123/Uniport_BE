@@ -98,7 +98,7 @@ public class NewsService {
 
     @Transactional(readOnly = true)
     public NewsItemResponseDTO getNewsDetail(String newsId) {
-        NewsArticleView article = requireArticleView(newsId);
+        NewsArticleView article = withOnDemandBody(requireArticleView(newsId));
         return toItem(article, true, article.featured());
     }
 
@@ -136,7 +136,7 @@ public class NewsService {
 
     @Transactional(readOnly = true)
     public RealtimeNewsDetailResponseDTO getRealtimeNewsDetail(String newsId) {
-        NewsArticleView article = requireArticleView(newsId);
+        NewsArticleView article = withOnDemandBody(requireArticleView(newsId));
         RealtimeNewsCategory realtimeCategory = classifyArticle(article);
         List<RealtimeNewsRelatedStockDTO> relatedStocks = extractRelatedStocks(article);
         NewsSentimentAnalysis sentiment = newsSentimentAnalyzer.analyze(toSentimentInput(article));
@@ -275,6 +275,32 @@ public class NewsService {
                 .orElseThrow(() -> new ApiException("News article not found", HttpStatus.NOT_FOUND));
     }
 
+    private NewsArticleView withOnDemandBody(NewsArticleView article) {
+        if (!article.fetchableExternalContent()
+                || article.externalUrl() == null
+                || article.externalUrl().isBlank()) {
+            return article;
+        }
+        String fetchedBody = newsFeedClient.fetchArticleContent(article.externalUrl());
+        if (fetchedBody == null || fetchedBody.isBlank()) {
+            return article;
+        }
+        return new NewsArticleView(
+                article.id(),
+                article.category(),
+                article.categoryLabel(),
+                article.title(),
+                article.summary(),
+                fetchedBody,
+                article.sourceName(),
+                article.publishedAt(),
+                article.featured(),
+                article.thumbnailUrl(),
+                article.externalUrl(),
+                false
+        );
+    }
+
     private NewsArticleView toView(ManagedNewsArticle article) {
         NewsCategory category = resolveCategory(article.getCategory(), article.getStockCode(), article.getStockName());
         LocalDateTime publishedAt = article.getPublishedAt() != null
@@ -291,24 +317,28 @@ public class NewsService {
                 publishedAt,
                 Boolean.TRUE.equals(article.getFeatured()),
                 article.getImageUrl(),
-                article.getExternalUrl()
+                article.getExternalUrl(),
+                false
         );
     }
 
     private NewsArticleView toView(FetchedNewsArticle article) {
         NewsCategory category = article.getCategory() != null ? article.getCategory() : NewsCategory.MARKET;
+        String content = defaultIfBlank(article.getContent(), "");
+        String externalUrl = article.getExternalUrl();
         return new NewsArticleView(
                 article.getId(),
                 category,
                 category.label(),
                 defaultIfBlank(article.getTitle(), "제목 없는 뉴스"),
                 defaultIfBlank(article.getSummary(), ""),
-                defaultIfBlank(article.getContent(), buildNewsroomBody(article, category)),
+                defaultIfBlank(content, buildNewsroomBody(article, category)),
                 defaultIfBlank(article.getSourceName(), "네이버 뉴스"),
                 article.getPublishedAt(),
                 article.isFeatured(),
                 null,
-                article.getExternalUrl()
+                externalUrl,
+                content.isBlank() && externalUrl != null && !externalUrl.isBlank()
         );
     }
 
@@ -664,7 +694,8 @@ public class NewsService {
                 publishedAt,
                 featured,
                 null,
-                null
+                null,
+                false
         );
     }
 
@@ -771,7 +802,8 @@ public class NewsService {
             LocalDateTime publishedAt,
             boolean featured,
             String thumbnailUrl,
-            String externalUrl
+            String externalUrl,
+            boolean fetchableExternalContent
     ) {
     }
 
