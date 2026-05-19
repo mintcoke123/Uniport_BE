@@ -253,8 +253,7 @@ class NewsServiceTest {
     }
 
     @Test
-    void getRealtimeNewsDetail_fetchesFetchedArticleFullContentOnDemand() {
-        String fullContent = "첫 번째 원문 본문 문단입니다.\n\n두 번째 원문 본문 문단입니다.";
+    void getRealtimeNewsDetail_usesNewsroomBodyWithoutScrapingPublisherPage() {
         when(newsFeedClient.fetchLatest()).thenReturn(List.of(
                 FetchedNewsArticle.builder()
                         .id("naver_full_text")
@@ -268,13 +267,12 @@ class NewsServiceTest {
                         .externalUrl("https://example.com/full-text")
                         .build()
         ));
-        when(newsFeedClient.fetchArticleContent("https://example.com/full-text")).thenReturn(fullContent);
 
         RealtimeNewsDetailResponseDTO response = newsService.getRealtimeNewsDetail("naver_full_text");
 
-        assertEquals(fullContent, response.getBody());
-        assertEquals(fullContent, response.getCoreSummary());
-        verify(newsFeedClient).fetchArticleContent("https://example.com/full-text");
+        org.junit.jupiter.api.Assertions.assertTrue(response.getBody().contains("UniPort 뉴스룸"));
+        org.junit.jupiter.api.Assertions.assertTrue(response.getBody().contains("검색 API 요약입니다."));
+        org.junit.jupiter.api.Assertions.assertFalse(response.getBody().contains("다른 기사 두 번째"));
     }
 
     @Test

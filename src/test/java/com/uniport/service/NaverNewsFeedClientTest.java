@@ -123,41 +123,6 @@ class NaverNewsFeedClientTest {
     }
 
     @Test
-    void fetchArticleContent_extractsOriginalArticleBodyWhenRequested() {
-        RestTemplate restTemplate = mock(RestTemplate.class);
-        NaverNewsFeedClient client = new NaverNewsFeedClient(
-                restTemplate,
-                true,
-                "client-id",
-                "client-secret",
-                300,
-                10,
-                List.of(NaverNewsFeedClient.FeedDefinition.market("코스피 시황"))
-        );
-        when(restTemplate.exchange(
-                eq(URI.create("https://example.com/full-article")),
-                eq(HttpMethod.GET),
-                any(HttpEntity.class),
-                eq(String.class)
-        )).thenReturn(ResponseEntity.ok("""
-                <html>
-                  <head><script>광고 스크립트</script><style>.ad { display:none; }</style></head>
-                  <body>
-                    <article>
-                      <p>첫 번째 본문 문단입니다. 시장 흐름을 자세히 설명합니다.</p>
-                      <p>두 번째 본문 문단입니다. 투자자가 확인할 변수를 설명합니다.</p>
-                    </article>
-                  </body>
-                </html>
-                """));
-
-        String content = client.fetchArticleContent("https://example.com/full-article");
-
-        assertEquals("첫 번째 본문 문단입니다. 시장 흐름을 자세히 설명합니다.\n\n두 번째 본문 문단입니다. 투자자가 확인할 변수를 설명합니다.",
-                content);
-    }
-
-    @Test
     void fetchLatest_prefersStockCategoryWhenSameArticleAppearsInMarketAndStockFeeds() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         NaverNewsFeedClient client = new NaverNewsFeedClient(

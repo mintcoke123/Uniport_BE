@@ -187,59 +187,6 @@ public class NaverNewsFeedClient implements NewsFeedClient {
         return articles;
     }
 
-    @Override
-    public String fetchArticleContent(String externalUrl) {
-        if (externalUrl == null || externalUrl.isBlank()) {
-            return "";
-        }
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0 UniPort-NewsFetcher/1.0");
-            headers.set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-            ResponseEntity<String> response = restTemplate.exchange(
-                    URI.create(externalUrl),
-                    HttpMethod.GET,
-                    new HttpEntity<Void>(headers),
-                    String.class
-            );
-            return extractArticleContent(response.getBody());
-        } catch (Exception ignored) {
-            return "";
-        }
-    }
-
-    private String extractArticleContent(String html) {
-        if (html == null || html.isBlank()) {
-            return "";
-        }
-        String normalized = html
-                .replaceAll("(?is)<(script|style|noscript|svg|iframe|form|button|nav|header|footer|aside)[^>]*>.*?</\\1>", " ")
-                .replaceAll("(?is)<br\\s*/?>", "\n")
-                .replaceAll("(?is)</(p|div|article|section|h[1-6]|li|blockquote)>", "\n")
-                .replaceAll("(?is)<[^>]+>", " ");
-        String unescaped = HtmlUtils.htmlUnescape(normalized).replace('\u00A0', ' ');
-        List<String> paragraphs = new ArrayList<>();
-        for (String rawLine : unescaped.split("\\R+")) {
-            String line = rawLine.replaceAll("\\s+", " ").trim();
-            if (isUsefulArticleLine(line)) {
-                paragraphs.add(line);
-            }
-        }
-        return String.join("\n\n", paragraphs);
-    }
-
-    private boolean isUsefulArticleLine(String line) {
-        if (line == null || line.length() < 12) {
-            return false;
-        }
-        String normalized = line.toLowerCase(Locale.ROOT);
-        return !normalized.contains("copyright")
-                && !normalized.contains("무단전재")
-                && !normalized.contains("재배포")
-                && !normalized.contains("구독")
-                && !normalized.contains("제보");
-    }
-
     private ParsedTitle parseTitle(String rawTitle) {
         String title = cleanText(rawTitle);
         int separatorIndex = title.lastIndexOf(" - ");

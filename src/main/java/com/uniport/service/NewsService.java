@@ -98,7 +98,7 @@ public class NewsService {
 
     @Transactional(readOnly = true)
     public NewsItemResponseDTO getNewsDetail(String newsId) {
-        NewsArticleView article = withOnDemandBody(requireArticleView(newsId));
+        NewsArticleView article = requireArticleView(newsId);
         return toItem(article, true, article.featured());
     }
 
@@ -136,7 +136,7 @@ public class NewsService {
 
     @Transactional(readOnly = true)
     public RealtimeNewsDetailResponseDTO getRealtimeNewsDetail(String newsId) {
-        NewsArticleView article = withOnDemandBody(requireArticleView(newsId));
+        NewsArticleView article = requireArticleView(newsId);
         RealtimeNewsCategory realtimeCategory = classifyArticle(article);
         List<RealtimeNewsRelatedStockDTO> relatedStocks = extractRelatedStocks(article);
         NewsSentimentAnalysis sentiment = newsSentimentAnalyzer.analyze(toSentimentInput(article));
@@ -275,32 +275,6 @@ public class NewsService {
                 .orElseThrow(() -> new ApiException("News article not found", HttpStatus.NOT_FOUND));
     }
 
-    private NewsArticleView withOnDemandBody(NewsArticleView article) {
-        if (!article.fetchableExternalContent()
-                || article.externalUrl() == null
-                || article.externalUrl().isBlank()) {
-            return article;
-        }
-        String fetchedBody = newsFeedClient.fetchArticleContent(article.externalUrl());
-        if (fetchedBody == null || fetchedBody.isBlank()) {
-            return article;
-        }
-        return new NewsArticleView(
-                article.id(),
-                article.category(),
-                article.categoryLabel(),
-                article.title(),
-                article.summary(),
-                fetchedBody,
-                article.sourceName(),
-                article.publishedAt(),
-                article.featured(),
-                article.thumbnailUrl(),
-                article.externalUrl(),
-                false
-        );
-    }
-
     private NewsArticleView toView(ManagedNewsArticle article) {
         NewsCategory category = resolveCategory(article.getCategory(), article.getStockCode(), article.getStockName());
         LocalDateTime publishedAt = article.getPublishedAt() != null
@@ -317,15 +291,13 @@ public class NewsService {
                 publishedAt,
                 Boolean.TRUE.equals(article.getFeatured()),
                 article.getImageUrl(),
-                article.getExternalUrl(),
-                false
+                article.getExternalUrl()
         );
     }
 
     private NewsArticleView toView(FetchedNewsArticle article) {
         NewsCategory category = article.getCategory() != null ? article.getCategory() : NewsCategory.MARKET;
         String content = defaultIfBlank(article.getContent(), "");
-        String externalUrl = article.getExternalUrl();
         return new NewsArticleView(
                 article.getId(),
                 category,
@@ -337,8 +309,7 @@ public class NewsService {
                 article.getPublishedAt(),
                 article.isFeatured(),
                 null,
-                externalUrl,
-                content.isBlank() && externalUrl != null && !externalUrl.isBlank()
+                article.getExternalUrl()
         );
     }
 
@@ -694,8 +665,7 @@ public class NewsService {
                 publishedAt,
                 featured,
                 null,
-                null,
-                false
+                null
         );
     }
 
@@ -802,8 +772,7 @@ public class NewsService {
             LocalDateTime publishedAt,
             boolean featured,
             String thumbnailUrl,
-            String externalUrl,
-            boolean fetchableExternalContent
+            String externalUrl
     ) {
     }
 
