@@ -7,10 +7,6 @@ import java.util.List;
 
 public interface FestivalTradingSessionRepository extends JpaRepository<FestivalTradingSession, Long> {
 
-    long countByParticipantName(String participantName);
-
-    boolean existsByPhoneNumber(String phoneNumber);
-
     List<FestivalTradingSession> findByEndedAtIsNotNullOrderByEndTotalValueDescEndedAtAsc();
 
     List<FestivalTradingSession> findAllByOrderByStartedAtDesc();

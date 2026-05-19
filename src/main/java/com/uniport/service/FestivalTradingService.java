@@ -49,16 +49,9 @@ public class FestivalTradingService {
         if (!Boolean.TRUE.equals(request.getPrivacyAgreed())) {
             throw new ApiException("privacy agreement is required", HttpStatus.BAD_REQUEST);
         }
-        if (sessionRepository.existsByPhoneNumber(phoneNumber)) {
-            throw new ApiException("phone number already registered", HttpStatus.BAD_REQUEST);
-        }
-
-        long duplicateCount = sessionRepository.countByParticipantName(participantName);
-        String displayName = duplicateCount == 0 ? participantName : participantName + (duplicateCount + 1);
-
         FestivalTradingSession session = sessionRepository.save(FestivalTradingSession.builder()
                 .participantName(participantName)
-                .displayName(displayName)
+                .displayName(participantName)
                 .department("")
                 .studentId("")
                 .phoneNumber(phoneNumber)
