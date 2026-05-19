@@ -1,7 +1,10 @@
 package com.uniport.service;
 
 import com.uniport.dto.GroupInsightsResponseDTO;
+import com.uniport.entity.Vote;
 import com.uniport.entity.User;
+import com.uniport.repository.ManagedGroupInsightRepository;
+import com.uniport.repository.VoteRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -10,6 +13,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -34,6 +38,14 @@ class HomeDataServiceTest {
     private CompetitionService competitionService;
     @Mock
     private CompetitionParticipationService competitionParticipationService;
+    @Mock
+    private ManagedGroupInsightRepository managedGroupInsightRepository;
+    @Mock
+    private VoteRepository voteRepository;
+    @Mock
+    private StockVisualAssetResolver stockVisualAssetResolver;
+    @Mock
+    private StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
 
     @Spy
     @InjectMocks
@@ -76,5 +88,48 @@ class HomeDataServiceTest {
         verify(rankingService).getMyGroupRanking(user, rankings);
         verify(rankingService, never()).getAllGroupsRanking();
         verify(competitionParticipationService, never()).getApplicationStatus(anyLong(), any(), any());
+    }
+
+    @Test
+    void getGroupInsightsBuildsInsightFromTopRankedGroupsLatestVoteReason() {
+        when(rankingService.getAllGroupsRankingSnapshot()).thenReturn(List.of(
+                Map.of(
+                        "id", 11L,
+                        "groupName", "가즈아팀",
+                        "currentAssets", new BigDecimal("11234000"),
+                        "profitRate", new BigDecimal("0.1234")
+                )
+        ));
+        when(voteRepository.findByRoomIdOrderByCreatedAtDesc(11L)).thenReturn(List.of(
+                Vote.builder()
+                        .roomId(11L)
+                        .proposerId(7L)
+                        .proposerName("팀장")
+                        .type("매수")
+                        .stockName("엔비디아")
+                        .stockCode("NVDA")
+                        .quantity(3)
+                        .proposedPrice(new BigDecimal("900"))
+                        .reason("AI 수요가 계속 늘고 실적 발표 기대감이 커서 매수")
+                        .createdAt(Instant.parse("2026-05-19T09:00:00Z"))
+                        .expiresAt(Instant.parse("2026-05-19T09:10:00Z"))
+                        .totalMembers(3)
+                        .status("executed")
+                        .build()
+        ));
+
+        GroupInsightsResponseDTO response = homeDataService.getGroupInsights();
+
+        assertThat(response.getTopGroup().getGroupId()).isEqualTo(11L);
+        assertThat(response.getTopGroup().getGroupName()).isEqualTo("가즈아팀");
+        assertThat(response.getTopGroup().getTopPick()).isEqualTo("엔비디아");
+        assertThat(response.getTopGroup().getDailyReturnRate()).isEqualByComparingTo("12.3400");
+        assertThat(response.getTopGroup().getComment()).contains("매수", "AI 수요가 계속 늘고 실적 발표 기대감이 커서 매수");
+        assertThat(response.getTopConsensus()).hasSize(1);
+        assertThat(response.getTopConsensus().get(0).getStockCode()).isEqualTo("NVDA");
+        assertThat(response.getTopConsensus().get(0).getStockName()).isEqualTo("엔비디아");
+        assertThat(response.getTopConsensus().get(0).getSignal()).isEqualTo("BUY");
+        assertThat(response.getTopConsensus().get(0).getConfidenceRate()).isEqualTo(100);
+        verify(managedGroupInsightRepository, never()).findByInsightKey(any());
     }
 }

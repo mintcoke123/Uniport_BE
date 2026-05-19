@@ -1,7 +1,5 @@
 package com.uniport.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.dto.CompetitionDataDTO;
 import com.uniport.dto.GroupInsightConsensusDTO;
 import com.uniport.dto.GroupInsightsResponseDTO;
@@ -13,15 +11,16 @@ import com.uniport.dto.MockInvestingSummaryResponseDTO;
 import com.uniport.dto.MyInvestmentResponseDTO;
 import com.uniport.dto.StockVisualDTO;
 import com.uniport.dto.TopGroupInsightDTO;
-import com.uniport.entity.ManagedGroupInsight;
+import com.uniport.entity.Vote;
 import com.uniport.entity.User;
-import com.uniport.repository.ManagedGroupInsightRepository;
+import com.uniport.repository.VoteRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,15 +30,15 @@ import java.util.Map;
 public class HomeDataService {
 
     private static final Logger log = LoggerFactory.getLogger(HomeDataService.class);
-    private static final String GROUP_INSIGHT_KEY = "HOME_TOP";
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final int MAX_TOP_CONSENSUS_ITEMS = 3;
+    private static final int MAX_INSIGHT_VOTES = 20;
 
     private final MatchingRoomService matchingRoomService;
     private final MeService meService;
     private final RankingService rankingService;
     private final CompetitionService competitionService;
     private final CompetitionParticipationService competitionParticipationService;
-    private final ManagedGroupInsightRepository managedGroupInsightRepository;
+    private final VoteRepository voteRepository;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
 
@@ -48,7 +47,7 @@ public class HomeDataService {
                            RankingService rankingService,
                            CompetitionService competitionService,
                            CompetitionParticipationService competitionParticipationService,
-                           ManagedGroupInsightRepository managedGroupInsightRepository,
+                           VoteRepository voteRepository,
                            StockVisualAssetResolver stockVisualAssetResolver,
                            StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
         this.matchingRoomService = matchingRoomService;
@@ -56,7 +55,7 @@ public class HomeDataService {
         this.rankingService = rankingService;
         this.competitionService = competitionService;
         this.competitionParticipationService = competitionParticipationService;
-        this.managedGroupInsightRepository = managedGroupInsightRepository;
+        this.voteRepository = voteRepository;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
     }
@@ -122,15 +121,37 @@ public class HomeDataService {
 
     @Transactional(readOnly = true)
     public GroupInsightsResponseDTO getGroupInsights() {
-        ManagedGroupInsight insight = getOrCreateInsight();
+        List<Map<String, Object>> rankings = rankingService.getAllGroupsRankingSnapshot();
+        if (rankings.isEmpty()) {
+            return GroupInsightsResponseDTO.builder()
+                    .topConsensus(List.of())
+                    .topGroup(null)
+                    .build();
+        }
+
+        Map<String, Object> topRanking = rankings.get(0);
+        Long topGroupId = asLong(topRanking, "id");
+        String topGroupName = stringValue(topRanking.get("groupName"));
+        BigDecimal topReturnRate = percentRate(topRanking.get("profitRate"));
+        List<Vote> votes = topGroupId != null
+                ? voteRepository.findByRoomIdOrderByCreatedAtDesc(topGroupId).stream()
+                        .filter(this::hasInsightStock)
+                        .limit(MAX_INSIGHT_VOTES)
+                        .toList()
+                : List.of();
+        Vote latestReasonVote = votes.stream()
+                .filter(vote -> vote.getReason() != null && !vote.getReason().isBlank())
+                .findFirst()
+                .orElse(votes.isEmpty() ? null : votes.get(0));
+
         return GroupInsightsResponseDTO.builder()
-                .topConsensus(parseConsensus(insight.getConsensusJson()))
+                .topConsensus(buildConsensus(votes, topReturnRate))
                 .topGroup(TopGroupInsightDTO.builder()
-                        .groupId(insight.getTopGroupId())
-                        .groupName(insight.getTopGroupName())
-                        .dailyReturnRate(insight.getDailyReturnRate())
-                        .topPick(insight.getTopPick())
-                        .comment(insight.getComment())
+                        .groupId(topGroupId)
+                        .groupName(topGroupName)
+                        .dailyReturnRate(topReturnRate)
+                        .topPick(latestReasonVote != null ? displayStockName(latestReasonVote) : null)
+                        .comment(buildInsightComment(topGroupName, latestReasonVote))
                         .build())
                 .build();
     }
@@ -219,49 +240,6 @@ public class HomeDataService {
         return body;
     }
 
-    private ManagedGroupInsight getOrCreateInsight() {
-        return managedGroupInsightRepository.findByInsightKey(GROUP_INSIGHT_KEY)
-                .orElseGet(() ->
-                        ManagedGroupInsight.builder()
-                                .insightKey(GROUP_INSIGHT_KEY)
-                                .topGroupName("")
-                                .topPick("")
-                                .comment("")
-                                .consensusJson("[]")
-                                .build()
-                );
-    }
-
-    private List<GroupInsightConsensusDTO> parseConsensus(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            List<Map<String, Object>> rows = OBJECT_MAPPER.readValue(json, new TypeReference<>() {});
-            return rows.stream()
-                    .map(row -> {
-                        String stockCode = stringValue(row.get("stockCode"));
-                        String stockName = stringValue(row.get("stockName"));
-                        String market = marketFor(stockCode);
-                        StockVisualDTO visual = stockVisualAssetResolver.resolve(market, stockCode, stockName, null);
-                        String logoUrl = stockSymbolLogoUrlResolver.resolve(market, stockCode, visual);
-                        return GroupInsightConsensusDTO.builder()
-                                .stockCode(stockCode)
-                                .stockName(stockName)
-                                .market(market)
-                                .logoUrl(logoUrl)
-                                .visual(visual)
-                                .confidenceRate(row.get("confidenceRate") instanceof Number n ? n.intValue() : 0)
-                                .dailyReturnRate(row.get("dailyReturnRate") instanceof Number n ? BigDecimal.valueOf(n.doubleValue()) : BigDecimal.ZERO)
-                                .signal(stringValue(row.get("signal")))
-                                .build();
-                    })
-                    .toList();
-        } catch (Exception ignored) {
-            return List.of();
-        }
-    }
-
     private static Integer asInteger(Map<String, Object> map, String key) {
         return map != null && map.get(key) instanceof Number n ? n.intValue() : null;
     }
@@ -276,6 +254,121 @@ public class HomeDataService {
 
     private String marketFor(String stockCode) {
         return stockCode != null && stockCode.matches("\\d{6}") ? "KRX" : "US";
+    }
+
+    private boolean hasInsightStock(Vote vote) {
+        if (vote == null) {
+            return false;
+        }
+        String stockCode = vote.getStockCode();
+        String stockName = vote.getStockName();
+        return (stockCode != null && !stockCode.isBlank())
+                || (stockName != null && !stockName.isBlank());
+    }
+
+    private List<GroupInsightConsensusDTO> buildConsensus(List<Vote> votes, BigDecimal topReturnRate) {
+        Map<String, ConsensusAccumulator> byStock = new LinkedHashMap<>();
+        for (Vote vote : votes) {
+            String key = consensusKey(vote);
+            byStock.computeIfAbsent(key, ignored -> new ConsensusAccumulator(vote)).add(vote);
+        }
+
+        return byStock.values().stream()
+                .limit(MAX_TOP_CONSENSUS_ITEMS)
+                .map(accumulator -> {
+                    String market = marketFor(accumulator.stockCode);
+                    StockVisualDTO visual = stockVisualAssetResolver.resolve(market, accumulator.stockCode, accumulator.stockName, null);
+                    String logoUrl = stockSymbolLogoUrlResolver.resolve(market, accumulator.stockCode, visual);
+                    return GroupInsightConsensusDTO.builder()
+                            .stockCode(accumulator.stockCode)
+                            .stockName(accumulator.stockName)
+                            .market(market)
+                            .logoUrl(logoUrl)
+                            .visual(visual)
+                            .confidenceRate(accumulator.confidenceRate())
+                            .dailyReturnRate(topReturnRate)
+                            .signal(accumulator.signal())
+                            .build();
+                })
+                .toList();
+    }
+
+    private String consensusKey(Vote vote) {
+        String stockCode = vote.getStockCode();
+        if (stockCode != null && !stockCode.isBlank()) {
+            return stockCode.trim().toUpperCase();
+        }
+        return displayStockName(vote);
+    }
+
+    private static String displayStockName(Vote vote) {
+        String stockName = vote.getStockName();
+        if (stockName != null && !stockName.isBlank()) {
+            return stockName;
+        }
+        return vote.getStockCode();
+    }
+
+    private String buildInsightComment(String topGroupName, Vote vote) {
+        if (vote == null) {
+            return "최근 매수/매도 투표 근거가 아직 없습니다.";
+        }
+        String groupName = topGroupName != null && !topGroupName.isBlank() ? topGroupName : "상위 그룹";
+        String stockName = displayStockName(vote);
+        String action = vote.getType() != null && !vote.getType().isBlank() ? vote.getType() : "투자";
+        String reason = vote.getReason() != null && !vote.getReason().isBlank()
+                ? vote.getReason()
+                : "투표 근거가 비어 있습니다.";
+        return groupName + "은 " + stockName + " " + action + " 의견을 냈어요. 근거: " + reason;
+    }
+
+    private static BigDecimal percentRate(Object value) {
+        if (value instanceof BigDecimal decimal) {
+            return decimal.multiply(BigDecimal.valueOf(100)).setScale(4, RoundingMode.HALF_UP);
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue())
+                    .multiply(BigDecimal.valueOf(100))
+                    .setScale(4, RoundingMode.HALF_UP);
+        }
+        return BigDecimal.ZERO;
+    }
+
+    private static final class ConsensusAccumulator {
+        private final String stockCode;
+        private final String stockName;
+        private int buyCount;
+        private int sellCount;
+
+        private ConsensusAccumulator(Vote vote) {
+            this.stockCode = vote.getStockCode();
+            this.stockName = displayStockName(vote);
+        }
+
+        private void add(Vote vote) {
+            if (isSell(vote)) {
+                sellCount++;
+            } else {
+                buyCount++;
+            }
+        }
+
+        private String signal() {
+            return sellCount > buyCount ? "SELL" : "BUY";
+        }
+
+        private int confidenceRate() {
+            int total = buyCount + sellCount;
+            if (total == 0) {
+                return 0;
+            }
+            return Math.round((Math.max(buyCount, sellCount) * 100f) / total);
+        }
+
+        private static boolean isSell(Vote vote) {
+            String type = vote.getType();
+            return type != null && (type.equalsIgnoreCase("SELL") || type.contains("매도"));
+        }
     }
 
     private static String normalizeRoomStatus(String status) {
