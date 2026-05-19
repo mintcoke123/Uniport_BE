@@ -12,5 +12,5 @@ kis:
 
 backtest:
   price-fallback:
-    # 실제 지표 검증을 위해 기본값은 비활성화. 필요 시 BACKTEST_PRICE_FALLBACK_ENABLED=true 로만 합성 가격 사용.
-    enabled: ${BACKTEST_PRICE_FALLBACK_ENABLED:false}
+    # 외부/캐시 가격이 비는 종목도 분석 흐름은 유지한다. 실제 가격만 검증할 때는 BACKTEST_PRICE_FALLBACK_ENABLED=false.
+    enabled: ${BACKTEST_PRICE_FALLBACK_ENABLED:true}

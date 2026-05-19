@@ -42,7 +42,7 @@ public class KisHistoricalPriceProvider implements HistoricalPriceProvider {
                                       FxRateProvider fxRateProvider,
                                       AssetPriceDailyRepository assetPriceDailyRepository,
                                       AssetMasterRepository assetMasterRepository,
-                                      @Value("${backtest.price-fallback.enabled:false}") boolean localSyntheticPriceFallbackEnabled) {
+                                      @Value("${backtest.price-fallback.enabled:true}") boolean localSyntheticPriceFallbackEnabled) {
         this.kisApiService = kisApiService;
         this.fxRateProvider = fxRateProvider;
         this.assetPriceDailyRepository = assetPriceDailyRepository;

@@ -43,7 +43,7 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
     public YahooHistoricalPriceProvider(RestTemplate restTemplate,
                                         FxRateProvider fxRateProvider,
                                         AssetMasterRepository assetMasterRepository,
-                                        @Value("${backtest.price-fallback.enabled:false}") boolean syntheticPriceFallbackEnabled,
+                                        @Value("${backtest.price-fallback.enabled:true}") boolean syntheticPriceFallbackEnabled,
                                         @Value("${backtest.yahoo.chart-base-url:https://query1.finance.yahoo.com}") String chartBaseUrl) {
         this.restTemplate = restTemplate;
         this.fxRateProvider = fxRateProvider;
