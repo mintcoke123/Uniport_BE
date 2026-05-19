@@ -92,6 +92,8 @@ public class ChatRoomService {
             roomMap.put("groupId", room.getId());
             roomMap.put("name", room.getName());
             roomMap.put("status", room.getStatus());
+            roomMap.put("competitionId", room.getCompetitionId());
+            roomMap.put("roomType", room.getCompetitionId() != null ? "TOURNAMENT" : "GROUP_INVEST");
             roomMap.put("modeLabel", deriveModeLabel(room));
             roomMap.put("marketType", room.getMarketType());
             roomMap.put("marketLabel", toMarketLabel(room.getMarketType()));

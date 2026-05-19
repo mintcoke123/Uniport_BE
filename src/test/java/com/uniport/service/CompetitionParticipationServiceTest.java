@@ -17,6 +17,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -25,6 +26,42 @@ import static org.mockito.Mockito.when;
 class CompetitionParticipationServiceTest {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+    @Test
+    void applyUsesApplicantScopedFallbackTeamIdInsteadOfCurrentUserTeamId() {
+        CompetitionRepository competitionRepository = mock(CompetitionRepository.class);
+        CompetitionApplicationRepository applicationRepository = mock(CompetitionApplicationRepository.class);
+        Competition competition = Competition.builder()
+                .id(7L)
+                .name("세종대 대축제")
+                .startDate("2026-05-20T00:00:00")
+                .endDate("2026-05-21T23:59:59")
+                .status("upcoming")
+                .build();
+        User user = User.builder()
+                .id(10L)
+                .nickname("참가자")
+                .teamId("team-337")
+                .build();
+        when(competitionRepository.findById(7L)).thenReturn(Optional.of(competition));
+        when(applicationRepository.findByCompetition_IdAndUser_Id(7L, 10L)).thenReturn(Optional.empty());
+        when(applicationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        CompetitionService competitionService = new CompetitionService(
+                competitionRepository,
+                Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), KST)
+        );
+        CompetitionParticipationService service = new CompetitionParticipationService(
+                competitionRepository,
+                applicationRepository,
+                competitionService
+        );
+
+        var response = service.apply(7L, user, null, null);
+
+        assertEquals("applicant-10", response.get("teamId"));
+        verify(applicationRepository).findByCompetition_IdAndUser_Id(7L, 10L);
+        verify(applicationRepository, never()).existsByCompetition_IdAndUser_IdAndStatus(anyLong(), anyLong(), any());
+    }
 
     @Test
     void applyRejectsCompetitionThatAlreadyStarted() {

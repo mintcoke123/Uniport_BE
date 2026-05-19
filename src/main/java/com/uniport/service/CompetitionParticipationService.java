@@ -146,13 +146,10 @@ public class CompetitionParticipationService {
     }
 
     private String fallbackParticipantTeamId(User user) {
-        if (user != null && user.getTeamId() != null && !user.getTeamId().isBlank()) {
-            return user.getTeamId();
-        }
         if (user != null && user.getId() != null) {
-            return "solo-" + user.getId();
+            return "applicant-" + user.getId();
         }
-        return "solo-anonymous";
+        return "applicant-anonymous";
     }
 
     private String fallbackParticipantName(User user) {

@@ -65,6 +65,7 @@ class ChatRoomServiceTest {
                 .capacity(3)
                 .memberCount(3)
                 .status("started")
+                .competitionId(7L)
                 .createdAt(Instant.parse("2026-05-17T00:00:00Z"))
                 .build();
         MatchingRoom waitingRoom = MatchingRoom.builder()
@@ -118,8 +119,12 @@ class ChatRoomServiceTest {
         assertEquals(2, rooms.size());
         assertEquals(startedRoom.getId(), rooms.get(0).get("roomId"));
         assertEquals("started", rooms.get(0).get("status"));
+        assertEquals(7L, rooms.get(0).get("competitionId"));
+        assertEquals("TOURNAMENT", rooms.get(0).get("roomType"));
         assertEquals(endedRoom.getId(), rooms.get(1).get("roomId"));
         assertEquals("ended", rooms.get(1).get("status"));
+        assertEquals(null, rooms.get(1).get("competitionId"));
+        assertEquals("GROUP_INVEST", rooms.get(1).get("roomType"));
         verify(teamAccountRepository, never()).findByTeamId(waitingRoom.getId());
         verify(chatMessageRepository, never()).findTopByRoomIdOrderByCreatedAtDesc(waitingRoom.getId());
         verify(voteRepository, never()).findByRoomIdOrderByCreatedAtDesc(waitingRoom.getId());
