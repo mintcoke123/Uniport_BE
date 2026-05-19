@@ -70,14 +70,22 @@ public class RankingService {
     }
 
     public List<MockInvestmentLeaderboardItemDTO> getActiveTeamGameLeaderboard(int limit) {
+        return buildActiveTeamGameLeaderboard(limit, false);
+    }
+
+    public List<MockInvestmentLeaderboardItemDTO> getLiveActiveTeamGameLeaderboard(int limit) {
+        return buildActiveTeamGameLeaderboard(limit, true);
+    }
+
+    private List<MockInvestmentLeaderboardItemDTO> buildActiveTeamGameLeaderboard(int limit, boolean allowNetworkPriceFetch) {
         List<MatchingRoom> started = matchingRoomRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(r -> "started".equals(r.getStatus()))
+                .filter(this::isStartedAlwaysOnRoom)
                 .collect(Collectors.toList());
         Map<String, BigDecimal> resolvedPrices = new HashMap<>();
         List<TeamRankingCandidate> candidates = new ArrayList<>();
 
         for (MatchingRoom room : started) {
-            BigDecimal totalValue = computeTotalValue(room.getId(), false, resolvedPrices);
+            BigDecimal totalValue = computeTotalValue(room.getId(), allowNetworkPriceFetch, resolvedPrices);
             candidates.add(new TeamRankingCandidate(
                     room,
                     totalValue,
@@ -196,9 +204,13 @@ public class RankingService {
     private List<Map<String, Object>> buildGroupRankings(boolean allowNetworkPriceFetch) {
         long startedAt = System.currentTimeMillis();
         List<MatchingRoom> started = matchingRoomRepository.findAllByOrderByCreatedAtDesc().stream()
-                .filter(r -> "started".equals(r.getStatus()))
+                .filter(this::isStartedAlwaysOnRoom)
                 .collect(Collectors.toList());
         return buildGroupRankingsFromRooms(started, allowNetworkPriceFetch, startedAt);
+    }
+
+    private boolean isStartedAlwaysOnRoom(MatchingRoom room) {
+        return room != null && "started".equals(room.getStatus()) && room.getCompetitionId() == null;
     }
 
     private List<Map<String, Object>> buildGroupRankingsForCompetition(Long competitionId, boolean allowNetworkPriceFetch) {

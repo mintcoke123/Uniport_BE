@@ -73,7 +73,7 @@ public class MockInvestmentHomeDashboardService {
         Instant now = serverTime.toInstant();
         String serverTimeText = serverTime.toString();
         List<MockInvestmentLeaderboardItemDTO> activeLeaderboard =
-                rankingService.getActiveTeamGameLeaderboard(HERO_LEADERBOARD_LIMIT);
+                rankingService.getLiveActiveTeamGameLeaderboard(HERO_LEADERBOARD_LIMIT);
 
         return MockInvestmentHomeResponseDTO.builder()
                 .mode(normalizedMode)
@@ -272,7 +272,7 @@ public class MockInvestmentHomeDashboardService {
                 : sources.get(0).updatedAt();
 
         if (sources.isEmpty()) {
-            sources = rankingService.getActiveTeamGameLeaderboard(TOP_INSIGHT_LIMIT).stream()
+            sources = rankingService.getLiveActiveTeamGameLeaderboard(TOP_INSIGHT_LIMIT).stream()
                     .limit(TOP_INSIGHT_LIMIT)
                     .map(TopGroupSource::fromLeaderboard)
                     .toList();

@@ -117,6 +117,55 @@ class RankingServiceTest {
     }
 
     @Test
+    void activeTeamLeaderboardExcludesTournamentRooms() {
+        MatchingRoom alwaysOnRoom = room(11L, "상시 팀", 3, "2026-05-19T00:00:00Z", "2026-05-26T00:00:00Z");
+        MatchingRoom tournamentRoom = room(12L, "토너먼트 팀", 3, "2026-05-19T01:00:00Z", "2026-05-26T01:00:00Z");
+        tournamentRoom.setCompetitionId(7L);
+        when(matchingRoomRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(tournamentRoom, alwaysOnRoom));
+        when(teamAccountRepository.findByTeamId(11L)).thenReturn(Optional.of(account(11L, "11000000.0000")));
+        when(teamHoldingRepository.findByTeamId(11L)).thenReturn(List.of());
+
+        List<MockInvestmentLeaderboardItemDTO> leaderboard = rankingService.getActiveTeamGameLeaderboard(5);
+
+        assertThat(leaderboard)
+                .extracting(MockInvestmentLeaderboardItemDTO::getGroupId)
+                .containsExactly(11L);
+    }
+
+    @Test
+    void liveActiveTeamLeaderboardUsesLiveStockPriceForAlwaysOnRooms() {
+        MatchingRoom alwaysOnRoom = room(13L, "실시간 상시 팀", 3, "2026-05-19T00:00:00Z", "2026-05-26T00:00:00Z");
+        when(matchingRoomRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(alwaysOnRoom));
+        when(teamAccountRepository.findByTeamId(13L)).thenReturn(Optional.of(account(13L, "10000000.0000")));
+        when(teamHoldingRepository.findByTeamId(13L)).thenReturn(List.of(holding(13L, "005930", 10, "100000.0000")));
+        when(kisApiService.getStockPrice("005930")).thenReturn(price("005930", "130000.0000"));
+
+        List<MockInvestmentLeaderboardItemDTO> leaderboard = rankingService.getLiveActiveTeamGameLeaderboard(5);
+
+        assertThat(leaderboard).hasSize(1);
+        assertThat(leaderboard.getFirst().getGroupId()).isEqualTo(13L);
+        assertThat(leaderboard.getFirst().getTotalAssetAmount()).isEqualByComparingTo(new BigDecimal("11300000.0000"));
+        assertThat(leaderboard.getFirst().getReturnRate()).isEqualByComparingTo(new BigDecimal("13.0000"));
+        verify(kisApiService).getStockPrice("005930");
+    }
+
+    @Test
+    void allGroupsRankingExcludesTournamentRooms() {
+        MatchingRoom alwaysOnRoom = room(21L, "상시 전체 랭킹 팀", 3, "2026-05-19T00:00:00Z", "2026-05-26T00:00:00Z");
+        MatchingRoom tournamentRoom = room(22L, "토너먼트 전체 랭킹 팀", 3, "2026-05-19T01:00:00Z", "2026-05-26T01:00:00Z");
+        tournamentRoom.setCompetitionId(7L);
+        when(matchingRoomRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(tournamentRoom, alwaysOnRoom));
+        when(teamAccountRepository.findByTeamId(21L)).thenReturn(Optional.of(account(21L, "11000000.0000")));
+        when(teamHoldingRepository.findByTeamId(21L)).thenReturn(List.of());
+
+        List<Map<String, Object>> ranking = rankingService.getAllGroupsRankingSnapshot();
+
+        assertThat(ranking)
+                .extracting(item -> item.get("id"))
+                .containsExactly(21L);
+    }
+
+    @Test
     void activeTeamLeaderboardUsesCurrentAssetsAsTieBreakerWhenReturnRatesAreEqual() {
         MatchingRoom lowerAssetRoom = room(3L, "동률 낮은 자산 팀", 3, "2026-05-19T00:00:00Z", "2026-05-26T00:00:00Z");
         MatchingRoom higherAssetRoom = room(4L, "동률 높은 자산 팀", 4, "2026-05-19T01:00:00Z", "2026-05-26T01:00:00Z");

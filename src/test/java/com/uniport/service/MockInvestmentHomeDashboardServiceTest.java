@@ -62,7 +62,7 @@ class MockInvestmentHomeDashboardServiceTest {
     void notParticipatingUserGetsParticipationLabelAndStartCta() {
         User user = user(1L, null);
         when(matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(1L)).thenReturn(List.of());
-        when(rankingService.getActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of());
+        when(rankingService.getLiveActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of());
         when(teamGameSnapshotRepository.findBySnapshotDateForRanking(any(LocalDate.class))).thenReturn(List.of());
         when(voteRepository.findByCreatedAtAfterOrderByCreatedAtDesc(any(Instant.class))).thenReturn(List.of());
         when(competitionService.findOngoing()).thenReturn(Optional.empty());
@@ -83,7 +83,7 @@ class MockInvestmentHomeDashboardServiceTest {
         User user = user(2L, "team-7");
         MatchingRoom room = room(7L, "미래투자팀", "started", Instant.now().minusSeconds(600), Instant.now().plusSeconds(3600));
         when(matchingRoomRepository.findById(7L)).thenReturn(Optional.of(room));
-        when(rankingService.getActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of(
+        when(rankingService.getLiveActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of(
                 leaderboardItem(11L, 1, "앞선팀"),
                 leaderboardItem(7L, 2, "미래투자팀")
         ));
@@ -112,7 +112,7 @@ class MockInvestmentHomeDashboardServiceTest {
         User user = user(5L, "team-17");
         MatchingRoom room = room(17L, "정산대기팀", "started", Instant.now().minusSeconds(7200), Instant.now().minusSeconds(60));
         when(matchingRoomRepository.findById(17L)).thenReturn(Optional.of(room));
-        when(rankingService.getActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of(
+        when(rankingService.getLiveActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of(
                 leaderboardItem(17L, 4, "정산대기팀")
         ));
         when(teamGameSnapshotRepository.findBySnapshotDateForRanking(any(LocalDate.class))).thenReturn(List.of());
@@ -136,7 +136,7 @@ class MockInvestmentHomeDashboardServiceTest {
         MatchingRoom room = room(23L, "종료팀", "ended", Instant.now().minusSeconds(10800), Instant.now().minusSeconds(3600));
         when(matchingRoomRepository.findById(23L)).thenReturn(Optional.of(room));
         when(matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(6L)).thenReturn(List.of());
-        when(rankingService.getActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of());
+        when(rankingService.getLiveActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of());
         when(teamGameSnapshotRepository.findBySnapshotDateForRanking(any(LocalDate.class))).thenReturn(List.of());
         when(voteRepository.findByCreatedAtAfterOrderByCreatedAtDesc(any(Instant.class))).thenReturn(List.of());
         when(competitionService.findOngoing()).thenReturn(Optional.empty());
@@ -155,7 +155,7 @@ class MockInvestmentHomeDashboardServiceTest {
     void topThreeInsightsAreUnlockedAndRanksFourToTwentyAreLocked() {
         User user = user(3L, null);
         when(matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(3L)).thenReturn(List.of());
-        when(rankingService.getActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of());
+        when(rankingService.getLiveActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of());
         when(teamGameSnapshotRepository.findBySnapshotDateForRanking(any(LocalDate.class))).thenReturn(List.of(
                 snapshot(1L, "알파팀", "12.3000"),
                 snapshot(2L, "브라보팀", "10.1000"),
@@ -198,7 +198,7 @@ class MockInvestmentHomeDashboardServiceTest {
     void collectiveSignalUsesRecentVotesAndMinimumCount() {
         User user = user(4L, null);
         when(matchingRoomMemberRepository.findByUserIdOrderByJoinedAtDesc(4L)).thenReturn(List.of());
-        when(rankingService.getActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of());
+        when(rankingService.getLiveActiveTeamGameLeaderboard(anyInt())).thenReturn(List.of());
         when(teamGameSnapshotRepository.findBySnapshotDateForRanking(any(LocalDate.class))).thenReturn(List.of());
         when(voteRepository.findByCreatedAtAfterOrderByCreatedAtDesc(any(Instant.class))).thenReturn(List.of(
                 votes(12, 10L, "매수", "삼성전자", "005930", "실적 개선 기대", Instant.now()),
