@@ -608,6 +608,7 @@ public class PointSocialDataService {
                 .map(User::getId)
                 .toList();
         Map<Long, LearningProgressSnapshot> learningProgressByUserId = learningProgressByUserId(userIds);
+        Map<Long, String> relationStatusByUserId = relationStatusByOtherUserId(user);
 
         List<User> sorted = rankingPool.stream()
                 .filter(candidate -> candidate.getId() != null)
@@ -628,13 +629,38 @@ public class PointSocialDataService {
         int endIndex = Math.min(sorted.size(), myIndex + FRIEND_RANKING_WINDOW_SIZE + 1);
         List<FriendRankingItemDTO> items = new ArrayList<>();
         for (int i = startIndex; i < endIndex; i++) {
-            items.add(toRankingItem(i + 1, sorted.get(i), getLearningProgress(sorted.get(i), learningProgressByUserId)));
+            User rankingUser = sorted.get(i);
+            items.add(toRankingItem(
+                    i + 1,
+                    rankingUser,
+                    getLearningProgress(rankingUser, learningProgressByUserId),
+                    relationStatusByUserId.get(rankingUser.getId())
+            ));
         }
         int myRank = myIndex + 1;
         return FriendsDashboardResponseDTO.builder()
                 .ranking(FriendRankingSectionDTO.builder().endDay(3).items(items).build())
-                .myRanking(toRankingItem(myRank, user, getLearningProgress(user, learningProgressByUserId)))
+                .myRanking(toRankingItem(myRank, user, getLearningProgress(user, learningProgressByUserId), null))
                 .build();
+    }
+
+    private Map<Long, String> relationStatusByOtherUserId(User user) {
+        if (user == null || user.getId() == null) {
+            return Map.of();
+        }
+        Map<Long, String> statuses = new HashMap<>();
+        for (FriendRelation relation : friendRelationRepository.findByRequesterUser_IdOrAddresseeUser_IdOrderByUpdatedAtDesc(
+                user.getId(),
+                user.getId()
+        )) {
+            User otherUser = relation.getRequesterUser().getId().equals(user.getId())
+                    ? relation.getAddresseeUser()
+                    : relation.getRequesterUser();
+            if (otherUser != null && otherUser.getId() != null) {
+                statuses.putIfAbsent(otherUser.getId(), relation.getStatus());
+            }
+        }
+        return statuses;
     }
 
     private UserMyPagePreference getOrCreatePreference(Long userId) {
@@ -829,10 +855,15 @@ public class PointSocialDataService {
     }
 
     private FriendRankingItemDTO toRankingItem(int rank, User user) {
-        return toRankingItem(rank, user, getLearningProgress(user));
+        return toRankingItem(rank, user, getLearningProgress(user), null);
     }
 
-    private FriendRankingItemDTO toRankingItem(int rank, User user, LearningProgressSnapshot learningProgress) {
+    private FriendRankingItemDTO toRankingItem(
+            int rank,
+            User user,
+            LearningProgressSnapshot learningProgress,
+            String relationStatus
+    ) {
         return FriendRankingItemDTO.builder()
                 .rank(rank)
                 .userId("USER_" + user.getId())
@@ -841,6 +872,8 @@ public class PointSocialDataService {
                 .level(learningProgress.level())
                 .xp(learningProgress.totalXp())
                 .rankChange(0)
+                .alreadyInvited("REQUESTED".equalsIgnoreCase(relationStatus))
+                .alreadyMatched("ACCEPTED".equalsIgnoreCase(relationStatus))
                 .build();
     }
 

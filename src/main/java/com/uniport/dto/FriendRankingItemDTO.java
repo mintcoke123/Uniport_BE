@@ -33,4 +33,10 @@ public class FriendRankingItemDTO {
 
     @Schema(example = "2")
     private Integer rankChange;
+
+    @Schema(example = "false", requiredMode = Schema.RequiredMode.REQUIRED)
+    private boolean alreadyInvited;
+
+    @Schema(example = "false", requiredMode = Schema.RequiredMode.REQUIRED)
+    private boolean alreadyMatched;
 }
