@@ -157,6 +157,35 @@ class InvestmentIssueServiceTest {
     }
 
     @Test
+    void getIssueDetail_bodyIncludesArticleEvidenceForSpecificIssueContext() {
+        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(List.of(
+                article("nvidia-earnings-risk", NewsCategory.OVERSEAS_STOCK,
+                        "엔비디아 실적 쇼크 우려에 AI 반도체주 약세",
+                        "데이터센터 매출 둔화와 마진 압박 우려가 커졌어요",
+                        "본문 원문은 그대로 복사하지 않아야 합니다.",
+                        BASE_TIME),
+                article("nvidia-margin", NewsCategory.OVERSEAS_STOCK,
+                        "엔비디아 실적 둔화 우려에 마진 압박 전망",
+                        "AI 칩 수요는 유지되지만 비용 부담과 가이던스가 쟁점이라는 설명",
+                        "두 번째 원문 문단",
+                        BASE_TIME.plusMinutes(3))
+        ))));
+        String issueId = investmentIssueService.getIssueList("OVERSEAS", null, 20)
+                .getHeroIssue()
+                .getIssueId();
+
+        InvestmentIssueDetailResponseDTO detail = investmentIssueService.getIssueDetail(issueId);
+
+        assertFalse(detail.getTitle().equals("엔비디아 실적"));
+        assertTrue(detail.getTitle().contains("실적 쇼크 우려") || detail.getTitle().contains("마진 압박"));
+        assertTrue(detail.getBody().contains("기사에서 확인된 내용"));
+        assertTrue(detail.getBody().contains("데이터센터 매출 둔화"));
+        assertTrue(detail.getBody().contains("AI 칩 수요는 유지되지만 비용 부담"));
+        assertFalse(detail.getBody().contains("본문 원문은 그대로 복사하지 않아야 합니다."));
+        assertFalse(detail.getBody().contains("..."));
+    }
+
+    @Test
     void getIssueList_filtersCategoryAndPaginatesItemsAfterCursor() {
         InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(List.of(
                 article("hbm-newest", NewsCategory.DOMESTIC_STOCK,

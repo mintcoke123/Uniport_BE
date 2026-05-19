@@ -381,6 +381,10 @@ public class InvestmentIssueService {
         if (!summary.isBlank()) {
             sections.add(summary);
         }
+        List<String> articleEvidence = articleEvidenceSnippets(issue.sourceArticles(), 3);
+        if (!articleEvidence.isEmpty()) {
+            sections.add("기사에서 확인된 내용\n" + bulletLines(articleEvidence));
+        }
         List<String> reasons = limit(issue.reasonBullets(), maxReasonBullets);
         if (!reasons.isEmpty()) {
             sections.add("주요 근거\n" + bulletLines(reasons));
@@ -398,6 +402,43 @@ public class InvestmentIssueService {
             return "이 설명은 같은 이슈로 묶인 기사 " + sourceCount + "건을 바탕으로 UniPort가 생성했어요.";
         }
         return "이 설명은 현재 확인된 기사 흐름을 바탕으로 UniPort가 생성했어요.";
+    }
+
+    private List<String> articleEvidenceSnippets(List<FetchedNewsArticle> articles, int limit) {
+        List<String> snippets = new ArrayList<>();
+        for (FetchedNewsArticle article : safeList(articles)) {
+            addArticleEvidenceSnippet(snippets, article.getSummary(), limit);
+            if (snippets.size() >= limit) {
+                break;
+            }
+            addArticleEvidenceSnippet(snippets, article.getTitle(), limit);
+            if (snippets.size() >= limit) {
+                break;
+            }
+        }
+        return List.copyOf(snippets);
+    }
+
+    private void addArticleEvidenceSnippet(List<String> snippets, String value, int limit) {
+        if (snippets.size() >= limit) {
+            return;
+        }
+        String snippet = cleanEvidenceText(value);
+        if (snippet.length() < 8 || snippets.contains(snippet)) {
+            return;
+        }
+        snippets.add(snippet);
+    }
+
+    private String cleanEvidenceText(String value) {
+        String cleaned = trimToEmpty(value)
+                .replaceAll("\\.{2,}|…", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (cleaned.length() <= 110) {
+            return cleaned;
+        }
+        return cleaned.substring(0, 110).replaceAll("\\s+\\S*$", "").trim();
     }
 
     private String bulletLines(List<String> values) {

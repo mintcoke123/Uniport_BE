@@ -171,25 +171,75 @@ public class InvestmentIssueAnalyzer {
     private String buildTitle(IssueCluster cluster) {
         String mainEntity = clean(cluster.mainEntity());
         String mainEvent = clean(cluster.mainEvent());
+        String articleTitle = bestArticleTitle(cluster);
+        String generatedTitle = "";
         if (!mainEntity.isBlank() && !mainEvent.isBlank()) {
-            return mainEntity + " " + mainEvent;
+            generatedTitle = mainEntity + " " + mainEvent;
+        } else if (!mainEntity.isBlank()) {
+            generatedTitle = mainEntity;
+        } else if (!mainEvent.isBlank()) {
+            generatedTitle = mainEvent;
         }
-        if (!mainEntity.isBlank()) {
-            return mainEntity;
+
+        if (shouldPreferArticleTitle(generatedTitle, articleTitle, mainEntity)) {
+            return articleTitle;
         }
-        if (!mainEvent.isBlank()) {
-            return mainEvent;
+        if (!generatedTitle.isBlank()) {
+            return generatedTitle;
         }
+        return articleTitle.isBlank() ? "시장 이슈" : articleTitle;
+    }
+
+    private String bestArticleTitle(IssueCluster cluster) {
         return cluster.articles().stream()
                 .map(FetchedNewsArticle::getTitle)
-                .map(this::clean)
+                .map(this::cleanEvidenceText)
                 .filter(title -> !title.isBlank())
                 .findFirst()
-                .orElse("시장 이슈");
+                .orElse("");
+    }
+
+    private boolean shouldPreferArticleTitle(String generatedTitle, String articleTitle, String mainEntity) {
+        if (articleTitle.isBlank()) {
+            return false;
+        }
+        if (generatedTitle.isBlank()) {
+            return true;
+        }
+        if (isGenericGeneratedTitle(generatedTitle)) {
+            return true;
+        }
+        return articleTitle.length() >= generatedTitle.length() + 6
+                && sharesMainEntity(articleTitle, mainEntity);
+    }
+
+    private boolean isGenericGeneratedTitle(String generatedTitle) {
+        String normalizedTitle = clean(generatedTitle);
+        return normalizedTitle.equals("시장")
+                || normalizedTitle.equals("시장 기타")
+                || normalizedTitle.equals("시장 이슈")
+                || normalizedTitle.endsWith(" 기타")
+                || normalizedTitle.endsWith(" 실적")
+                || normalizedTitle.endsWith(" 상승")
+                || normalizedTitle.endsWith(" 하락")
+                || normalizedTitle.endsWith(" 규제")
+                || normalizedTitle.endsWith(" 파업");
+    }
+
+    private boolean sharesMainEntity(String articleTitle, String mainEntity) {
+        String normalizedEntity = normalize(mainEntity);
+        if (normalizedEntity.isBlank() || normalizedEntity.equals("시장")) {
+            return true;
+        }
+        return normalize(articleTitle).contains(normalizedEntity);
     }
 
     private String buildSummary(InvestmentIssueLabel label, IssueCluster cluster) {
         String subject = subject(cluster);
+        List<String> evidenceSnippets = evidenceSnippets(cluster.articles(), 2);
+        if (!evidenceSnippets.isEmpty()) {
+            return subject + " 이슈입니다. " + String.join(" ", evidenceSnippets);
+        }
         return switch (label) {
             case POSITIVE -> subject + " 관련 실적 또는 수요 기대가 강화된 이슈입니다.";
             case NEGATIVE -> subject + " 관련 불확실성과 부담 요인이 커진 이슈입니다.";
@@ -216,6 +266,7 @@ public class InvestmentIssueAnalyzer {
         } else {
             reasons.add(label.labelText() + " 판단 단서: " + cueTexts(labelCues));
         }
+        evidenceSnippets(sourceArticles, 2).forEach(snippet -> reasons.add("기사 핵심: " + snippet));
         if (sourceArticles.size() > 1) {
             reasons.add("같은 이슈로 묶인 기사 " + sourceArticles.size() + "건에서 반복 확인됐어요.");
         }
@@ -253,6 +304,43 @@ public class InvestmentIssueAnalyzer {
                 .toList()
                 .stream()
                 .collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    private List<String> evidenceSnippets(List<FetchedNewsArticle> articles, int limit) {
+        List<String> snippets = new ArrayList<>();
+        for (FetchedNewsArticle article : articles) {
+            addEvidenceSnippet(snippets, article.getSummary(), limit);
+            if (snippets.size() >= limit) {
+                break;
+            }
+            addEvidenceSnippet(snippets, article.getTitle(), limit);
+            if (snippets.size() >= limit) {
+                break;
+            }
+        }
+        return List.copyOf(snippets);
+    }
+
+    private void addEvidenceSnippet(List<String> snippets, String value, int limit) {
+        if (snippets.size() >= limit) {
+            return;
+        }
+        String snippet = cleanEvidenceText(value);
+        if (snippet.length() < 8 || snippets.contains(snippet)) {
+            return;
+        }
+        snippets.add(snippet);
+    }
+
+    private String cleanEvidenceText(String value) {
+        String cleaned = clean(value)
+                .replaceAll("\\.{2,}|…", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (cleaned.length() <= 90) {
+            return cleaned;
+        }
+        return cleaned.substring(0, 90).replaceAll("\\s+\\S*$", "").trim();
     }
 
     private String subject(IssueCluster cluster) {

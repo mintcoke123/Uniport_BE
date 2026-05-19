@@ -171,6 +171,49 @@ class InvestmentIssueAnalyzerTest {
     }
 
     @Test
+    void analyze_usesSpecificArticleTitleWhenClusterEntityAndEventAreGeneric() {
+        IssueCluster cluster = cluster(
+                "20260519|MARKET|시장|기타",
+                InvestmentIssueCategory.MARKET,
+                "시장",
+                "기타",
+                article(
+                        "kospi-rebound",
+                        "코스피, 외국인 순매수에 2,750선 회복",
+                        "대형주 중심으로 위험자산 선호가 살아났다는 분석"
+                )
+        );
+
+        InvestmentIssue issue = analyzer.analyze(cluster);
+
+        assertFalse(issue.title().equals("시장 기타"));
+        assertTrue(issue.title().contains("코스피"));
+        assertTrue(issue.title().contains("2,750선"));
+    }
+
+    @Test
+    void analyze_expandsCompanyEarningsTitleAndSummaryWithArticleEvidence() {
+        IssueCluster cluster = cluster(
+                "20260519|OVERSEAS|엔비디아|실적",
+                InvestmentIssueCategory.OVERSEAS,
+                "엔비디아",
+                "실적",
+                article(
+                        "nvidia-earnings-risk",
+                        "엔비디아 실적 쇼크 우려에 AI 반도체주 약세",
+                        "데이터센터 매출 둔화와 마진 압박 우려가 커졌어요"
+                )
+        );
+
+        InvestmentIssue issue = analyzer.analyze(cluster);
+
+        assertFalse(issue.title().equals("엔비디아 실적"));
+        assertTrue(issue.title().contains("실적 쇼크 우려"));
+        assertTrue(issue.summary().contains("데이터센터 매출 둔화"));
+        assertTrue(issue.summary().contains("마진 압박 우려"));
+    }
+
+    @Test
     void analyze_dailyTextDoesNotMatchAiAcronymCueOrTheme() {
         IssueCluster cluster = cluster(
                 "20260519|MARKET|시장|기타",
