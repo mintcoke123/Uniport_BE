@@ -18,7 +18,6 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.never;
 
 class BetaIosApplicationServiceTest {
 
@@ -131,7 +130,7 @@ class BetaIosApplicationServiceTest {
     }
 
     @Test
-    void syncPendingInternalTestersLeavesApplicationPendingWhenTesterHasNotAcceptedInviteYet() {
+    void syncPendingInternalTestersPersistsPendingReasonWhenTesterHasNotAcceptedInviteYet() {
         BetaIosApplicationRepository repository = mock(BetaIosApplicationRepository.class);
         AppStoreConnectUserInvitationClient invitationClient = mock(AppStoreConnectUserInvitationClient.class);
         AppStoreConnectBetaGroupClient betaGroupClient = mock(AppStoreConnectBetaGroupClient.class);
@@ -153,12 +152,51 @@ class BetaIosApplicationServiceTest {
         )).thenReturn(java.util.List.of(application));
         when(betaGroupClient.addTesterToInternalGroup("ios@example.com"))
                 .thenReturn(AppStoreConnectBetaGroupSyncResult.pending("No betaTester exists for email yet."));
+        when(repository.save(any(BetaIosApplication.class))).thenAnswer(invocation -> invocation.getArgument(0));
         BetaIosApplicationService service = new BetaIosApplicationService(repository, invitationClient, betaGroupClient);
 
         service.syncPendingInternalTesters();
 
+        ArgumentCaptor<BetaIosApplication> captor = ArgumentCaptor.forClass(BetaIosApplication.class);
+        verify(repository).save(captor.capture());
+        BetaIosApplication saved = captor.getValue();
         assertEquals(BetaIosApplicationStatus.USER_INVITE_SENT, application.getStatus());
-        assertEquals("No betaTester exists for email yet.", application.getTestflightGroupFailureMessage());
-        verify(repository, never()).save(any(BetaIosApplication.class));
+        assertEquals("No betaTester exists for email yet.", saved.getTestflightGroupFailureMessage());
+    }
+
+    @Test
+    void syncPendingInternalTestersPersistsFailureWhenBetaGroupClientThrows() {
+        BetaIosApplicationRepository repository = mock(BetaIosApplicationRepository.class);
+        AppStoreConnectUserInvitationClient invitationClient = mock(AppStoreConnectUserInvitationClient.class);
+        AppStoreConnectBetaGroupClient betaGroupClient = mock(AppStoreConnectBetaGroupClient.class);
+        BetaIosApplication application = BetaIosApplication.builder()
+                .id(7L)
+                .name("김유니")
+                .appleIdEmail("ios@example.com")
+                .contactEmail("ios@example.com")
+                .device("iPhone")
+                .consent(true)
+                .status(BetaIosApplicationStatus.USER_INVITE_SENT)
+                .build();
+        when(repository.findTop50ByStatusInOrderByUpdatedAtAsc(
+                java.util.List.of(
+                        BetaIosApplicationStatus.USER_INVITE_SENT,
+                        BetaIosApplicationStatus.USER_INVITE_FAILED,
+                        BetaIosApplicationStatus.TESTFLIGHT_GROUP_FAILED
+                )
+        )).thenReturn(java.util.List.of(application));
+        when(betaGroupClient.addTesterToInternalGroup("ios@example.com"))
+                .thenThrow(new RuntimeException("token parse failed"));
+        when(repository.save(any(BetaIosApplication.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        BetaIosApplicationService service = new BetaIosApplicationService(repository, invitationClient, betaGroupClient);
+
+        service.syncPendingInternalTesters();
+
+        ArgumentCaptor<BetaIosApplication> captor = ArgumentCaptor.forClass(BetaIosApplication.class);
+        verify(repository).save(captor.capture());
+        BetaIosApplication saved = captor.getValue();
+        assertEquals(BetaIosApplicationStatus.TESTFLIGHT_GROUP_FAILED, saved.getStatus());
+        assertEquals("App Store Connect TestFlight group sync failed: token parse failed",
+                saved.getTestflightGroupFailureMessage());
     }
 }

@@ -74,7 +74,14 @@ public class BetaIosApplicationService {
     public void syncPendingInternalTesters() {
         List<BetaIosApplication> applications = repository.findTop50ByStatusInOrderByUpdatedAtAsc(GROUP_SYNC_STATUSES);
         for (BetaIosApplication application : applications) {
-            AppStoreConnectBetaGroupSyncResult result = betaGroupClient.addTesterToInternalGroup(application.getAppleIdEmail());
+            AppStoreConnectBetaGroupSyncResult result;
+            try {
+                result = betaGroupClient.addTesterToInternalGroup(application.getAppleIdEmail());
+            } catch (RuntimeException e) {
+                result = AppStoreConnectBetaGroupSyncResult.failed(
+                        "App Store Connect TestFlight group sync failed: " + e.getMessage()
+                );
+            }
             applyGroupSyncResult(application, result);
         }
     }
@@ -100,6 +107,7 @@ public class BetaIosApplicationService {
     private void applyGroupSyncResult(BetaIosApplication application, AppStoreConnectBetaGroupSyncResult result) {
         if (result.pending()) {
             application.setTestflightGroupFailureMessage(result.message());
+            repository.save(application);
             return;
         }
 
@@ -119,6 +127,7 @@ public class BetaIosApplicationService {
 
         if (result.skipped()) {
             application.setTestflightGroupFailureMessage(result.message());
+            repository.save(application);
             return;
         }
 

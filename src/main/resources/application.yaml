@@ -23,6 +23,10 @@ spring:
         format_sql: true
         default_batch_fetch_size: 100
     open-in-view: false
+  task:
+    scheduling:
+      pool:
+        size: ${SPRING_TASK_SCHEDULING_POOL_SIZE:4}
 
 # 로깅 (SQL 가독성)
 logging:
