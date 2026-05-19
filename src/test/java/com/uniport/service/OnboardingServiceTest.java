@@ -83,6 +83,7 @@ class OnboardingServiceTest {
         LearningUserStateEntity savedState = stateCaptor.getValue();
         assertEquals("{\"intro\":1}", savedState.getEducationCurrentDayJson());
         assertTrue(savedState.getEducationSectorSelectionsJson().contains("\"intro\":[\"ai_semiconductor\",\"quantum_computer\"]"));
+        assertTrue(savedState.getEducationSectorSelectionsJson().contains("\"advanced\":[\"ai_semiconductor\",\"quantum_computer\"]"));
     }
 
     @Test

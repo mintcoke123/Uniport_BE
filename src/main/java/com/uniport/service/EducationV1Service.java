@@ -44,6 +44,8 @@ public class EducationV1Service {
     private static final int REQUIRED_SECTOR_COUNT = 2;
     private static final int DAILY_REWARD_POINT = 500;
     private static final int DAILY_REWARD_EXP = 500;
+    private static final String INTRO_COURSE_ID = "intro";
+    private static final String ADVANCED_COURSE_ID = "advanced";
     private static final Pattern QUIZ_ID_PATTERN = Pattern.compile("^(intro|advanced)_d(\\d+)_q(\\d+)(?:_.+)?$");
     private static final TypeReference<Map<String, Integer>> MAP_STRING_INTEGER_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, Set<Integer>>> MAP_STRING_SET_INTEGER_TYPE = new TypeReference<>() {};
@@ -52,8 +54,8 @@ public class EducationV1Service {
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
     private static final Map<String, CourseDefinition> COURSE_DEFINITIONS = Map.of(
-            "intro", new CourseDefinition("intro", "입문 30일 코스", "투자의 기초를 탄탄하게 다지는 첫걸음", "intro_core", "intro_sector", "입문", "course_cover_intro_main"),
-            "advanced", new CourseDefinition("advanced", "초급 30일 코스", "실전 감각을 익히는 심화 과정", "advanced_core", "advanced_sector", "초급", "course_cover_advanced_main")
+            INTRO_COURSE_ID, new CourseDefinition(INTRO_COURSE_ID, "입문 30일 코스", "투자의 기초를 탄탄하게 다지는 첫걸음", "intro_core", "intro_sector", "입문", "course_cover_intro_main"),
+            ADVANCED_COURSE_ID, new CourseDefinition(ADVANCED_COURSE_ID, "초급 30일 코스", "실전 감각을 익히는 심화 과정", "advanced_core", "advanced_sector", "초급", "course_cover_advanced_main")
     );
 
     private static final List<SectorDefinition> SECTORS = List.of(
@@ -130,7 +132,7 @@ public class EducationV1Service {
             overviewByDay.put(overview.getDayNumber(), overview);
         }
 
-        List<String> selectedSectorIds = state.sectorSelectionsByCourse.getOrDefault(course.id(), List.of());
+        List<String> selectedSectorIds = selectedSectorIdsForCourse(course, state);
         Set<Integer> completedDays = state.completedDaysByCourse.getOrDefault(course.id(), Set.of());
         int currentDay = resolveCurrentDay(course.id(), state);
 
@@ -189,7 +191,7 @@ public class EducationV1Service {
         response.put("content_version", CONTENT_VERSION);
         response.put("course_id", course.id());
         response.put("required_count", REQUIRED_SECTOR_COUNT);
-        response.put("selected_sectors", selectedSectorMaps(state.sectorSelectionsByCourse.getOrDefault(course.id(), List.of())));
+        response.put("selected_sectors", selectedSectorMaps(selectedSectorIdsForCourse(course, state)));
         response.put("available_sectors", availableSectorMaps());
         return response;
     }
@@ -625,11 +627,23 @@ public class EducationV1Service {
         if (day <= CORE_DAYS) {
             return new DayTarget(course.coreTrack(), null, day, "core");
         }
-        List<String> selectedSectorIds = state.sectorSelectionsByCourse.getOrDefault(course.id(), List.of());
+        List<String> selectedSectorIds = selectedSectorIdsForCourse(course, state);
         if (selectedSectorIds.size() < REQUIRED_SECTOR_COUNT) {
             throw new ApiException("SECTOR_SELECTION_REQUIRED", HttpStatus.BAD_REQUEST);
         }
         return sectorDayTarget(course, selectedSectorIds, day);
+    }
+
+    private List<String> selectedSectorIdsForCourse(CourseDefinition course, EducationApiState state) {
+        List<String> selectedSectorIds = state.sectorSelectionsByCourse.getOrDefault(course.id(), List.of());
+        if (selectedSectorIds.size() >= REQUIRED_SECTOR_COUNT || !ADVANCED_COURSE_ID.equals(course.id())) {
+            return selectedSectorIds;
+        }
+        List<String> introSelectedSectorIds = state.sectorSelectionsByCourse.getOrDefault(INTRO_COURSE_ID, List.of());
+        if (introSelectedSectorIds.size() >= REQUIRED_SECTOR_COUNT) {
+            return introSelectedSectorIds;
+        }
+        return selectedSectorIds;
     }
 
     private DayTarget sectorDayTarget(CourseDefinition course, List<String> selectedSectorIds, int day) {

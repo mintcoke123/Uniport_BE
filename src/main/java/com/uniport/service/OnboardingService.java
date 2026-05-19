@@ -34,6 +34,8 @@ import java.util.stream.Collectors;
 public class OnboardingService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String INTRO_COURSE_ID = "intro";
+    private static final String ADVANCED_COURSE_ID = "advanced";
     private static final TypeReference<Map<String, Integer>> MAP_STRING_INTEGER_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, List<String>>> MAP_STRING_LIST_STRING_TYPE = new TypeReference<>() {};
 
@@ -289,6 +291,9 @@ public class OnboardingService {
 
         currentDays.put(courseId, 1);
         sectorSelections.put(courseId, new ArrayList<>(sectorIds));
+        if (INTRO_COURSE_ID.equals(courseId)) {
+            sectorSelections.putIfAbsent(ADVANCED_COURSE_ID, new ArrayList<>(sectorIds));
+        }
 
         learningUserStateRepository.save(LearningUserStateEntity.builder()
                 .userId(user.getId())
@@ -311,9 +316,9 @@ public class OnboardingService {
 
     private String resolveEducationCourseId(String investmentLevel) {
         if ("입문".equals(investmentLevel)) {
-            return "intro";
+            return INTRO_COURSE_ID;
         }
-        return "advanced";
+        return ADVANCED_COURSE_ID;
     }
 
     private boolean hasResult(User user) {

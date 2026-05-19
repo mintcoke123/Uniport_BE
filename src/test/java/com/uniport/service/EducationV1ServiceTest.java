@@ -97,6 +97,44 @@ class EducationV1ServiceTest {
     }
 
     @Test
+    void advancedRoadmapUsesIntroSectorSelectionWhenAdvancedSelectionIsMissing() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateWithIntroSectorsOnlyForAdvancedCourse()));
+        when(educationOverviewRepository.findByTrackAndSectorOrderByDayNumberAsc(eq("advanced_core"), isNull()))
+                .thenReturn(coreOverviews("advanced_core"));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(anyString(), any(), anyInt()))
+                .thenReturn(List.of());
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(anyString(), any(), anyInt()))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseRoadmap(user, "advanced");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> selectedSectors = (List<Map<String, Object>>) response.get("selected_sectors");
+        assertEquals("ai_semiconductor", selectedSectors.get(0).get("sector_id"));
+        assertEquals("quantum_computer", selectedSectors.get(1).get("sector_id"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> days = (List<Map<String, Object>>) response.get("days");
+        assertEquals("ai_semiconductor", days.get(26).get("sector_id"));
+        assertEquals("ai_semiconductor", days.get(27).get("sector_id"));
+        assertEquals("quantum_computer", days.get(28).get("sector_id"));
+        assertEquals("quantum_computer", days.get(29).get("sector_id"));
+    }
+
+    @Test
+    void advancedSectorSelectionUsesIntroSectorSelectionWhenAdvancedSelectionIsMissing() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateWithIntroSectorsOnlyForAdvancedCourse()));
+
+        Map<String, Object> response = service.getSectorSelection(user, "advanced");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> selectedSectors = (List<Map<String, Object>>) response.get("selected_sectors");
+        assertEquals(2, selectedSectors.size());
+        assertEquals("ai_semiconductor", selectedSectors.get(0).get("sector_id"));
+        assertEquals("quantum_computer", selectedSectors.get(1).get("sector_id"));
+    }
+
+    @Test
     void courseDayReplacesSelectedSectorPlaceholderTitleWithSelectedSectorName() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateWithSelectedSectors()));
         when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_sector"), eq("AI 반도체"), eq(1)))
@@ -115,6 +153,23 @@ class EducationV1ServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> visual = (Map<String, Object>) flow.getFirst().get("visual");
         assertEquals("AI 반도체 Day1", visual.get("alt"));
+    }
+
+    @Test
+    void advancedCourseDayUsesIntroSectorSelectionWhenAdvancedSelectionIsMissing() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateWithIntroSectorsOnlyForAdvancedCourse()));
+        when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("advanced_sector"), eq("AI 반도체"), eq(1)))
+                .thenReturn(Optional.of(overview("advanced_sector", "AI 반도체", 1, "선택 섹터 A Day1")));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("advanced_sector"), eq("AI 반도체"), eq(1)))
+                .thenReturn(List.of());
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("advanced_sector"), eq("AI 반도체"), eq(1)))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseDay(user, "advanced", 27);
+
+        assertEquals("AI 반도체 Day1", response.get("title"));
+        assertEquals("advanced", response.get("course_id"));
+        assertEquals("sector", response.get("module_type"));
     }
 
     @Test
@@ -612,6 +667,23 @@ class EducationV1ServiceTest {
                 .completedDaysByCourseJson("{}")
                 .submittedStepIdsJson("[]")
                 .educationCurrentDayJson("{\"intro\":27}")
+                .educationCompletedDaysJson("{}")
+                .educationQuizAnswersJson("{}")
+                .educationCardProgressJson("{}")
+                .educationSectorSelectionsJson("{\"intro\":[\"ai_semiconductor\",\"quantum_computer\"]}")
+                .build();
+    }
+
+    private LearningUserStateEntity stateWithIntroSectorsOnlyForAdvancedCourse() {
+        return LearningUserStateEntity.builder()
+                .userId(1L)
+                .level(0)
+                .point(3000)
+                .streakDays(0)
+                .currentDayByCourseJson("{}")
+                .completedDaysByCourseJson("{}")
+                .submittedStepIdsJson("[]")
+                .educationCurrentDayJson("{\"advanced\":27}")
                 .educationCompletedDaysJson("{}")
                 .educationQuizAnswersJson("{}")
                 .educationCardProgressJson("{}")
