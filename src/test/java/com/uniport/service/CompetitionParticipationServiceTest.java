@@ -216,6 +216,52 @@ class CompetitionParticipationServiceTest {
     }
 
     @Test
+    void applyAllowsAnotherApplicationWhenExistingTournamentHasNotStartedYet() {
+        CompetitionRepository competitionRepository = mock(CompetitionRepository.class);
+        CompetitionApplicationRepository applicationRepository = mock(CompetitionApplicationRepository.class);
+        Competition requestedCompetition = Competition.builder()
+                .id(8L)
+                .name("새 토너먼트")
+                .startDate("2026-05-21T00:00:00")
+                .endDate("2026-05-22T23:59:59")
+                .status("upcoming")
+                .build();
+        Competition existingCompetition = Competition.builder()
+                .id(7L)
+                .name("기존 예정 토너먼트")
+                .startDate("2026-05-20T00:00:00")
+                .endDate("2026-05-23T23:59:59")
+                .status("upcoming")
+                .build();
+        User user = User.builder().id(10L).nickname("참가자").build();
+        CompetitionApplication existingApplication = CompetitionApplication.builder()
+                .competition(existingCompetition)
+                .user(user)
+                .status("APPLIED")
+                .appliedAt(Instant.parse("2026-05-18T00:00:00Z"))
+                .build();
+        when(competitionRepository.findById(8L)).thenReturn(Optional.of(requestedCompetition));
+        when(applicationRepository.findByUser_IdOrderByAppliedAtDesc(10L))
+                .thenReturn(java.util.List.of(existingApplication));
+        when(applicationRepository.findByCompetition_IdAndUser_Id(8L, 10L)).thenReturn(Optional.empty());
+        when(applicationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        CompetitionService competitionService = new CompetitionService(
+                competitionRepository,
+                Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), KST)
+        );
+        CompetitionParticipationService service = new CompetitionParticipationService(
+                competitionRepository,
+                applicationRepository,
+                competitionService
+        );
+
+        var response = service.apply(8L, user, null, null);
+
+        assertEquals(true, response.get("applied"));
+        verify(applicationRepository).save(any());
+    }
+
+    @Test
     void cancelRejectsCompetitionThatAlreadyStarted() {
         CompetitionRepository competitionRepository = mock(CompetitionRepository.class);
         CompetitionApplicationRepository applicationRepository = mock(CompetitionApplicationRepository.class);

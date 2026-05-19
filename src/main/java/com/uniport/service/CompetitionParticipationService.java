@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +44,7 @@ public class CompetitionParticipationService {
         if (!"upcoming".equals(competitionService.resolveStatus(competition))) {
             throw new ApiException("시작 전 토너먼트만 참가 신청할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
-        assertNoOtherActiveTournamentApplication(competitionId, user);
+        assertNoOverlappingOngoingTournamentApplication(competition, user);
 
         CompetitionApplication application = applicationRepository.findByCompetition_IdAndUser_Id(competitionId, user.getId())
                 .orElseGet(() -> CompetitionApplication.builder()
@@ -129,7 +131,7 @@ public class CompetitionParticipationService {
         return applicationRepository.existsByCompetition_IdAndUser_IdAndStatus(competitionId, user.getId(), "APPLIED");
     }
 
-    private void assertNoOtherActiveTournamentApplication(Long competitionId, User user) {
+    private void assertNoOverlappingOngoingTournamentApplication(Competition requestedCompetition, User user) {
         List<CompetitionApplication> applications = applicationRepository.findByUser_IdOrderByAppliedAtDesc(user.getId());
         if (applications == null || applications.isEmpty()) {
             return;
@@ -139,10 +141,33 @@ public class CompetitionParticipationService {
                 .map(CompetitionApplication::getCompetition)
                 .anyMatch(competition -> competition != null
                         && competition.getId() != null
-                        && !competition.getId().equals(competitionId)
-                        && !"ended".equals(competitionService.resolveStatus(competition)));
+                        && !competition.getId().equals(requestedCompetition.getId())
+                        && "ongoing".equals(competitionService.resolveStatus(competition))
+                        && overlaps(competition, requestedCompetition));
         if (hasOtherActiveApplication) {
             throw new ApiException(ACTIVE_TOURNAMENT_APPLICATION_BLOCK_MESSAGE, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private boolean overlaps(Competition left, Competition right) {
+        LocalDateTime leftStart = parseDateTime(left.getStartDate());
+        LocalDateTime leftEnd = parseDateTime(left.getEndDate());
+        LocalDateTime rightStart = parseDateTime(right.getStartDate());
+        LocalDateTime rightEnd = parseDateTime(right.getEndDate());
+        if (leftStart == null || leftEnd == null || rightStart == null || rightEnd == null) {
+            return false;
+        }
+        return leftStart.isBefore(rightEnd) && rightStart.isBefore(leftEnd);
+    }
+
+    private LocalDateTime parseDateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(value);
+        } catch (DateTimeParseException e) {
+            return null;
         }
     }
 
