@@ -15,6 +15,12 @@ class KeywordNewsSentimentAnalyzer implements NewsSentimentAnalyzer {
             "둔화",
             "악화",
             "매도",
+            "약세",
+            "내린",
+            "밀렸",
+            "투매",
+            "폭삭",
+            "후퇴",
             "부진",
             "쇼크",
             "적자",
@@ -40,10 +46,10 @@ class KeywordNewsSentimentAnalyzer implements NewsSentimentAnalyzer {
         String text = input.textForAnalysis().toUpperCase(Locale.ROOT);
         int negativeScore = countMatches(text, NEGATIVE_KEYWORDS);
         int positiveScore = countMatches(text, POSITIVE_KEYWORDS);
-        if (negativeScore > positiveScore) {
+        if (negativeScore > 0 && negativeScore >= positiveScore) {
             return NewsSentimentAnalysis.negative(
                     confidence(negativeScore, positiveScore),
-                    "키워드 기반 부정 신호가 긍정 신호보다 강해 악재로 분류했어요."
+                    "키워드 기반 부정 신호가 긍정 신호 이상으로 확인되어 악재로 분류했어요."
             );
         }
         return NewsSentimentAnalysis.positive(
