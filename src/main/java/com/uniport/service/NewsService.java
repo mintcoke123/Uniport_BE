@@ -674,8 +674,8 @@ public class NewsService {
     }
 
     private String buildNewsroomBody(FetchedNewsArticle article, NewsCategory category) {
-        String title = defaultIfBlank(article.getTitle(), "이번 뉴스");
-        String summary = defaultIfBlank(article.getSummary(), "네이버 뉴스 검색 API에서 확인한 최신 뉴스입니다.");
+        String title = cleanSnippetEllipsis(defaultIfBlank(article.getTitle(), "이번 뉴스"));
+        String summary = bodySummary(article, title);
         String source = defaultIfBlank(article.getSourceName(), "네이버 뉴스");
         String categoryContext = switch (category) {
             case MARKET -> "시황 뉴스는 지수, 금리, 환율처럼 시장 전체 방향을 움직이는 재료를 먼저 확인하는 것이 좋습니다.";
@@ -687,6 +687,25 @@ public class NewsService {
                 + "\n\n핵심 요약: " + summary
                 + "\n\n" + categoryContext
                 + "\n\n원문 전문은 저작권 보호를 위해 앱 안에 복제하지 않고, 출처인 " + source + "의 원문 링크에서 확인할 수 있게 연결합니다.";
+    }
+
+    private String bodySummary(FetchedNewsArticle article, String title) {
+        String summary = cleanSnippetEllipsis(article.getSummary());
+        if (summary.isBlank()) {
+            return title + " 관련 최신 시장 흐름을 확인한 뉴스입니다.";
+        }
+        return summary;
+    }
+
+    private String cleanSnippetEllipsis(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value
+                .replace("...", " ")
+                .replace("…", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     private NewsCategory parseCategory(String rawCategory) {

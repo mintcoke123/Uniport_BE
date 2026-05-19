@@ -276,6 +276,29 @@ class NewsServiceTest {
     }
 
     @Test
+    void getRealtimeNewsDetail_doesNotRenderEllipsizedSearchSnippetsInBody() {
+        when(newsFeedClient.fetchLatest()).thenReturn(List.of(
+                FetchedNewsArticle.builder()
+                        .id("naver_truncated")
+                        .category(NewsCategory.MARKET)
+                        .title("원/달러 환율 다시 1500원 돌파…외국인 6조 매도에 원화 약세 압력 커졌...")
+                        .summary("코스피는 이날 3% 넘게 밀리며 7,271선까지 후퇴했고, 장중에는 7,100선... 달러 강세...")
+                        .content("")
+                        .sourceName("네이버 뉴스")
+                        .publishedAt(LocalDateTime.of(2026, 5, 19, 15, 30))
+                        .featured(true)
+                        .externalUrl("https://example.com/truncated")
+                        .build()
+        ));
+
+        RealtimeNewsDetailResponseDTO response = newsService.getRealtimeNewsDetail("naver_truncated");
+
+        org.junit.jupiter.api.Assertions.assertFalse(response.getBody().contains("..."));
+        org.junit.jupiter.api.Assertions.assertFalse(response.getBody().contains("…"));
+        org.junit.jupiter.api.Assertions.assertTrue(response.getBody().contains("원/달러 환율 다시 1500원 돌파"));
+    }
+
+    @Test
     void getNewsDetail_canResolveNaverApiArticleById() {
         when(newsFeedClient.fetchLatest()).thenReturn(List.of(
                 fetched("naver_overseas_1", NewsCategory.OVERSEAS_STOCK, false, LocalDateTime.of(2026, 5, 11, 12, 20))

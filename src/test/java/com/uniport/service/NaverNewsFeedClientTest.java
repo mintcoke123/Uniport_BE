@@ -1,17 +1,20 @@
 package com.uniport.service;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
+import java.net.URLDecoder;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -167,5 +170,35 @@ class NaverNewsFeedClientTest {
 
         assertEquals(1, articles.size());
         assertEquals(NewsCategory.DOMESTIC_STOCK, articles.get(0).getCategory());
+    }
+
+    @Test
+    void fetchLatest_defaultFeedsAreBroadInsteadOfSamsungAndSkHynixOnly() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        NaverNewsFeedClient client = new NaverNewsFeedClient(
+                restTemplate,
+                true,
+                "client-id",
+                "client-secret",
+                300,
+                10
+        );
+
+        client.fetchLatest();
+
+        ArgumentCaptor<URI> uriCaptor = ArgumentCaptor.forClass(URI.class);
+        verify(restTemplate, org.mockito.Mockito.atLeastOnce()).exchange(
+                uriCaptor.capture(),
+                eq(HttpMethod.GET),
+                org.mockito.ArgumentMatchers.<HttpEntity<Void>>any(),
+                eq(String.class)
+        );
+        List<String> queries = uriCaptor.getAllValues().stream()
+                .map(URI::toString)
+                .map(value -> URLDecoder.decode(value, java.nio.charset.StandardCharsets.UTF_8))
+                .toList();
+        assertTrue(queries.stream().anyMatch(value -> value.contains("코스피") && value.contains("환율")));
+        assertTrue(queries.stream().anyMatch(value -> value.contains("반도체") && value.contains("바이오")));
+        assertFalse(queries.stream().anyMatch(value -> value.contains("삼성전자 SK하이닉스")));
     }
 }

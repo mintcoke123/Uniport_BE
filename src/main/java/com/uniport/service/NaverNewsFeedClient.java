@@ -250,13 +250,13 @@ public class NaverNewsFeedClient implements NewsFeedClient {
 
     private static List<FeedDefinition> defaultFeeds() {
         return List.of(
-                FeedDefinition.domesticStock("삼성전자 SK하이닉스"),
-                FeedDefinition.domesticStock("현대차 기아 LG에너지솔루션"),
-                FeedDefinition.domesticStock("NAVER 카카오 셀트리온"),
-                FeedDefinition.overseasStock("엔비디아 애플 테슬라"),
-                FeedDefinition.overseasStock("마이크로소프트 알파벳 아마존"),
-                FeedDefinition.market("코스피 시황"),
-                FeedDefinition.market("환율 금리 증시")
+                FeedDefinition.market("코스피 코스닥 환율 금리"),
+                FeedDefinition.market("증시 시황 외국인 기관"),
+                FeedDefinition.domesticStock("국내증시 실적 어닝"),
+                FeedDefinition.domesticStock("반도체 자동차 배터리 바이오 금융"),
+                FeedDefinition.domesticStock("AI 로봇 원전 방산"),
+                FeedDefinition.overseasStock("미국증시 빅테크 AI"),
+                FeedDefinition.overseasStock("나스닥 엔비디아 테슬라 애플")
         );
     }
 
