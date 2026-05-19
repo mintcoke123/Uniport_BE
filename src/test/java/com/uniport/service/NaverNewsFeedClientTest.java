@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -200,5 +201,42 @@ class NaverNewsFeedClientTest {
         assertTrue(queries.stream().anyMatch(value -> value.contains("코스피") && value.contains("환율")));
         assertTrue(queries.stream().anyMatch(value -> value.contains("반도체") && value.contains("바이오")));
         assertFalse(queries.stream().anyMatch(value -> value.contains("삼성전자 SK하이닉스")));
+    }
+
+    @Test
+    void fetchLatest_usesConfiguredQueriesByGroup() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("naver.news.queries.market[0]", "시장 설정")
+                .withProperty("naver.news.queries.theme[0]", "테마 설정")
+                .withProperty("naver.news.queries.company[0]", "기업 설정")
+                .withProperty("naver.news.queries.overseas[0]", "해외 설정");
+        NaverNewsFeedClient client = new NaverNewsFeedClient(
+                restTemplate,
+                true,
+                "client-id",
+                "client-secret",
+                300,
+                10,
+                environment
+        );
+
+        client.fetchLatest();
+
+        ArgumentCaptor<URI> uriCaptor = ArgumentCaptor.forClass(URI.class);
+        verify(restTemplate, org.mockito.Mockito.times(4)).exchange(
+                uriCaptor.capture(),
+                eq(HttpMethod.GET),
+                org.mockito.ArgumentMatchers.<HttpEntity<Void>>any(),
+                eq(String.class)
+        );
+        List<String> queries = uriCaptor.getAllValues().stream()
+                .map(URI::toString)
+                .map(value -> URLDecoder.decode(value, java.nio.charset.StandardCharsets.UTF_8))
+                .toList();
+        assertTrue(queries.stream().anyMatch(value -> value.contains("시장 설정")));
+        assertTrue(queries.stream().anyMatch(value -> value.contains("테마 설정")));
+        assertTrue(queries.stream().anyMatch(value -> value.contains("기업 설정")));
+        assertTrue(queries.stream().anyMatch(value -> value.contains("해외 설정")));
     }
 }

@@ -98,7 +98,21 @@ naver:
     client-id: ${NAVER_NEWS_CLIENT_ID:}
     client-secret: ${NAVER_NEWS_CLIENT_SECRET:}
     cache-ttl-seconds: ${NAVER_NEWS_CACHE_TTL_SECONDS:300}
-    display-per-query: ${NAVER_NEWS_DISPLAY_PER_QUERY:10}
+    display-per-query: ${NAVER_NEWS_DISPLAY_PER_QUERY:30}
+    queries:
+      market:
+        - "코스피 코스닥 환율 금리 외국인 기관"
+        - "증시 시황 FOMC 금리 환율"
+      theme:
+        - "반도체 HBM AI 데이터센터"
+        - "2차전지 배터리 전기차 리튬"
+        - "방산 원전 로봇 바이오"
+      company:
+        - "국내증시 실적 영업이익 어닝"
+        - "수주 공급계약 공시 자사주"
+      overseas:
+        - "미국증시 나스닥 빅테크 AI"
+        - "엔비디아 테슬라 애플 마이크로소프트"
 
 finbert:
   sentiment:

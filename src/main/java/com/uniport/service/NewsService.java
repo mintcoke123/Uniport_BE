@@ -18,6 +18,7 @@ import com.uniport.exception.ApiException;
 import com.uniport.repository.ManagedNewsArticleRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,24 @@ public class NewsService {
     private final ChatService chatService;
     private final NewsFeedClient newsFeedClient;
     private final NewsSentimentAnalyzer newsSentimentAnalyzer;
+    private final RawNewsNormalizer rawNewsNormalizer;
+
+    @Autowired
+    public NewsService(ManagedNewsArticleRepository managedNewsArticleRepository,
+                       MatchingRoomMemberRepository matchingRoomMemberRepository,
+                       MatchingRoomRepository matchingRoomRepository,
+                       ChatService chatService,
+                       NewsFeedClient newsFeedClient,
+                       NewsSentimentAnalyzer newsSentimentAnalyzer,
+                       RawNewsNormalizer rawNewsNormalizer) {
+        this.managedNewsArticleRepository = managedNewsArticleRepository;
+        this.matchingRoomMemberRepository = matchingRoomMemberRepository;
+        this.matchingRoomRepository = matchingRoomRepository;
+        this.chatService = chatService;
+        this.newsFeedClient = newsFeedClient;
+        this.newsSentimentAnalyzer = newsSentimentAnalyzer;
+        this.rawNewsNormalizer = rawNewsNormalizer != null ? rawNewsNormalizer : new RawNewsNormalizer();
+    }
 
     public NewsService(ManagedNewsArticleRepository managedNewsArticleRepository,
                        MatchingRoomMemberRepository matchingRoomMemberRepository,
@@ -53,12 +72,13 @@ public class NewsService {
                        ChatService chatService,
                        NewsFeedClient newsFeedClient,
                        NewsSentimentAnalyzer newsSentimentAnalyzer) {
-        this.managedNewsArticleRepository = managedNewsArticleRepository;
-        this.matchingRoomMemberRepository = matchingRoomMemberRepository;
-        this.matchingRoomRepository = matchingRoomRepository;
-        this.chatService = chatService;
-        this.newsFeedClient = newsFeedClient;
-        this.newsSentimentAnalyzer = newsSentimentAnalyzer;
+        this(managedNewsArticleRepository,
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatService,
+                newsFeedClient,
+                newsSentimentAnalyzer,
+                new RawNewsNormalizer());
     }
 
     @Transactional(readOnly = true)
@@ -441,8 +461,8 @@ public class NewsService {
     }
 
     private boolean hasSimilarTitle(String left, String right) {
-        List<String> leftTokens = titleSimilarityTokens(left);
-        List<String> rightTokens = titleSimilarityTokens(right);
+        List<String> leftTokens = rawNewsNormalizer.titleTokens(left);
+        List<String> rightTokens = rawNewsNormalizer.titleTokens(right);
         if (leftTokens.size() < 3 || rightTokens.size() < 3) {
             return false;
         }
@@ -454,59 +474,6 @@ public class NewsService {
         }
         double overlap = common / (double) Math.min(leftTokens.size(), rightTokens.size());
         return common >= 3 && overlap >= 0.5;
-    }
-
-    private List<String> titleSimilarityTokens(String title) {
-        if (title == null || title.isBlank()) {
-            return List.of();
-        }
-        String normalized = title
-                .replace("外人", "외국인")
-                .replace("外國人", "외국인")
-                .replace("외인", "외국인")
-                .replace("兆", "조")
-                .replace("↓", " 하락 ")
-                .replace("↑", " 상승 ")
-                .replaceAll("(?<=\\d),(?=\\d)", "")
-                .replaceAll("\\[[^\\]]+]", " ")
-                .replaceAll("[^0-9A-Za-z가-힣]+", " ");
-        List<String> tokens = new ArrayList<>();
-        for (String rawToken : normalized.split("\\s+")) {
-            String token = canonicalTitleToken(rawToken);
-            if (!token.isBlank() && !tokens.contains(token)) {
-                tokens.add(token);
-            }
-        }
-        return tokens;
-    }
-
-    private String canonicalTitleToken(String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) {
-            return "";
-        }
-        String token = rawToken.trim().toUpperCase(Locale.ROOT)
-                .replaceAll("(으로|에서|에게|까지|부터|보다|에는|으로는|에는|에|이|가|은|는|을|를|과|와|도)$", "");
-        if (token.contains("외국인")) {
-            return "외국인";
-        }
-        if (token.contains("순매도") || token.contains("매도") || token.contains("팔자") || token.contains("투매")) {
-            return "매도";
-        }
-        if (token.contains("급락") || token.contains("하락") || token.contains("후퇴")
-                || token.contains("내린") || token.contains("붕괴") || token.contains("털썩")) {
-            return "하락";
-        }
-        if (token.matches("\\d+조.*")) {
-            return token.replaceAll("^(\\d+)조.*", "$1조");
-        }
-        if (token.matches("\\d{4}선.*")) {
-            return token.substring(0, 4) + "선";
-        }
-        if (List.of("마감시황", "속보", "종합", "단독", "뉴스", "시황").contains(token)
-                || token.length() < 2) {
-            return "";
-        }
-        return token;
     }
 
     private RealtimeNewsCategory classifyArticle(NewsArticleView article) {

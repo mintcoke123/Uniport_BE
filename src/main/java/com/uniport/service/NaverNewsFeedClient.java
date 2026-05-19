@@ -4,13 +4,15 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.HtmlUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
@@ -22,10 +24,10 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
 
 @Component
 public class NaverNewsFeedClient implements NewsFeedClient {
@@ -42,6 +44,8 @@ public class NaverNewsFeedClient implements NewsFeedClient {
     private final int cacheTtlSeconds;
     private final int displayPerQuery;
     private final List<FeedDefinition> feeds;
+    private final RawNewsNormalizer normalizer;
+    private final RawNewsDeduplicator deduplicator;
 
     private Instant cachedAt;
     private List<FetchedNewsArticle> cachedArticles = List.of();
@@ -52,7 +56,20 @@ public class NaverNewsFeedClient implements NewsFeedClient {
                                @Value("${naver.news.client-id:}") String clientId,
                                @Value("${naver.news.client-secret:}") String clientSecret,
                                @Value("${naver.news.cache-ttl-seconds:300}") int cacheTtlSeconds,
-                               @Value("${naver.news.display-per-query:10}") int displayPerQuery) {
+                               @Value("${naver.news.display-per-query:10}") int displayPerQuery,
+                               Environment environment,
+                               RawNewsNormalizer normalizer,
+                               RawNewsDeduplicator deduplicator) {
+        this(restTemplate, enabled, clientId, clientSecret, cacheTtlSeconds, displayPerQuery,
+                feedsFromEnvironment(environment), normalizer, deduplicator);
+    }
+
+    NaverNewsFeedClient(RestTemplate restTemplate,
+                        boolean enabled,
+                        String clientId,
+                        String clientSecret,
+                        int cacheTtlSeconds,
+                        int displayPerQuery) {
         this(restTemplate, enabled, clientId, clientSecret, cacheTtlSeconds, displayPerQuery, defaultFeeds());
     }
 
@@ -62,7 +79,31 @@ public class NaverNewsFeedClient implements NewsFeedClient {
                         String clientSecret,
                         int cacheTtlSeconds,
                         int displayPerQuery,
+                        Environment environment) {
+        this(restTemplate, enabled, clientId, clientSecret, cacheTtlSeconds, displayPerQuery,
+                feedsFromEnvironment(environment));
+    }
+
+    NaverNewsFeedClient(RestTemplate restTemplate,
+                        boolean enabled,
+                        String clientId,
+                        String clientSecret,
+                        int cacheTtlSeconds,
+                        int displayPerQuery,
                         List<FeedDefinition> feeds) {
+        this(restTemplate, enabled, clientId, clientSecret, cacheTtlSeconds, displayPerQuery,
+                feeds, new RawNewsNormalizer(), new RawNewsDeduplicator());
+    }
+
+    private NaverNewsFeedClient(RestTemplate restTemplate,
+                                boolean enabled,
+                                String clientId,
+                                String clientSecret,
+                                int cacheTtlSeconds,
+                                int displayPerQuery,
+                                List<FeedDefinition> feeds,
+                                RawNewsNormalizer normalizer,
+                                RawNewsDeduplicator deduplicator) {
         this.restTemplate = restTemplate;
         this.enabled = enabled;
         this.clientId = clientId != null ? clientId.trim() : "";
@@ -70,6 +111,8 @@ public class NaverNewsFeedClient implements NewsFeedClient {
         this.cacheTtlSeconds = Math.max(cacheTtlSeconds, 0);
         this.displayPerQuery = Math.max(1, Math.min(displayPerQuery, 100));
         this.feeds = feeds != null ? feeds : List.of();
+        this.normalizer = normalizer != null ? normalizer : new RawNewsNormalizer();
+        this.deduplicator = deduplicator != null ? deduplicator : new RawNewsDeduplicator(this.normalizer);
     }
 
     @Override
@@ -81,20 +124,12 @@ public class NaverNewsFeedClient implements NewsFeedClient {
             return cachedArticles;
         }
 
-        Map<String, FetchedNewsArticle> deduped = new LinkedHashMap<>();
+        List<FetchedNewsArticle> fetched = new ArrayList<>();
         for (FeedDefinition feed : feeds) {
-            for (FetchedNewsArticle article : fetchFeed(feed)) {
-                String key = article.getExternalUrl() != null && !article.getExternalUrl().isBlank()
-                        ? article.getExternalUrl()
-                        : article.getTitle();
-                FetchedNewsArticle existing = deduped.get(key);
-                if (existing == null || shouldPreferArticle(article, existing)) {
-                    deduped.put(key, article);
-                }
-            }
+            fetched.addAll(fetchFeed(feed));
         }
 
-        List<FetchedNewsArticle> articles = new ArrayList<>(deduped.values());
+        List<FetchedNewsArticle> articles = new ArrayList<>(deduplicator.deduplicate(fetched));
         articles.sort((left, right) -> {
             LocalDateTime l = left.getPublishedAt();
             LocalDateTime r = right.getPublishedAt();
@@ -165,7 +200,7 @@ public class NaverNewsFeedClient implements NewsFeedClient {
             }
             String rawTitle = stringValue(item.get("title"));
             ParsedTitle parsedTitle = parseTitle(rawTitle);
-            String summary = cleanText(stringValue(item.get("description")));
+            String summary = normalizer.cleanDisplayText(stringValue(item.get("description")));
             String originalLink = stringValue(item.get("originallink"));
             String naverLink = stringValue(item.get("link"));
             String externalUrl = !originalLink.isBlank() ? originalLink : naverLink;
@@ -188,23 +223,12 @@ public class NaverNewsFeedClient implements NewsFeedClient {
     }
 
     private ParsedTitle parseTitle(String rawTitle) {
-        String title = cleanText(rawTitle);
+        String title = normalizer.cleanDisplayText(rawTitle);
         int separatorIndex = title.lastIndexOf(" - ");
         if (separatorIndex <= 0 || separatorIndex >= title.length() - 3) {
             return new ParsedTitle(title, "");
         }
         return new ParsedTitle(title.substring(0, separatorIndex).trim(), title.substring(separatorIndex + 3).trim());
-    }
-
-    private String cleanText(String value) {
-        if (value == null || value.isBlank()) {
-            return "";
-        }
-        return HtmlUtils.htmlUnescape(value)
-                .replaceAll("(?i)</?b>", "")
-                .replaceAll("<[^>]+>", "")
-                .replaceAll("\\s+", " ")
-                .trim();
     }
 
     private LocalDateTime parsePublishedAt(String value) {
@@ -230,34 +254,63 @@ public class NaverNewsFeedClient implements NewsFeedClient {
         return builder.toString();
     }
 
-    private boolean shouldPreferArticle(FetchedNewsArticle candidate, FetchedNewsArticle existing) {
-        return categoryPriority(candidate.getCategory()) > categoryPriority(existing.getCategory());
-    }
-
-    private int categoryPriority(NewsCategory category) {
-        if (category == NewsCategory.DOMESTIC_STOCK || category == NewsCategory.OVERSEAS_STOCK) {
-            return 2;
-        }
-        if (category == NewsCategory.MARKET) {
-            return 1;
-        }
-        return 0;
-    }
-
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
     }
 
+    private static List<FeedDefinition> feedsFromEnvironment(Environment environment) {
+        if (environment == null) {
+            return defaultFeeds();
+        }
+        List<FeedDefinition> feeds = new ArrayList<>();
+        addFeeds(feeds, configuredQueries(environment, "naver.news.queries.market", defaultMarketQueries()), FeedDefinition::market);
+        addFeeds(feeds, configuredQueries(environment, "naver.news.queries.theme", defaultThemeQueries()), FeedDefinition::domesticStock);
+        addFeeds(feeds, configuredQueries(environment, "naver.news.queries.company", defaultCompanyQueries()), FeedDefinition::domesticStock);
+        addFeeds(feeds, configuredQueries(environment, "naver.news.queries.overseas", defaultOverseasQueries()), FeedDefinition::overseasStock);
+        return List.copyOf(feeds);
+    }
+
+    private static List<String> configuredQueries(Environment environment, String key, List<String> defaultQueries) {
+        List<String> queries = Binder.get(environment)
+                .bind(key, Bindable.listOf(String.class))
+                .orElse(defaultQueries);
+        return queries.stream()
+                .map(query -> query != null ? query.trim() : "")
+                .filter(query -> !query.isBlank())
+                .toList();
+    }
+
+    private static void addFeeds(List<FeedDefinition> feeds,
+                                 List<String> queries,
+                                 Function<String, FeedDefinition> factory) {
+        queries.stream()
+                .map(factory)
+                .forEach(feeds::add);
+    }
+
     private static List<FeedDefinition> defaultFeeds() {
-        return List.of(
-                FeedDefinition.market("코스피 코스닥 환율 금리"),
-                FeedDefinition.market("증시 시황 외국인 기관"),
-                FeedDefinition.domesticStock("국내증시 실적 어닝"),
-                FeedDefinition.domesticStock("반도체 자동차 배터리 바이오 금융"),
-                FeedDefinition.domesticStock("AI 로봇 원전 방산"),
-                FeedDefinition.overseasStock("미국증시 빅테크 AI"),
-                FeedDefinition.overseasStock("나스닥 엔비디아 테슬라 애플")
-        );
+        List<FeedDefinition> feeds = new ArrayList<>();
+        addFeeds(feeds, defaultMarketQueries(), FeedDefinition::market);
+        addFeeds(feeds, defaultCompanyQueries(), FeedDefinition::domesticStock);
+        addFeeds(feeds, defaultThemeQueries(), FeedDefinition::domesticStock);
+        addFeeds(feeds, defaultOverseasQueries(), FeedDefinition::overseasStock);
+        return List.copyOf(feeds);
+    }
+
+    private static List<String> defaultMarketQueries() {
+        return List.of("코스피 코스닥 환율 금리", "증시 시황 외국인 기관");
+    }
+
+    private static List<String> defaultThemeQueries() {
+        return List.of("반도체 자동차 배터리 바이오 금융", "AI 로봇 원전 방산");
+    }
+
+    private static List<String> defaultCompanyQueries() {
+        return List.of("국내증시 실적 어닝");
+    }
+
+    private static List<String> defaultOverseasQueries() {
+        return List.of("미국증시 빅테크 AI", "나스닥 엔비디아 테슬라 애플");
     }
 
     private record ParsedTitle(String title, String source) {
