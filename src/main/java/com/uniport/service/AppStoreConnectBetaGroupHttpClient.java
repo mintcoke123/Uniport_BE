@@ -24,7 +24,6 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
 
     private final RestTemplate restTemplate;
     private final AppStoreConnectTokenProvider tokenProvider;
-    private final boolean enabled;
     private final String appId;
     private final String configuredGroupId;
     private final String groupName;
@@ -33,7 +32,6 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
     public AppStoreConnectBetaGroupHttpClient(
             RestTemplate restTemplate,
             AppStoreConnectTokenProvider tokenProvider,
-            @Value("${app.beta.ios.app-store-connect.group-sync-enabled:false}") boolean enabled,
             @Value("${app.beta.ios.app-store-connect.app-id:}") String appId,
             @Value("${app.beta.ios.app-store-connect.internal-beta-group-id:}") String configuredGroupId,
             @Value("${app.beta.ios.app-store-connect.internal-beta-group-name:uniport tester}") String groupName,
@@ -41,7 +39,6 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
     ) {
         this.restTemplate = restTemplate;
         this.tokenProvider = tokenProvider;
-        this.enabled = enabled;
         this.appId = trimToEmpty(appId);
         this.configuredGroupId = trimToEmpty(configuredGroupId);
         this.groupName = trimToDefault(groupName, "uniport tester");
@@ -51,7 +48,7 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
     @Override
     @SuppressWarnings("unchecked")
     public AppStoreConnectBetaGroupSyncResult addTesterToInternalGroup(String email) {
-        if (!enabled || appId.isBlank()) {
+        if (appId.isBlank()) {
             return AppStoreConnectBetaGroupSyncResult.skipped("App Store Connect TestFlight group sync is not configured.");
         }
         if (configuredGroupId.isBlank() && groupName.isBlank()) {

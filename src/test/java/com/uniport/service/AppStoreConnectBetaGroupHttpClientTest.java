@@ -55,7 +55,6 @@ class AppStoreConnectBetaGroupHttpClientTest {
         AppStoreConnectBetaGroupHttpClient client = new AppStoreConnectBetaGroupHttpClient(
                 restTemplate,
                 tokenProvider,
-                true,
                 "app-1",
                 "",
                 "uniport tester",
@@ -108,7 +107,6 @@ class AppStoreConnectBetaGroupHttpClientTest {
         AppStoreConnectBetaGroupHttpClient client = new AppStoreConnectBetaGroupHttpClient(
                 restTemplate,
                 tokenProvider,
-                true,
                 "app-1",
                 "group-1",
                 "",
