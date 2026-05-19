@@ -83,6 +83,61 @@ class AppStoreConnectBetaGroupHttpClientTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void addTesterToInternalGroupCreatesBetaTesterInGroupWhenTesterDoesNotExistYet() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        AppStoreConnectTokenProvider tokenProvider = mock(AppStoreConnectTokenProvider.class);
+        when(tokenProvider.createToken()).thenReturn("jwt-token");
+        when(restTemplate.exchange(
+                eq(URI.create("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com")),
+                eq(HttpMethod.GET),
+                org.mockito.ArgumentMatchers.any(HttpEntity.class),
+                eq(Map.class)
+        )).thenReturn(ResponseEntity.ok(Map.of(
+                "data", List.of()
+        )));
+        when(restTemplate.exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/betaTesters"),
+                eq(HttpMethod.POST),
+                org.mockito.ArgumentMatchers.any(HttpEntity.class),
+                eq(Map.class)
+        )).thenReturn(ResponseEntity.status(201).body(Map.of(
+                "data", Map.of("id", "tester-1")
+        )));
+        AppStoreConnectBetaGroupHttpClient client = new AppStoreConnectBetaGroupHttpClient(
+                restTemplate,
+                tokenProvider,
+                "app-1",
+                "group-1",
+                "",
+                "https://api.appstoreconnect.apple.com"
+        );
+
+        AppStoreConnectBetaGroupSyncResult result = client.addTesterToInternalGroup("ios@example.com");
+
+        ArgumentCaptor<HttpEntity> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/betaTesters"),
+                eq(HttpMethod.POST),
+                captor.capture(),
+                eq(Map.class)
+        );
+        Map<String, Object> body = (Map<String, Object>) captor.getValue().getBody();
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        Map<String, Object> attributes = (Map<String, Object>) data.get("attributes");
+        Map<String, Object> relationships = (Map<String, Object>) data.get("relationships");
+        Map<String, Object> betaGroups = (Map<String, Object>) relationships.get("betaGroups");
+        List<Map<String, String>> betaGroupData = (List<Map<String, String>>) betaGroups.get("data");
+        assertEquals("betaTesters", data.get("type"));
+        assertEquals("ios@example.com", attributes.get("email"));
+        assertEquals("betaGroups", betaGroupData.get(0).get("type"));
+        assertEquals("group-1", betaGroupData.get(0).get("id"));
+        assertTrue(result.added());
+        assertEquals("tester-1", result.betaTesterId());
+        assertEquals("group-1", result.groupId());
+    }
+
+    @Test
     void addTesterToInternalGroupTreatsExistingRelationshipAsAdded() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         AppStoreConnectTokenProvider tokenProvider = mock(AppStoreConnectTokenProvider.class);

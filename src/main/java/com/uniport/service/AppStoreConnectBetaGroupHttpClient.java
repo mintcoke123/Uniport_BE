@@ -65,13 +65,25 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
                     Map.class
             );
             String betaTesterId = firstDataId(testerResponse.getBody());
-            if (betaTesterId == null || betaTesterId.isBlank()) {
-                return AppStoreConnectBetaGroupSyncResult.pending("No betaTester exists for email yet.");
-            }
 
             String groupId = configuredGroupId.isBlank() ? resolveGroupId(getEntity) : configuredGroupId;
             if (groupId == null || groupId.isBlank()) {
                 return AppStoreConnectBetaGroupSyncResult.failed("App Store Connect internal beta group was not found.");
+            }
+
+            if (betaTesterId == null || betaTesterId.isBlank()) {
+                HttpEntity<Map<String, Object>> createEntity = new HttpEntity<>(betaTesterCreateBody(email, groupId), headers());
+                ResponseEntity<Map> createResponse = restTemplate.exchange(
+                        baseUrl + "/v1/betaTesters",
+                        HttpMethod.POST,
+                        createEntity,
+                        Map.class
+                );
+                String createdBetaTesterId = firstDataId(createResponse.getBody());
+                if (createdBetaTesterId == null || createdBetaTesterId.isBlank()) {
+                    return AppStoreConnectBetaGroupSyncResult.failed("App Store Connect beta tester create response did not include an id.");
+                }
+                return AppStoreConnectBetaGroupSyncResult.added(createdBetaTesterId, groupId);
             }
 
             RestClientResponseException groupRelationshipFailure = null;
@@ -158,6 +170,9 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
     @SuppressWarnings("unchecked")
     private static String firstDataId(Map<String, Object> body) {
         Object data = body != null ? body.get("data") : null;
+        if (data instanceof Map<?, ?> dataMap) {
+            return Objects.toString(dataMap.get("id"), "");
+        }
         if (!(data instanceof List<?> items) || items.isEmpty()) {
             return null;
         }
@@ -166,6 +181,25 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
             return Objects.toString(firstMap.get("id"), "");
         }
         return null;
+    }
+
+    private Map<String, Object> betaTesterCreateBody(String email, String groupId) {
+        return Map.of(
+                "data", Map.of(
+                        "type", "betaTesters",
+                        "attributes", Map.of(
+                                "email", email
+                        ),
+                        "relationships", Map.of(
+                                "betaGroups", Map.of(
+                                        "data", List.of(Map.of(
+                                                "type", "betaGroups",
+                                                "id", groupId
+                                        ))
+                                )
+                        )
+                )
+        );
     }
 
     private Map<String, Object> betaTesterRelationshipBody(String betaTesterId) {
