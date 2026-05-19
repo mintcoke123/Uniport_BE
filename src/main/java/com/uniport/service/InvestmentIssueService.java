@@ -6,8 +6,15 @@ import com.uniport.dto.InvestmentIssueItemDTO;
 import com.uniport.dto.InvestmentIssueListResponseDTO;
 import com.uniport.dto.InvestmentIssueRelatedEtfDTO;
 import com.uniport.dto.InvestmentIssueRelatedStockDTO;
+import com.uniport.dto.InvestmentIssueSharePreviewDTO;
+import com.uniport.dto.InvestmentIssueShareRequestDTO;
+import com.uniport.dto.InvestmentIssueShareResponseDTO;
 import com.uniport.dto.InvestmentIssueSourceArticleDTO;
+import com.uniport.entity.ChatMessage;
+import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -32,6 +39,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 @Service
@@ -45,6 +53,7 @@ public class InvestmentIssueService {
     private static final int DEFAULT_MAX_WATCH_POINTS = 2;
     private static final int DEFAULT_MAX_RELATED_STOCKS = 5;
     private static final int DEFAULT_MAX_RELATED_ETFS = 3;
+    private static final String ROOM_ENDED_READ_ONLY_MESSAGE = "종료된 채팅방은 보기만 할 수 있습니다.";
     private static final Pattern NON_SLUG_CHARACTER = Pattern.compile("[^a-z0-9]+");
     private static final Comparator<LocalDateTime> NEWEST_FIRST =
             Comparator.nullsLast(Comparator.reverseOrder());
@@ -53,6 +62,9 @@ public class InvestmentIssueService {
     private final RawNewsDeduplicator rawNewsDeduplicator;
     private final IssueClusterService issueClusterService;
     private final InvestmentIssueAnalyzer investmentIssueAnalyzer;
+    private final MatchingRoomMemberRepository matchingRoomMemberRepository;
+    private final MatchingRoomRepository matchingRoomRepository;
+    private final ChatService chatService;
     private final Duration cacheTtl;
     private final Clock clock;
     private final int maxReasonBullets;
@@ -68,6 +80,9 @@ public class InvestmentIssueService {
                                   RawNewsDeduplicator rawNewsDeduplicator,
                                   IssueClusterService issueClusterService,
                                   InvestmentIssueAnalyzer investmentIssueAnalyzer,
+                                  MatchingRoomMemberRepository matchingRoomMemberRepository,
+                                  MatchingRoomRepository matchingRoomRepository,
+                                  ChatService chatService,
                                   @Value("${uniport.investment-issue.cache-ttl-seconds:300}") long cacheTtlSeconds,
                                   @Value("${uniport.investment-issue.display.max-reason-bullets:3}")
                                   int maxReasonBullets,
@@ -82,6 +97,9 @@ public class InvestmentIssueService {
                 rawNewsDeduplicator,
                 issueClusterService,
                 investmentIssueAnalyzer,
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatService,
                 Duration.ofSeconds(Math.max(0, cacheTtlSeconds)),
                 Clock.system(DEFAULT_ZONE),
                 maxReasonBullets,
@@ -102,6 +120,9 @@ public class InvestmentIssueService {
                 rawNewsDeduplicator,
                 issueClusterService,
                 investmentIssueAnalyzer,
+                null,
+                null,
+                null,
                 cacheTtl,
                 clock,
                 DEFAULT_MAX_REASON_BULLETS,
@@ -121,11 +142,44 @@ public class InvestmentIssueService {
                            int maxWatchPoints,
                            int maxRelatedStocks,
                            int maxRelatedEtfs) {
+        this(
+                newsFeedClient,
+                rawNewsDeduplicator,
+                issueClusterService,
+                investmentIssueAnalyzer,
+                null,
+                null,
+                null,
+                cacheTtl,
+                clock,
+                maxReasonBullets,
+                maxWatchPoints,
+                maxRelatedStocks,
+                maxRelatedEtfs
+        );
+    }
+
+    InvestmentIssueService(NewsFeedClient newsFeedClient,
+                           RawNewsDeduplicator rawNewsDeduplicator,
+                           IssueClusterService issueClusterService,
+                           InvestmentIssueAnalyzer investmentIssueAnalyzer,
+                           MatchingRoomMemberRepository matchingRoomMemberRepository,
+                           MatchingRoomRepository matchingRoomRepository,
+                           ChatService chatService,
+                           Duration cacheTtl,
+                           Clock clock,
+                           int maxReasonBullets,
+                           int maxWatchPoints,
+                           int maxRelatedStocks,
+                           int maxRelatedEtfs) {
         this.newsFeedClient = Objects.requireNonNull(newsFeedClient, "newsFeedClient must not be null");
         this.rawNewsDeduplicator = Objects.requireNonNull(rawNewsDeduplicator, "rawNewsDeduplicator must not be null");
         this.issueClusterService = Objects.requireNonNull(issueClusterService, "issueClusterService must not be null");
         this.investmentIssueAnalyzer = Objects.requireNonNull(investmentIssueAnalyzer,
                 "investmentIssueAnalyzer must not be null");
+        this.matchingRoomMemberRepository = matchingRoomMemberRepository;
+        this.matchingRoomRepository = matchingRoomRepository;
+        this.chatService = chatService;
         this.cacheTtl = cacheTtl == null ? Duration.ofSeconds(300) : cacheTtl;
         this.clock = clock == null ? Clock.system(DEFAULT_ZONE) : clock;
         this.maxReasonBullets = Math.max(0, maxReasonBullets);
@@ -185,6 +239,68 @@ public class InvestmentIssueService {
             return toDetail(fallbackCandidate);
         }
         throw new ApiException("investment issue not found", HttpStatus.NOT_FOUND);
+    }
+
+    @Transactional
+    public InvestmentIssueShareResponseDTO shareInvestmentIssue(Long chatRoomId,
+                                                                User user,
+                                                                InvestmentIssueShareRequestDTO request) {
+        if (chatRoomId == null) {
+            throw new ApiException("Chat room id is required", HttpStatus.BAD_REQUEST);
+        }
+        if (user == null || user.getId() == null) {
+            throw new ApiException("Authentication is required", HttpStatus.UNAUTHORIZED);
+        }
+        if (matchingRoomMemberRepository == null || chatService == null) {
+            throw new IllegalStateException("Investment issue sharing dependencies are not configured");
+        }
+        if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(chatRoomId, user.getId())) {
+            throw new ApiException("해당 채팅방에 대한 접근 권한이 없습니다.", HttpStatus.FORBIDDEN);
+        }
+        if (isEndedRoom(chatRoomId)) {
+            throw new ApiException(ROOM_ENDED_READ_ONLY_MESSAGE, HttpStatus.FORBIDDEN);
+        }
+
+        String issueId = request != null ? trimToEmpty(request.getIssueId()) : "";
+        if (issueId.isBlank()) {
+            throw new ApiException("Investment issue id is required", HttpStatus.BAD_REQUEST);
+        }
+        InvestmentIssueDetailResponseDTO issue = getIssueDetail(issueId);
+        InvestmentIssueSharePreviewDTO preview = InvestmentIssueSharePreviewDTO.builder()
+                .issueId(issue.getIssueId())
+                .title(issue.getTitle())
+                .label(issue.getLabel())
+                .labelText(issue.getLabelText())
+                .summary(issue.getSummary())
+                .relatedStocks(safeList(issue.getRelatedStocks()).stream()
+                        .map(InvestmentIssueRelatedStockDTO::getName)
+                        .toList())
+                .sourceCount(issue.getSourceCount())
+                .build();
+
+        ChatMessage saved = chatService.saveInvestmentIssueShareMessage(
+                chatRoomId,
+                user.getId(),
+                user.getNickname(),
+                preview
+        );
+        return InvestmentIssueShareResponseDTO.builder()
+                .messageId(saved.getId())
+                .chatRoomId(chatRoomId)
+                .type(ChatService.TYPE_INVESTMENT_ISSUE_SHARE)
+                .issue(preview)
+                .createdAt(saved.getCreatedAt() != null ? saved.getCreatedAt().toString() : null)
+                .build();
+    }
+
+    private boolean isEndedRoom(Long chatRoomId) {
+        if (matchingRoomRepository == null || chatRoomId == null) {
+            return false;
+        }
+        Optional<com.uniport.entity.MatchingRoom> room = matchingRoomRepository.findById(chatRoomId);
+        return room != null && room
+                .map(value -> "ended".equalsIgnoreCase(value.getStatus()))
+                .orElse(false);
     }
 
     private synchronized List<CachedIssue> currentIssues() {

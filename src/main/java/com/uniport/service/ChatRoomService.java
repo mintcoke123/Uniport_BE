@@ -368,6 +368,14 @@ public class ChatRoomService {
                     preview.put("preview", title);
                     preview.put("title", "뉴스 공유");
                     preview.put("description", "팀원이 함께 볼 뉴스를 공유했어요.");
+                } else if (ChatService.TYPE_INVESTMENT_ISSUE_SHARE.equals(type)) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> issue = (Map<String, Object>) parsed.get("issue");
+                    String title = issue != null && issue.get("title") != null ? String.valueOf(issue.get("title")) : "투자 이슈";
+                    preview.put("type", ChatService.TYPE_INVESTMENT_ISSUE_SHARE);
+                    preview.put("preview", title);
+                    preview.put("title", "투자 이슈 공유");
+                    preview.put("description", "팀원이 함께 볼 투자 이슈를 공유했어요.");
                 } else if (ChatService.TYPE_MENTION_ALL.equals(type)) {
                     Object mentionMessage = parsed.get("message");
                     preview.put("preview", mentionMessage != null ? String.valueOf(mentionMessage) : ChatService.MENTION_ALL_MESSAGE);

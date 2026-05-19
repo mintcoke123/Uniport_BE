@@ -3,7 +3,14 @@ package com.uniport.service;
 import com.uniport.dto.InvestmentIssueDetailResponseDTO;
 import com.uniport.dto.InvestmentIssueItemDTO;
 import com.uniport.dto.InvestmentIssueListResponseDTO;
+import com.uniport.dto.InvestmentIssueShareRequestDTO;
+import com.uniport.dto.InvestmentIssueShareResponseDTO;
+import com.uniport.entity.ChatMessage;
+import com.uniport.entity.MatchingRoom;
+import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.repository.MatchingRoomMemberRepository;
+import com.uniport.repository.MatchingRoomRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
@@ -24,6 +31,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class InvestmentIssueServiceTest {
 
@@ -329,6 +342,112 @@ class InvestmentIssueServiceTest {
         assertEquals("investment issue not found", exception.getMessage());
     }
 
+    @Test
+    void shareInvestmentIssue_savesIssueShareMessageOnlyWhenUserBelongsToChatRoom() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatService chatService = mock(ChatService.class);
+        InvestmentIssueService investmentIssueService = service(
+                new FakeNewsFeedClient(List.of(hbmArticles())),
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatService
+        );
+        User user = User.builder().nickname("이슈공유러").build();
+        user.setId(7L);
+        String issueId = investmentIssueService.getIssueList("THEME", null, 20)
+                .getHeroIssue()
+                .getIssueId();
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(3L, 7L)).thenReturn(true);
+        when(chatService.saveInvestmentIssueShareMessage(eq(3L), eq(7L), eq("이슈공유러"), any()))
+                .thenReturn(ChatMessage.builder()
+                        .id(99L)
+                        .roomId(3L)
+                        .userId(7L)
+                        .userNickname("이슈공유러")
+                        .createdAt(Instant.parse("2026-05-19T03:00:00Z"))
+                        .build());
+
+        InvestmentIssueShareResponseDTO response = investmentIssueService.shareInvestmentIssue(
+                3L,
+                user,
+                InvestmentIssueShareRequestDTO.builder().issueId(issueId).build()
+        );
+
+        assertEquals(99L, response.getMessageId());
+        assertEquals(3L, response.getChatRoomId());
+        assertEquals(ChatService.TYPE_INVESTMENT_ISSUE_SHARE, response.getType());
+        assertEquals(issueId, response.getIssue().getIssueId());
+        assertEquals("positive", response.getIssue().getLabel());
+        assertEquals("호재", response.getIssue().getLabelText());
+        assertTrue(response.getIssue().getRelatedStocks().contains("삼성전자"));
+        assertEquals(2, response.getIssue().getSourceCount());
+        verify(chatService).saveInvestmentIssueShareMessage(eq(3L), eq(7L), eq("이슈공유러"), any());
+    }
+
+    @Test
+    void shareInvestmentIssue_rejectsUserOutsideChatRoom() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatService chatService = mock(ChatService.class);
+        InvestmentIssueService investmentIssueService = service(
+                new FakeNewsFeedClient(List.of(hbmArticles())),
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatService
+        );
+        User user = User.builder().nickname("비회원").build();
+        user.setId(7L);
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(3L, 7L)).thenReturn(false);
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> investmentIssueService.shareInvestmentIssue(
+                        3L,
+                        user,
+                        InvestmentIssueShareRequestDTO.builder()
+                                .issueId("issue_20260519_hbm_semiconductor_8f3a12")
+                                .build()
+                ));
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+        verify(chatService, never()).saveInvestmentIssueShareMessage(eq(3L), eq(7L), eq("비회원"), any());
+    }
+
+    @Test
+    void shareInvestmentIssue_rejectsEndedChatRoomBeforeSavingMessage() {
+        MatchingRoomMemberRepository matchingRoomMemberRepository = mock(MatchingRoomMemberRepository.class);
+        MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
+        ChatService chatService = mock(ChatService.class);
+        InvestmentIssueService investmentIssueService = service(
+                new FakeNewsFeedClient(List.of(hbmArticles())),
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatService
+        );
+        User user = User.builder().nickname("이슈공유러").build();
+        user.setId(7L);
+        MatchingRoom endedRoom = MatchingRoom.builder()
+                .id(3L)
+                .capacity(3)
+                .status("ended")
+                .build();
+        when(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(3L, 7L)).thenReturn(true);
+        when(matchingRoomRepository.findById(3L)).thenReturn(java.util.Optional.of(endedRoom));
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> investmentIssueService.shareInvestmentIssue(
+                        3L,
+                        user,
+                        InvestmentIssueShareRequestDTO.builder()
+                                .issueId("issue_20260519_hbm_semiconductor_8f3a12")
+                                .build()
+                ));
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatus());
+        assertEquals("종료된 채팅방은 보기만 할 수 있습니다.", exception.getMessage());
+        verify(chatService, never()).saveInvestmentIssueShareMessage(eq(3L), eq(7L), eq("이슈공유러"), any());
+    }
+
     private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient) {
         return service(newsFeedClient, Duration.ofSeconds(300), Clock.fixed(
                 Instant.parse("2026-05-19T00:00:00Z"),
@@ -338,6 +457,27 @@ class InvestmentIssueServiceTest {
 
     private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient, Duration ttl, Clock clock) {
         return service(newsFeedClient, ttl, clock, 3, 2, 5, 3);
+    }
+
+    private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient,
+                                           MatchingRoomMemberRepository matchingRoomMemberRepository,
+                                           MatchingRoomRepository matchingRoomRepository,
+                                           ChatService chatService) {
+        return new InvestmentIssueService(
+                newsFeedClient,
+                new RawNewsDeduplicator(),
+                new IssueClusterService(new RawNewsNormalizer()),
+                new InvestmentIssueAnalyzer(new StockMappingService(), new EtfMappingService()),
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatService,
+                Duration.ofSeconds(300),
+                Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), KST),
+                3,
+                2,
+                5,
+                3
+        );
     }
 
     private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient,

@@ -1,26 +1,37 @@
 package com.uniport.controller;
 
+import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.InvestmentIssueCategoryDTO;
 import com.uniport.dto.InvestmentIssueDetailResponseDTO;
 import com.uniport.dto.InvestmentIssueItemDTO;
 import com.uniport.dto.InvestmentIssueListResponseDTO;
 import com.uniport.dto.InvestmentIssueRelatedEtfDTO;
 import com.uniport.dto.InvestmentIssueRelatedStockDTO;
+import com.uniport.dto.InvestmentIssueSharePreviewDTO;
+import com.uniport.dto.InvestmentIssueShareRequestDTO;
+import com.uniport.dto.InvestmentIssueShareResponseDTO;
 import com.uniport.dto.InvestmentIssueSourceArticleDTO;
+import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.exception.GlobalExceptionHandler;
+import com.uniport.service.CurrentUserResolver;
 import com.uniport.service.InvestmentIssueService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -141,6 +152,58 @@ class InvestmentIssueControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"));
 
         verify(investmentIssueService).getIssueList("CRYPTO", null, null);
+    }
+
+    @Test
+    void shareInvestmentIssueToChatRoom_resolvesCurrentUserAndDelegatesToService() throws Exception {
+        InvestmentIssueService investmentIssueService = mock(InvestmentIssueService.class);
+        CurrentUserResolver currentUserResolver = mock(CurrentUserResolver.class);
+        User currentUser = User.builder().nickname("이슈공유러").build();
+        currentUser.setId(7L);
+        when(currentUserResolver.resolveRequired(nullable(FirebaseAuthenticatedUser.class), eq("Bearer test-token")))
+                .thenReturn(currentUser);
+        when(investmentIssueService.shareInvestmentIssue(
+                eq(3L),
+                eq(currentUser),
+                any(InvestmentIssueShareRequestDTO.class)
+        )).thenReturn(InvestmentIssueShareResponseDTO.builder()
+                .messageId(99L)
+                .chatRoomId(3L)
+                .type("INVESTMENT_ISSUE_SHARE")
+                .issue(InvestmentIssueSharePreviewDTO.builder()
+                        .issueId("issue_20260519_hbm_semiconductor_8f3a12")
+                        .title("HBM 기대감에 반도체주 강세")
+                        .label("positive")
+                        .labelText("호재")
+                        .summary("AI 서버 투자 확대와 HBM 수요 증가 기대가 맞물리고 있어요.")
+                        .relatedStocks(List.of("삼성전자", "SK하이닉스"))
+                        .sourceCount(6)
+                        .build())
+                .createdAt("2026-05-19T03:00:00Z")
+                .build());
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(new InvestmentIssueShareController(investmentIssueService, currentUserResolver))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        mockMvc.perform(post("/api/chat/rooms/3/messages/investment-issue")
+                        .header("Authorization", "Bearer test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"issueId\":\"issue_20260519_hbm_semiconductor_8f3a12\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messageId").value(99))
+                .andExpect(jsonPath("$.chatRoomId").value(3))
+                .andExpect(jsonPath("$.type").value("INVESTMENT_ISSUE_SHARE"))
+                .andExpect(jsonPath("$.issue.issueId").value("issue_20260519_hbm_semiconductor_8f3a12"))
+                .andExpect(jsonPath("$.issue.title").value("HBM 기대감에 반도체주 강세"))
+                .andExpect(jsonPath("$.issue.labelText").value("호재"))
+                .andExpect(jsonPath("$.issue.relatedStocks[0]").value("삼성전자"));
+
+        verify(investmentIssueService).shareInvestmentIssue(
+                eq(3L),
+                eq(currentUser),
+                any(InvestmentIssueShareRequestDTO.class)
+        );
     }
 
     private InvestmentIssueItemDTO issueItem(String issueId) {

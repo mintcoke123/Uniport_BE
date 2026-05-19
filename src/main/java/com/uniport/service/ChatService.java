@@ -1,6 +1,7 @@
 package com.uniport.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uniport.dto.InvestmentIssueSharePreviewDTO;
 import com.uniport.dto.NewsSharePreviewDTO;
 import com.uniport.entity.ChatMessage;
 import com.uniport.repository.ChatMessageRepository;
@@ -23,6 +24,7 @@ public class ChatService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     public static final String TYPE_GROUP_INVESTMENT_FEEDBACK_REPORT = "GROUP_INVESTMENT_FEEDBACK_REPORT";
     public static final String TYPE_NEWS_SHARE = "NEWS_SHARE";
+    public static final String TYPE_INVESTMENT_ISSUE_SHARE = "INVESTMENT_ISSUE_SHARE";
     public static final String TYPE_MENTION_ALL = "mention_all";
     public static final String MENTION_ALL_MESSAGE = "모든 팀원을 호출했어요!";
 
@@ -135,6 +137,26 @@ public class ChatService {
             return saved;
         } catch (Exception e) {
             throw new RuntimeException("Failed to save news share message", e);
+        }
+    }
+
+    /** 투자 이슈 공유용: type=INVESTMENT_ISSUE_SHARE, issue 카드 데이터를 저장한다. */
+    @Transactional
+    public ChatMessage saveInvestmentIssueShareMessage(Long roomId,
+                                                       Long userId,
+                                                       String userNickname,
+                                                       InvestmentIssueSharePreviewDTO issue) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", TYPE_INVESTMENT_ISSUE_SHARE);
+            payload.put("issue", issue != null ? issue : Map.of());
+            String message = OBJECT_MAPPER.writeValueAsString(payload);
+            ChatMessage msg = ChatMessage.of(roomId, userId, userNickname, message);
+            ChatMessage saved = chatMessageRepository.save(msg);
+            broadcastToGroup(roomId, saved);
+            return saved;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to save investment issue share message", e);
         }
     }
 
@@ -308,6 +330,13 @@ public class ChatService {
                 if (TYPE_NEWS_SHARE.equals(parsed.get("type"))) {
                     map.put("type", TYPE_NEWS_SHARE);
                     map.put("news", parsed.get("news"));
+                    map.put("message", null);
+                    map.put("tradeData", null);
+                    return map;
+                }
+                if (TYPE_INVESTMENT_ISSUE_SHARE.equals(parsed.get("type"))) {
+                    map.put("type", TYPE_INVESTMENT_ISSUE_SHARE);
+                    map.put("issue", parsed.get("issue"));
                     map.put("message", null);
                     map.put("tradeData", null);
                     return map;
