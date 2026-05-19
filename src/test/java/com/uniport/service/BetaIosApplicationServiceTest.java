@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import com.uniport.dto.BetaIosApplicationRequestDTO;
 import com.uniport.dto.BetaIosApplicationResponseDTO;
+import com.uniport.dto.BetaIosTestFlightSyncResponseDTO;
 import com.uniport.entity.BetaIosApplication;
 import com.uniport.entity.BetaIosApplicationStatus;
 import com.uniport.exception.ApiException;
@@ -118,7 +119,7 @@ class BetaIosApplicationServiceTest {
         when(repository.save(any(BetaIosApplication.class))).thenAnswer(invocation -> invocation.getArgument(0));
         BetaIosApplicationService service = new BetaIosApplicationService(repository, invitationClient, betaGroupClient);
 
-        service.syncPendingInternalTesters();
+        BetaIosTestFlightSyncResponseDTO response = service.syncPendingInternalTesters();
 
         ArgumentCaptor<BetaIosApplication> captor = ArgumentCaptor.forClass(BetaIosApplication.class);
         verify(repository).save(captor.capture());
@@ -127,6 +128,11 @@ class BetaIosApplicationServiceTest {
         assertEquals("tester-1", saved.getBetaTesterId());
         assertEquals("group-1", saved.getTestflightGroupId());
         assertEquals(null, saved.getTestflightGroupFailureMessage());
+        assertEquals(1, response.getProcessed());
+        assertEquals(1, response.getAdded());
+        assertEquals(0, response.getPending());
+        assertEquals(0, response.getFailed());
+        assertEquals(0, response.getSkipped());
     }
 
     @Test
@@ -155,13 +161,18 @@ class BetaIosApplicationServiceTest {
         when(repository.save(any(BetaIosApplication.class))).thenAnswer(invocation -> invocation.getArgument(0));
         BetaIosApplicationService service = new BetaIosApplicationService(repository, invitationClient, betaGroupClient);
 
-        service.syncPendingInternalTesters();
+        BetaIosTestFlightSyncResponseDTO response = service.syncPendingInternalTesters();
 
         ArgumentCaptor<BetaIosApplication> captor = ArgumentCaptor.forClass(BetaIosApplication.class);
         verify(repository).save(captor.capture());
         BetaIosApplication saved = captor.getValue();
         assertEquals(BetaIosApplicationStatus.USER_INVITE_SENT, application.getStatus());
         assertEquals("No betaTester exists for email yet.", saved.getTestflightGroupFailureMessage());
+        assertEquals(1, response.getProcessed());
+        assertEquals(0, response.getAdded());
+        assertEquals(1, response.getPending());
+        assertEquals(0, response.getFailed());
+        assertEquals(0, response.getSkipped());
     }
 
     @Test
@@ -190,7 +201,7 @@ class BetaIosApplicationServiceTest {
         when(repository.save(any(BetaIosApplication.class))).thenAnswer(invocation -> invocation.getArgument(0));
         BetaIosApplicationService service = new BetaIosApplicationService(repository, invitationClient, betaGroupClient);
 
-        service.syncPendingInternalTesters();
+        BetaIosTestFlightSyncResponseDTO response = service.syncPendingInternalTesters();
 
         ArgumentCaptor<BetaIosApplication> captor = ArgumentCaptor.forClass(BetaIosApplication.class);
         verify(repository).save(captor.capture());
@@ -198,5 +209,10 @@ class BetaIosApplicationServiceTest {
         assertEquals(BetaIosApplicationStatus.TESTFLIGHT_GROUP_FAILED, saved.getStatus());
         assertEquals("App Store Connect TestFlight group sync failed: token parse failed",
                 saved.getTestflightGroupFailureMessage());
+        assertEquals(1, response.getProcessed());
+        assertEquals(0, response.getAdded());
+        assertEquals(0, response.getPending());
+        assertEquals(1, response.getFailed());
+        assertEquals(0, response.getSkipped());
     }
 }

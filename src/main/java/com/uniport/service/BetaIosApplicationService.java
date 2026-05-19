@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import com.uniport.dto.BetaIosApplicationRequestDTO;
 import com.uniport.dto.BetaIosApplicationResponseDTO;
+import com.uniport.dto.BetaIosTestFlightSyncResponseDTO;
 import com.uniport.entity.BetaIosApplication;
 import com.uniport.entity.BetaIosApplicationStatus;
 import com.uniport.exception.ApiException;
@@ -71,8 +72,12 @@ public class BetaIosApplicationService {
     }
 
     @Transactional
-    public void syncPendingInternalTesters() {
+    public BetaIosTestFlightSyncResponseDTO syncPendingInternalTesters() {
         List<BetaIosApplication> applications = repository.findTop50ByStatusInOrderByUpdatedAtAsc(GROUP_SYNC_STATUSES);
+        int added = 0;
+        int pending = 0;
+        int failed = 0;
+        int skipped = 0;
         for (BetaIosApplication application : applications) {
             AppStoreConnectBetaGroupSyncResult result;
             try {
@@ -83,7 +88,23 @@ public class BetaIosApplicationService {
                 );
             }
             applyGroupSyncResult(application, result);
+            if (result.added()) {
+                added++;
+            } else if (result.pending()) {
+                pending++;
+            } else if (result.skipped()) {
+                skipped++;
+            } else {
+                failed++;
+            }
         }
+        return BetaIosTestFlightSyncResponseDTO.builder()
+                .processed(applications.size())
+                .added(added)
+                .pending(pending)
+                .failed(failed)
+                .skipped(skipped)
+                .build();
     }
 
     private void applyInviteResult(BetaIosApplication application, AppStoreConnectUserInvitationResult inviteResult) {
