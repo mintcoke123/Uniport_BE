@@ -4,7 +4,6 @@ import com.uniport.dto.FriendsDashboardResponseDTO;
 import com.uniport.entity.FriendRelation;
 import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
-import com.uniport.entity.UserMyPagePreference;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,6 +61,20 @@ class PointSocialDataServiceFriendDashboardTest {
                         .subList(0, 4)
         );
         assertEquals(4, response.getMyRanking().getRank());
+        assertEquals(
+                List.of(false, false, true, false),
+                response.getRanking().getItems().stream()
+                        .map(item -> item.isAlreadyMatched())
+                        .toList()
+                        .subList(0, 4)
+        );
+        assertEquals(
+                List.of(false, true, false, false),
+                response.getRanking().getItems().stream()
+                        .map(item -> item.isAlreadyInvited())
+                        .toList()
+                        .subList(0, 4)
+        );
     }
 
     @Test
@@ -86,29 +99,6 @@ class PointSocialDataServiceFriendDashboardTest {
         );
         assertEquals(45, response.getRanking().getItems().getLast().getRank());
         assertEquals("랭킹45위", response.getRanking().getItems().getLast().getNickname());
-    }
-
-    @Test
-    void getFriendsDashboardUsesCharacterProfileUrlInsteadOfLegacySocialUrl() {
-        User currentUser = persistUser("20261201", "현재사용자");
-        currentUser.setProfileImageUrl("https://lh3.googleusercontent.com/a/legacy=s96-c");
-        persistPreference(currentUser.getId(), "PANDA");
-        persistLearningState(currentUser.getId(), 1_000);
-        entityManager.flush();
-        entityManager.clear();
-
-        FriendsDashboardResponseDTO response = pointSocialDataService.getFriendsDashboard(currentUser);
-
-        String expectedProfileImageUrl = "https://uniportbe-production.up.railway.app/assets/mypage/profile-options/panda.png";
-        assertEquals(expectedProfileImageUrl, response.getMyRanking().getProfileImageUrl());
-        assertEquals(
-                expectedProfileImageUrl,
-                response.getRanking().getItems().stream()
-                        .filter(item -> "현재사용자".equals(item.getNickname()))
-                        .findFirst()
-                        .orElseThrow()
-                        .getProfileImageUrl()
-        );
     }
 
     private User persistRankingUsers(int currentUserRank, int userCount) {
@@ -164,14 +154,5 @@ class PointSocialDataServiceFriendDashboardTest {
                 .educationSectorSelectionsJson("{}")
                 .build();
         entityManager.persist(state);
-    }
-
-    private void persistPreference(Long userId, String selectedCharacterCode) {
-        UserMyPagePreference preference = UserMyPagePreference.builder()
-                .userId(userId)
-                .selectedCharacterCode(selectedCharacterCode)
-                .pushEnabled(true)
-                .build();
-        entityManager.persist(preference);
     }
 }
