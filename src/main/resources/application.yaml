@@ -148,6 +148,20 @@ uniport:
     password: ${UNIPORT_SISU_ADMIN_PASSWORD:SISUadmin123!!}
   seed:
     test-user-enabled: ${UNIPORT_SEED_TEST_USER_ENABLED:true}
+  investment-issue:
+    enabled: true
+    cache-ttl-seconds: 300
+    # Reserved for future IssueClusterService tuning; display limits below are actively bound.
+    cluster:
+      time-window-hours: 24
+      min-similarity: 0.62
+      max-articles-per-issue: 8
+      min-articles-per-issue: 1
+    display:
+      max-reason-bullets: 3
+      max-watch-points: 2
+      max-related-stocks: 5
+      max-related-etfs: 3
   education:
     seed:
       force-refresh: ${UNIPORT_EDUCATION_SEED_FORCE_REFRESH:false}
