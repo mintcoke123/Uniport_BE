@@ -81,6 +81,20 @@ public class CompetitionParticipationService {
         return toApplicationMap(competition, saved, false, competition.getName() + " 참가 신청을 취소했어요.");
     }
 
+    @Transactional
+    public void cancelForTournamentRoomLeave(Long competitionId, User user) {
+        if (competitionId == null || user == null || user.getId() == null) {
+            return;
+        }
+        applicationRepository.findByCompetition_IdAndUser_Id(competitionId, user.getId())
+                .filter(application -> "APPLIED".equals(application.getStatus()))
+                .ifPresent(application -> {
+                    application.setStatus("CANCELLED");
+                    application.setCancelledAt(Instant.now());
+                    applicationRepository.save(application);
+                });
+    }
+
     public Map<String, Object> getApplicationStatus(Long competitionId, User user, String participantTeamId) {
         Competition competition = getCompetition(competitionId);
         CompetitionApplication application = user != null && user.getId() != null

@@ -213,8 +213,10 @@ public class MatchingRoomService {
         if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())) {
             throw new ApiException("참여 중인 방이 아닙니다.", HttpStatus.BAD_REQUEST);
         }
+        Long competitionId = room.getCompetitionId();
 
         matchingRoomMemberRepository.deleteByMatchingRoomIdAndUserId(room.getId(), user.getId());
+        competitionParticipationService.cancelForTournamentRoomLeave(competitionId, user);
         refreshLegacyTeamId(user);
 
         int newCount = (int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId());

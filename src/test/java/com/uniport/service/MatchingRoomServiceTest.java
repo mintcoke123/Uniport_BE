@@ -395,6 +395,28 @@ class MatchingRoomServiceTest {
     }
 
     @Test
+    void leaveTournamentRoom_cancelsCompetitionApplicationForUser() {
+        User user = persistUser("20263034", "leave-tournament-user");
+        Competition competition = persistOngoingCompetition("탈퇴 가능 대회");
+        CompetitionApplication application = persistApplication(competition, user);
+        MatchingRoom room = MatchingRoom.create("토너먼트 채팅방", 3);
+        room.setCompetitionId(competition.getId());
+        room.setStatus("started");
+        entityManager.persist(room);
+        entityManager.persist(MatchingRoomMember.of(room, user));
+        room.setMemberCount(1);
+        entityManager.flush();
+
+        matchingRoomService.leave("room-" + room.getId(), user);
+        entityManager.flush();
+
+        CompetitionApplication saved = competitionApplicationRepository.findById(application.getId()).orElseThrow();
+        assertEquals("CANCELLED", saved.getStatus());
+        assertTrue(saved.getCancelledAt() != null);
+        assertFalse(matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId()));
+    }
+
+    @Test
     void assertTeamRoomForCallAll_rejectsPersonalRoomWithCallAllMessage() {
         MatchingRoom room = MatchingRoom.create("개인방", 1);
         entityManager.persist(room);
