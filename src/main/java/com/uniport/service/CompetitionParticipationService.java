@@ -19,11 +19,14 @@ public class CompetitionParticipationService {
 
     private final CompetitionRepository competitionRepository;
     private final CompetitionApplicationRepository applicationRepository;
+    private final CompetitionService competitionService;
 
     public CompetitionParticipationService(CompetitionRepository competitionRepository,
-                                           CompetitionApplicationRepository applicationRepository) {
+                                           CompetitionApplicationRepository applicationRepository,
+                                           CompetitionService competitionService) {
         this.competitionRepository = competitionRepository;
         this.applicationRepository = applicationRepository;
+        this.competitionService = competitionService;
     }
 
     @Transactional
@@ -31,6 +34,9 @@ public class CompetitionParticipationService {
         Competition competition = getCompetition(competitionId);
         if (user == null || user.getId() == null) {
             throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
+        }
+        if (!"upcoming".equals(competitionService.resolveStatus(competition))) {
+            throw new ApiException("시작 전 토너먼트만 참가 신청할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
 
         String teamId = participantTeamId != null && !participantTeamId.isBlank()
@@ -60,6 +66,9 @@ public class CompetitionParticipationService {
         Competition competition = getCompetition(competitionId);
         if (user == null || user.getId() == null) {
             throw new ApiException("로그인이 필요합니다.", HttpStatus.UNAUTHORIZED);
+        }
+        if (!"upcoming".equals(competitionService.resolveStatus(competition))) {
+            throw new ApiException("시작된 토너먼트는 참가 신청을 취소할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
 
         CompetitionApplication application = applicationRepository.findByCompetition_IdAndUser_Id(competitionId, user.getId())

@@ -12,6 +12,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
+
 /**
  * 모의투자 대회. 어드민에서 생성/수정하며, 진행 중 대회 종료일을 홈/대회 페이지에 제공.
  */
@@ -42,4 +44,7 @@ public class Competition {
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String status = "upcoming";
+
+    @Column(name = "start_notification_sent_at")
+    private Instant startNotificationSentAt;
 }

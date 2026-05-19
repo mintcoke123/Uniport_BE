@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import com.uniport.dto.PushTestRequestDTO;
 import com.uniport.dto.PushTestResponseDTO;
+import com.uniport.entity.Competition;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.User;
 import com.uniport.entity.UserPushToken;
@@ -296,6 +297,25 @@ public class PushNotificationService {
                         "settlementUserId", String.valueOf(recipientUserId),
                         "rewardPoint", String.valueOf(safeRewardPoint),
                         "rewardExp", String.valueOf(safeRewardExp)
+                )
+        );
+    }
+
+    public void sendTournamentStarted(Competition competition, List<Long> recipientUserIds) {
+        if (competition == null || competition.getId() == null || recipientUserIds == null || recipientUserIds.isEmpty()) {
+            return;
+        }
+        String competitionName = valueOrDefault(competition.getName(), "토너먼트");
+        String competitionId = String.valueOf(competition.getId());
+        sendToUsers(
+                recipientUserIds,
+                "토너먼트가 시작되었습니다!",
+                competitionName + " 토너먼트가 시작됐어요. 지금 팀 매칭을 시작해 보세요.",
+                Map.of(
+                        "type", "tournament_started",
+                        "deeplink", publicBaseUrl + "/tournament?competitionId=" + competitionId,
+                        "entityId", competitionId,
+                        "competitionId", competitionId
                 )
         );
     }

@@ -11,5 +11,7 @@ public interface CompetitionApplicationRepository extends JpaRepository<Competit
 
     boolean existsByCompetition_IdAndUser_IdAndStatus(Long competitionId, Long userId, String status);
 
+    List<CompetitionApplication> findByCompetition_IdAndStatus(Long competitionId, String status);
+
     List<CompetitionApplication> findByUser_IdOrderByAppliedAtDesc(Long userId);
 }

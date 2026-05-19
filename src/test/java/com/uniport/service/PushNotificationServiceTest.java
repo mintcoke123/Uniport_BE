@@ -1,6 +1,7 @@
 package com.uniport.service;
 
 import com.uniport.entity.MatchingRoom;
+import com.uniport.entity.Competition;
 import com.uniport.entity.User;
 import com.uniport.entity.UserPushToken;
 import com.uniport.entity.Vote;
@@ -388,6 +389,37 @@ class PushNotificationServiceTest {
         assertEquals("100", message.getData().get("rewardExp"));
         assertEquals(
                 "https://uniportbe-production.up.railway.app/matching-room?roomId=260",
+                message.getData().get("deeplink")
+        );
+    }
+
+    @Test
+    void sendTournamentStartedSendsCompetitionPayloadToApplicants() {
+        FakePushTokenService pushTokenService = new FakePushTokenService();
+        pushTokenService.tokensByUserId.put(7L, List.of(pushToken("tournament-token")));
+        FakePushMessageSender sender = new FakePushMessageSender();
+        PushNotificationService service = new PushNotificationService(
+                pushTokenService,
+                sender,
+                "https://uniportbe-production.up.railway.app"
+        );
+        Competition competition = Competition.builder()
+                .id(55L)
+                .name("세종대 대축제")
+                .build();
+
+        service.sendTournamentStarted(competition, List.of(7L));
+
+        assertEquals(1, sender.messages.size());
+        PushMessage message = sender.messages.getFirst();
+        assertEquals("tournament-token", message.getToken());
+        assertEquals("토너먼트가 시작되었습니다!", message.getTitle());
+        assertTrue(message.getBody().contains("세종대 대축제"));
+        assertEquals("tournament_started", message.getData().get("type"));
+        assertEquals("55", message.getData().get("entityId"));
+        assertEquals("55", message.getData().get("competitionId"));
+        assertEquals(
+                "https://uniportbe-production.up.railway.app/tournament?competitionId=55",
                 message.getData().get("deeplink")
         );
     }
