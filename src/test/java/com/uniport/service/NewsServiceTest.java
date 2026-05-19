@@ -205,6 +205,55 @@ class NewsServiceTest {
     }
 
     @Test
+    void getRealtimeNewsList_collapsesNearDuplicateMarketEventTitles() {
+        when(newsFeedClient.fetchLatest()).thenReturn(List.of(
+                fetchedWithTitle(
+                        "market_close_1",
+                        NewsCategory.MARKET,
+                        "[마감시황] 코스피 7,271.66 마감…외국인 매도에 3.25% 급락",
+                        "외국인 매도에 코스피가 급락했어요.",
+                        "네이버 뉴스",
+                        false,
+                        LocalDateTime.of(2026, 5, 19, 16, 0)
+                ),
+                fetchedWithTitle(
+                        "market_close_2",
+                        NewsCategory.MARKET,
+                        "외국인 6兆 순매도에 코스피 3%↓…7270선 마감",
+                        "같은 마감 이벤트를 다른 표현으로 전한 기사예요.",
+                        "네이버 뉴스",
+                        false,
+                        LocalDateTime.of(2026, 5, 19, 15, 59)
+                ),
+                fetchedWithTitle(
+                        "market_close_3",
+                        NewsCategory.MARKET,
+                        "코스피, 外人 6조원 매도에 '7200선 후퇴'…코스닥 2.41%↓",
+                        "같은 하락 이벤트를 다룬 기사예요.",
+                        "네이버 뉴스",
+                        false,
+                        LocalDateTime.of(2026, 5, 19, 15, 58)
+                ),
+                fetchedWithTitle(
+                        "fx_1",
+                        NewsCategory.MARKET,
+                        "원/달러 환율 1500원 돌파…위험회피 심리 확산",
+                        "환율 상승 흐름을 다룬 별도 기사예요.",
+                        "네이버 뉴스",
+                        false,
+                        LocalDateTime.of(2026, 5, 19, 15, 57)
+                )
+        ));
+
+        RealtimeNewsListResponseDTO response = newsService.getRealtimeNewsList("ALL", null, 20);
+
+        assertEquals("market_close_1", response.getHeroNews().getNewsId());
+        assertEquals(List.of("fx_1"), response.getItems().stream()
+                .map(item -> item.getNewsId())
+                .toList());
+    }
+
+    @Test
     void getRealtimeNewsDetail_returnsSummaryPointsRisksRelatedStocksAndSourceArticles() {
         when(newsFeedClient.fetchLatest()).thenReturn(List.of(
                 fetchedWithTitle(

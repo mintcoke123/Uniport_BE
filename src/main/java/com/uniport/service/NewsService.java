@@ -107,10 +107,10 @@ public class NewsService {
         RealtimeNewsCategory selectedCategory = parseRealtimeCategory(category);
         int safeSize = size != null && size > 0 ? Math.min(size, 50) : 20;
 
-        List<NewsArticleView> filtered = loadArticles().stream()
+        List<NewsArticleView> filtered = collapseSimilarRealtimeArticles(loadArticles().stream()
                 .filter(article -> matchesRealtimeCategory(article, selectedCategory))
                 .sorted(latestFirst())
-                .toList();
+                .toList());
 
         NewsArticleView hero = filtered.isEmpty() ? null : filtered.get(0);
         List<NewsArticleView> regularItems = filtered.stream()
@@ -426,6 +426,87 @@ public class NewsService {
             return true;
         }
         return displayRealtimeCategory(classifyArticle(article)) == selectedCategory;
+    }
+
+    private List<NewsArticleView> collapseSimilarRealtimeArticles(List<NewsArticleView> articles) {
+        List<NewsArticleView> collapsed = new ArrayList<>();
+        for (NewsArticleView article : articles) {
+            boolean alreadyCovered = collapsed.stream()
+                    .anyMatch(existing -> hasSimilarTitle(existing.title(), article.title()));
+            if (!alreadyCovered) {
+                collapsed.add(article);
+            }
+        }
+        return List.copyOf(collapsed);
+    }
+
+    private boolean hasSimilarTitle(String left, String right) {
+        List<String> leftTokens = titleSimilarityTokens(left);
+        List<String> rightTokens = titleSimilarityTokens(right);
+        if (leftTokens.size() < 3 || rightTokens.size() < 3) {
+            return false;
+        }
+        int common = 0;
+        for (String token : leftTokens) {
+            if (rightTokens.contains(token)) {
+                common++;
+            }
+        }
+        double overlap = common / (double) Math.min(leftTokens.size(), rightTokens.size());
+        return common >= 3 && overlap >= 0.5;
+    }
+
+    private List<String> titleSimilarityTokens(String title) {
+        if (title == null || title.isBlank()) {
+            return List.of();
+        }
+        String normalized = title
+                .replace("外人", "외국인")
+                .replace("外國人", "외국인")
+                .replace("외인", "외국인")
+                .replace("兆", "조")
+                .replace("↓", " 하락 ")
+                .replace("↑", " 상승 ")
+                .replaceAll("(?<=\\d),(?=\\d)", "")
+                .replaceAll("\\[[^\\]]+]", " ")
+                .replaceAll("[^0-9A-Za-z가-힣]+", " ");
+        List<String> tokens = new ArrayList<>();
+        for (String rawToken : normalized.split("\\s+")) {
+            String token = canonicalTitleToken(rawToken);
+            if (!token.isBlank() && !tokens.contains(token)) {
+                tokens.add(token);
+            }
+        }
+        return tokens;
+    }
+
+    private String canonicalTitleToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return "";
+        }
+        String token = rawToken.trim().toUpperCase(Locale.ROOT)
+                .replaceAll("(으로|에서|에게|까지|부터|보다|에는|으로는|에는|에|이|가|은|는|을|를|과|와|도)$", "");
+        if (token.contains("외국인")) {
+            return "외국인";
+        }
+        if (token.contains("순매도") || token.contains("매도") || token.contains("팔자") || token.contains("투매")) {
+            return "매도";
+        }
+        if (token.contains("급락") || token.contains("하락") || token.contains("후퇴")
+                || token.contains("내린") || token.contains("붕괴") || token.contains("털썩")) {
+            return "하락";
+        }
+        if (token.matches("\\d+조.*")) {
+            return token.replaceAll("^(\\d+)조.*", "$1조");
+        }
+        if (token.matches("\\d{4}선.*")) {
+            return token.substring(0, 4) + "선";
+        }
+        if (List.of("마감시황", "속보", "종합", "단독", "뉴스", "시황").contains(token)
+                || token.length() < 2) {
+            return "";
+        }
+        return token;
     }
 
     private RealtimeNewsCategory classifyArticle(NewsArticleView article) {
