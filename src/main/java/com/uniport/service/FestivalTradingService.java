@@ -1,7 +1,6 @@
 package com.uniport.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.dto.FestivalAdminOverviewDTO;
 import com.uniport.dto.FestivalAdminSessionItemDTO;
@@ -319,23 +318,23 @@ public class FestivalTradingService {
         return normalized;
     }
 
-    private String writeJson(JsonNode node) {
-        if (node == null || node.isNull()) {
+    private String writeJson(Object value) {
+        if (value == null) {
             return null;
         }
         try {
-            return objectMapper.writeValueAsString(node);
+            return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException e) {
             throw new ApiException("failed to serialize festival session payload", HttpStatus.BAD_REQUEST);
         }
     }
 
-    private JsonNode readJson(String json) {
+    private Object readJson(String json) {
         if (json == null || json.isBlank()) {
             return null;
         }
         try {
-            return objectMapper.readTree(json);
+            return objectMapper.readValue(json, Object.class);
         } catch (JsonProcessingException e) {
             throw new ApiException("failed to read stored festival session payload", HttpStatus.INTERNAL_SERVER_ERROR);
         }

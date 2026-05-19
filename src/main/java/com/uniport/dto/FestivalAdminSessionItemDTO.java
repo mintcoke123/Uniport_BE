@@ -1,6 +1,5 @@
 package com.uniport.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
 import lombok.Data;
 
@@ -29,6 +28,6 @@ public class FestivalAdminSessionItemDTO {
     private Integer unfilledOrderCount;
     private LocalDateTime startedAt;
     private LocalDateTime endedAt;
-    private JsonNode holdingsSnapshot;
-    private JsonNode tradeHistory;
+    private Object holdingsSnapshot;
+    private Object tradeHistory;
 }

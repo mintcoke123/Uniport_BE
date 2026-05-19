@@ -1,6 +1,5 @@
 package com.uniport.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -14,6 +13,6 @@ public class FestivalSessionCompleteRequestDTO {
     private String mainStockName;
     private Integer tradeCount;
     private Integer unfilledOrderCount;
-    private JsonNode holdingsSnapshot;
-    private JsonNode tradeHistory;
+    private Object holdingsSnapshot;
+    private Object tradeHistory;
 }
