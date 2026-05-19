@@ -21,6 +21,7 @@ public class BetaIosApplicationService {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final List<BetaIosApplicationStatus> GROUP_SYNC_STATUSES = List.of(
             BetaIosApplicationStatus.USER_INVITE_SENT,
+            BetaIosApplicationStatus.USER_INVITE_FAILED,
             BetaIosApplicationStatus.TESTFLIGHT_GROUP_FAILED
     );
 

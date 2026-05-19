@@ -110,6 +110,7 @@ class BetaIosApplicationServiceTest {
         when(repository.findTop50ByStatusInOrderByUpdatedAtAsc(
                 java.util.List.of(
                         BetaIosApplicationStatus.USER_INVITE_SENT,
+                        BetaIosApplicationStatus.USER_INVITE_FAILED,
                         BetaIosApplicationStatus.TESTFLIGHT_GROUP_FAILED
                 )
         )).thenReturn(java.util.List.of(application));
@@ -146,6 +147,7 @@ class BetaIosApplicationServiceTest {
         when(repository.findTop50ByStatusInOrderByUpdatedAtAsc(
                 java.util.List.of(
                         BetaIosApplicationStatus.USER_INVITE_SENT,
+                        BetaIosApplicationStatus.USER_INVITE_FAILED,
                         BetaIosApplicationStatus.TESTFLIGHT_GROUP_FAILED
                 )
         )).thenReturn(java.util.List.of(application));
