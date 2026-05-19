@@ -1,21 +1,25 @@
 package com.uniport.service;
 
+import com.uniport.dto.StockPriceDTO;
 import com.uniport.entity.Competition;
 import com.uniport.entity.CompetitionResult;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
 import com.uniport.entity.PointTransaction;
+import com.uniport.entity.TeamHolding;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.CompetitionRepository;
 import com.uniport.repository.CompetitionResultRepository;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
+import com.uniport.repository.TeamHoldingRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
@@ -36,19 +40,25 @@ public class CompetitionSettlementService {
     private final CompetitionResultRepository resultRepository;
     private final RankingService rankingService;
     private final PointLedgerService pointLedgerService;
+    private final TeamHoldingRepository teamHoldingRepository;
+    private final KisApiService kisApiService;
 
     public CompetitionSettlementService(CompetitionRepository competitionRepository,
                                         MatchingRoomRepository matchingRoomRepository,
                                         MatchingRoomMemberRepository matchingRoomMemberRepository,
                                         CompetitionResultRepository resultRepository,
                                         RankingService rankingService,
-                                        PointLedgerService pointLedgerService) {
+                                        PointLedgerService pointLedgerService,
+                                        TeamHoldingRepository teamHoldingRepository,
+                                        KisApiService kisApiService) {
         this.competitionRepository = competitionRepository;
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.resultRepository = resultRepository;
         this.rankingService = rankingService;
         this.pointLedgerService = pointLedgerService;
+        this.teamHoldingRepository = teamHoldingRepository;
+        this.kisApiService = kisApiService;
     }
 
     @Transactional
@@ -197,6 +207,7 @@ public class CompetitionSettlementService {
                     Map<String, Object> item = new HashMap<>();
                     item.put("userId", user != null ? user.getId() : null);
                     item.put("nickname", user != null ? user.getNickname() : "팀원");
+                    item.put("profileImageUrl", user != null ? user.getProfileImageUrl() : null);
                     item.put("isMe", currentUser != null && user != null && currentUser.getId().equals(user.getId()));
                     return item;
                 })
@@ -204,8 +215,45 @@ public class CompetitionSettlementService {
 
         Map<String, Object> detail = new HashMap<>(ranking);
         detail.put("competitionId", competitionId);
+        detail.put("holdings", buildHoldings(roomId));
         detail.put("members", members);
         return detail;
+    }
+
+    private List<Map<String, Object>> buildHoldings(Long roomId) {
+        List<Map<String, Object>> holdings = new ArrayList<>();
+        for (TeamHolding holding : teamHoldingRepository.findByTeamId(roomId)) {
+            String stockName = holding.getStockName() != null && !holding.getStockName().isBlank()
+                    ? holding.getStockName()
+                    : "종목_" + holding.getStockCode();
+            StockPriceDTO priceDto = kisApiService.getStockPrice(holding.getStockCode());
+            BigDecimal currentPrice = priceDto.getCurrentPrice();
+            if (currentPrice == null) {
+                throw new ApiException("현재가를 가져올 수 없습니다: " + holding.getStockCode(), HttpStatus.SERVICE_UNAVAILABLE);
+            }
+            if ((stockName.startsWith("종목_") || stockName.equals("종목_" + holding.getStockCode()))
+                    && priceDto.getStockName() != null && !priceDto.getStockName().isBlank()) {
+                stockName = priceDto.getStockName();
+            }
+
+            BigDecimal currentValue = currentPrice.multiply(BigDecimal.valueOf(holding.getQuantity()));
+            BigDecimal investedValue = holding.getAveragePurchasePrice().multiply(BigDecimal.valueOf(holding.getQuantity()));
+            BigDecimal profitLossPercentage = investedValue.compareTo(BigDecimal.ZERO) != 0
+                    ? currentValue.subtract(investedValue).divide(investedValue, 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100))
+                    : BigDecimal.ZERO;
+
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", holding.getId());
+            item.put("stockCode", holding.getStockCode());
+            item.put("stockName", stockName);
+            item.put("quantity", holding.getQuantity());
+            item.put("averagePrice", holding.getAveragePurchasePrice());
+            item.put("currentPrice", currentPrice);
+            item.put("currentValue", currentValue);
+            item.put("profitLossPercentage", profitLossPercentage);
+            holdings.add(item);
+        }
+        return holdings;
     }
 
     private Competition getCompetition(Long competitionId) {
