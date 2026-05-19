@@ -15,6 +15,8 @@ public interface MatchingRoomRepository extends JpaRepository<MatchingRoom, Long
 
     List<MatchingRoom> findAllByOrderByCreatedAtDesc();
 
+    List<MatchingRoom> findByStatusOrderByCreatedAtDesc(String status);
+
     List<MatchingRoom> findByStatusAndCompetitionIdOrderByCreatedAtDesc(String status, Long competitionId);
 
     Optional<MatchingRoom> findByInviteCode(String inviteCode);

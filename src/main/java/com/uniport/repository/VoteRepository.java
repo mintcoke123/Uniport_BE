@@ -2,6 +2,7 @@ package com.uniport.repository;
 
 import com.uniport.entity.Vote;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +16,10 @@ import org.springframework.data.repository.query.Param;
 public interface VoteRepository extends JpaRepository<Vote, Long> {
 
     List<Vote> findByRoomIdOrderByCreatedAtDesc(Long roomId);
+
+    List<Vote> findTop20ByRoomIdOrderByCreatedAtDesc(Long roomId);
+
+    List<Vote> findByCreatedAtAfterOrderByCreatedAtDesc(Instant createdAt);
 
     List<Vote> findByRoomIdAndStatusOrderByCreatedAtDesc(Long roomId, String status);
 

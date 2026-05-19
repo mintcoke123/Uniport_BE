@@ -3,10 +3,12 @@ package com.uniport.controller;
 import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.dto.ErrorResponseDTO;
 import com.uniport.dto.GroupInsightsResponseDTO;
+import com.uniport.dto.MockInvestmentHomeResponseDTO;
 import com.uniport.dto.MockInvestingSummaryResponseDTO;
 import com.uniport.entity.User;
 import com.uniport.service.CurrentUserResolver;
 import com.uniport.service.HomeDataService;
+import com.uniport.service.MockInvestmentHomeDashboardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -19,6 +21,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -29,11 +32,14 @@ import java.util.Map;
 public class ApiHomeController {
 
     private final HomeDataService homeDataService;
+    private final MockInvestmentHomeDashboardService mockInvestmentHomeDashboardService;
     private final CurrentUserResolver currentUserResolver;
 
     public ApiHomeController(HomeDataService homeDataService,
+                             MockInvestmentHomeDashboardService mockInvestmentHomeDashboardService,
                              CurrentUserResolver currentUserResolver) {
         this.homeDataService = homeDataService;
+        this.mockInvestmentHomeDashboardService = mockInvestmentHomeDashboardService;
         this.currentUserResolver = currentUserResolver;
     }
 
@@ -50,6 +56,22 @@ public class ApiHomeController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         User user = currentUserResolver.resolveRequired(principal, authorization);
         return ResponseEntity.ok(homeDataService.getSummary(user));
+    }
+
+    @GetMapping("/mock-investing-dashboard")
+    @Operation(summary = "모의투자 신규 홈 대시보드 조회", security = @SecurityRequirement(name = "firebaseBearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공",
+                    content = @Content(schema = @Schema(implementation = MockInvestmentHomeResponseDTO.class))),
+            @ApiResponse(responseCode = "401", description = "인증 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    public ResponseEntity<MockInvestmentHomeResponseDTO> getMockInvestingDashboard(
+            @AuthenticationPrincipal FirebaseAuthenticatedUser principal,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(value = "mode", required = false, defaultValue = "ALWAYS_ON") String mode) {
+        User user = currentUserResolver.resolveRequired(principal, authorization);
+        return ResponseEntity.ok(mockInvestmentHomeDashboardService.getHome(user, mode));
     }
 
     @GetMapping("/group-matching-dashboard")

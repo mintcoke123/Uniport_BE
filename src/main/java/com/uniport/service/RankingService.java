@@ -1,5 +1,6 @@
 package com.uniport.service;
 
+import com.uniport.dto.MockInvestmentLeaderboardItemDTO;
 import com.uniport.dto.StockPriceDTO;
 import com.uniport.entity.MatchingRoom;
 import com.uniport.entity.MatchingRoomMember;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -31,6 +33,7 @@ public class RankingService {
 
     private static final Logger log = LoggerFactory.getLogger(RankingService.class);
     private static final BigDecimal INITIAL_TEAM_BALANCE = new BigDecimal("10000000");
+    private static final BigDecimal PERCENT = new BigDecimal("100");
 
     private final MatchingRoomRepository matchingRoomRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
@@ -56,6 +59,53 @@ public class RankingService {
 
     public List<Map<String, Object>> getAllGroupsRankingSnapshot() {
         return buildGroupRankings(false);
+    }
+
+    public record TeamValuation(BigDecimal totalValue, BigDecimal returnRatePercent) {
+    }
+
+    public TeamValuation evaluateTeam(Long teamId, boolean allowNetworkPriceFetch) {
+        BigDecimal totalValue = computeTotalValue(teamId, allowNetworkPriceFetch, new HashMap<>());
+        return new TeamValuation(totalValue, calculateReturnRatePercent(totalValue));
+    }
+
+    public List<MockInvestmentLeaderboardItemDTO> getActiveTeamGameLeaderboard(int limit) {
+        List<MatchingRoom> started = matchingRoomRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(r -> "started".equals(r.getStatus()))
+                .collect(Collectors.toList());
+        Map<String, BigDecimal> resolvedPrices = new HashMap<>();
+        List<TeamRankingCandidate> candidates = new ArrayList<>();
+
+        for (MatchingRoom room : started) {
+            BigDecimal totalValue = computeTotalValue(room.getId(), false, resolvedPrices);
+            candidates.add(new TeamRankingCandidate(
+                    room,
+                    totalValue,
+                    calculateReturnRatePercent(totalValue),
+                    null
+            ));
+        }
+
+        candidates.sort(teamRankingComparator());
+
+        int boundedLimit = Math.max(limit, 0);
+        List<MockInvestmentLeaderboardItemDTO> leaderboard = new ArrayList<>();
+        for (int i = 0; i < candidates.size() && i < boundedLimit; i++) {
+            TeamRankingCandidate candidate = candidates.get(i);
+            MatchingRoom room = candidate.room();
+            leaderboard.add(MockInvestmentLeaderboardItemDTO.builder()
+                    .rank(i + 1)
+                    .groupId(room.getId())
+                    .groupName(room.getName() != null ? room.getName() : "팀 " + room.getId())
+                    .teamGameId("team_game_" + room.getId())
+                    .startedAt(toIsoString(room.getCreatedAt()))
+                    .endsAt(toIsoString(room.getEndedAt()))
+                    .totalAssetAmount(candidate.totalValue())
+                    .returnRate(candidate.returnRatePercent())
+                    .avatarUrl(null)
+                    .build());
+        }
+        return leaderboard;
     }
 
     /**
@@ -173,10 +223,15 @@ public class RankingService {
             map.put("groupName", room.getName() != null ? room.getName() : "팀 " + room.getId());
             map.put("currentAssets", totalValue);
             map.put("profitRate", profitRate);
+            map.put("startedAt", toIsoString(room.getCreatedAt()));
+            map.put("endsAt", toIsoString(room.getEndedAt()));
+            map.put("memberCount", room.getMemberCount());
+            map.put("teamGameId", "team_game_" + room.getId());
+            map.put("lastTradeAt", null);
             list.add(map);
         }
 
-        list.sort(Comparator.<Map<String, Object>, BigDecimal>comparing(m -> (BigDecimal) m.get("currentAssets")).reversed());
+        list.sort(groupRankingComparator());
         log.info("[ranking] completed mode={} startedRooms={} elapsedMs={}",
                 allowNetworkPriceFetch ? "LIVE" : "SNAPSHOT",
                 started.size(),
@@ -281,5 +336,40 @@ public class RankingService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private static BigDecimal calculateReturnRatePercent(BigDecimal totalValue) {
+        return INITIAL_TEAM_BALANCE.compareTo(BigDecimal.ZERO) != 0
+                ? totalValue.subtract(INITIAL_TEAM_BALANCE)
+                .divide(INITIAL_TEAM_BALANCE, 6, RoundingMode.HALF_UP)
+                .multiply(PERCENT)
+                .setScale(4, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private static Comparator<Map<String, Object>> groupRankingComparator() {
+        return Comparator.<Map<String, Object>, BigDecimal>comparing(m -> (BigDecimal) m.get("profitRate")).reversed()
+                .thenComparing(Comparator.<Map<String, Object>, BigDecimal>comparing(m -> (BigDecimal) m.get("currentAssets")).reversed())
+                .thenComparing(m -> (Instant) m.get("lastTradeAt"), Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(m -> ((Number) m.get("id")).longValue());
+    }
+
+    private static Comparator<TeamRankingCandidate> teamRankingComparator() {
+        return Comparator.comparing(TeamRankingCandidate::returnRatePercent, Comparator.reverseOrder())
+                .thenComparing(TeamRankingCandidate::totalValue, Comparator.reverseOrder())
+                .thenComparing(TeamRankingCandidate::lastTradeAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(candidate -> candidate.room().getId());
+    }
+
+    private static String toIsoString(Instant instant) {
+        return instant != null ? instant.toString() : null;
+    }
+
+    private record TeamRankingCandidate(
+            MatchingRoom room,
+            BigDecimal totalValue,
+            BigDecimal returnRatePercent,
+            Instant lastTradeAt
+    ) {
     }
 }
