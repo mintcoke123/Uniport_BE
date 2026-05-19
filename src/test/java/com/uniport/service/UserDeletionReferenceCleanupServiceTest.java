@@ -1,5 +1,6 @@
 package com.uniport.service;
 
+import com.uniport.repository.CompetitionApplicationRepository;
 import com.uniport.repository.FriendInviteRepository;
 import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.HoldingRepository;
@@ -56,6 +57,9 @@ class UserDeletionReferenceCleanupServiceTest {
     @Mock
     private LearningUserStateRepository learningUserStateRepository;
 
+    @Mock
+    private CompetitionApplicationRepository competitionApplicationRepository;
+
     @InjectMocks
     private UserDeletionReferenceCleanupService cleanupService;
 
@@ -74,7 +78,8 @@ class UserDeletionReferenceCleanupServiceTest {
                 friendRelationRepository,
                 userPushTokenRepository,
                 userMyPagePreferenceRepository,
-                learningUserStateRepository
+                learningUserStateRepository,
+                competitionApplicationRepository
         );
         order.verify(pointShopOrderRepository).deleteByUser_Id(465L);
         order.verify(pointTransactionRepository).deleteByUser_Id(465L);
@@ -87,5 +92,6 @@ class UserDeletionReferenceCleanupServiceTest {
         order.verify(userPushTokenRepository).deleteByUser_Id(465L);
         order.verify(userMyPagePreferenceRepository).deleteById(465L);
         order.verify(learningUserStateRepository).deleteById(465L);
+        order.verify(competitionApplicationRepository).deleteByUser_Id(465L);
     }
 }

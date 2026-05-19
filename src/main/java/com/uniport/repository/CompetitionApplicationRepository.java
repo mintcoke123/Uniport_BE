@@ -14,4 +14,6 @@ public interface CompetitionApplicationRepository extends JpaRepository<Competit
     List<CompetitionApplication> findByCompetition_IdAndStatus(Long competitionId, String status);
 
     List<CompetitionApplication> findByUser_IdOrderByAppliedAtDesc(Long userId);
+
+    void deleteByUser_Id(Long userId);
 }

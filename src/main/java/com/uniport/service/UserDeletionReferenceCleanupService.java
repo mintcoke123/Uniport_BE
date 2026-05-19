@@ -1,5 +1,6 @@
 package com.uniport.service;
 
+import com.uniport.repository.CompetitionApplicationRepository;
 import com.uniport.repository.FriendInviteRepository;
 import com.uniport.repository.FriendRelationRepository;
 import com.uniport.repository.HoldingRepository;
@@ -28,6 +29,7 @@ public class UserDeletionReferenceCleanupService {
     private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
     private final UserPushTokenRepository userPushTokenRepository;
     private final LearningUserStateRepository learningUserStateRepository;
+    private final CompetitionApplicationRepository competitionApplicationRepository;
 
     public UserDeletionReferenceCleanupService(
             OrderRepository orderRepository,
@@ -40,7 +42,8 @@ public class UserDeletionReferenceCleanupService {
             PointWalletRepository pointWalletRepository,
             UserMyPagePreferenceRepository userMyPagePreferenceRepository,
             UserPushTokenRepository userPushTokenRepository,
-            LearningUserStateRepository learningUserStateRepository) {
+            LearningUserStateRepository learningUserStateRepository,
+            CompetitionApplicationRepository competitionApplicationRepository) {
         this.orderRepository = orderRepository;
         this.holdingRepository = holdingRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
@@ -52,6 +55,7 @@ public class UserDeletionReferenceCleanupService {
         this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
         this.userPushTokenRepository = userPushTokenRepository;
         this.learningUserStateRepository = learningUserStateRepository;
+        this.competitionApplicationRepository = competitionApplicationRepository;
     }
 
     @Transactional
@@ -67,5 +71,6 @@ public class UserDeletionReferenceCleanupService {
         userPushTokenRepository.deleteByUser_Id(userId);
         userMyPagePreferenceRepository.deleteById(userId);
         learningUserStateRepository.deleteById(userId);
+        competitionApplicationRepository.deleteByUser_Id(userId);
     }
 }
