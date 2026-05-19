@@ -73,8 +73,9 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
                 return AppStoreConnectBetaGroupSyncResult.failed("App Store Connect internal beta group was not found.");
             }
 
+            RestClientResponseException groupRelationshipFailure = null;
             try {
-                HttpEntity<Map<String, Object>> postEntity = new HttpEntity<>(relationshipBody(betaTesterId), headers());
+                HttpEntity<Map<String, Object>> postEntity = new HttpEntity<>(betaTesterRelationshipBody(betaTesterId), headers());
                 restTemplate.exchange(
                         baseUrl + "/v1/betaGroups/" + groupId + "/relationships/betaTesters",
                         HttpMethod.POST,
@@ -85,13 +86,39 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
                 if (e.getStatusCode() == HttpStatus.CONFLICT) {
                     return AppStoreConnectBetaGroupSyncResult.added(betaTesterId, groupId);
                 }
-                throw e;
+                groupRelationshipFailure = e;
+            }
+
+            if (groupRelationshipFailure != null) {
+                try {
+                    HttpEntity<Map<String, Object>> fallbackEntity = new HttpEntity<>(betaGroupRelationshipBody(groupId), headers());
+                    restTemplate.exchange(
+                            baseUrl + "/v1/betaTesters/" + betaTesterId + "/relationships/betaGroups",
+                            HttpMethod.POST,
+                            fallbackEntity,
+                            Map.class
+                    );
+                } catch (RestClientResponseException e) {
+                    if (e.getStatusCode() == HttpStatus.CONFLICT) {
+                        return AppStoreConnectBetaGroupSyncResult.added(betaTesterId, groupId);
+                    }
+                    return AppStoreConnectBetaGroupSyncResult.failed(truncateMessage(
+                            "App Store Connect TestFlight group sync failed: groupRelationship="
+                                    + responseFailure(groupRelationshipFailure)
+                                    + "; testerRelationship="
+                                    + responseFailure(e)
+                    ));
+                }
             }
             return AppStoreConnectBetaGroupSyncResult.added(betaTesterId, groupId);
         } catch (RestClientResponseException e) {
-            return AppStoreConnectBetaGroupSyncResult.failed("App Store Connect TestFlight group sync failed: " + e.getStatusCode());
+            return AppStoreConnectBetaGroupSyncResult.failed(truncateMessage(
+                    "App Store Connect TestFlight group sync failed: " + responseFailure(e)
+            ));
         } catch (RestClientException | IllegalStateException e) {
-            return AppStoreConnectBetaGroupSyncResult.failed("App Store Connect TestFlight group sync failed: " + e.getMessage());
+            return AppStoreConnectBetaGroupSyncResult.failed(truncateMessage(
+                    "App Store Connect TestFlight group sync failed: " + e.getMessage()
+            ));
         }
     }
 
@@ -140,13 +167,41 @@ public class AppStoreConnectBetaGroupHttpClient implements AppStoreConnectBetaGr
         return null;
     }
 
-    private Map<String, Object> relationshipBody(String betaTesterId) {
+    private Map<String, Object> betaTesterRelationshipBody(String betaTesterId) {
         return Map.of(
                 "data", List.of(Map.of(
                         "type", "betaTesters",
                         "id", betaTesterId
                 ))
         );
+    }
+
+    private Map<String, Object> betaGroupRelationshipBody(String groupId) {
+        return Map.of(
+                "data", List.of(Map.of(
+                        "type", "betaGroups",
+                        "id", groupId
+                ))
+        );
+    }
+
+    private static String responseFailure(RestClientResponseException e) {
+        String responseBody = normalizeWhitespace(e.getResponseBodyAsString());
+        if (responseBody.isBlank()) {
+            return e.getStatusCode().toString();
+        }
+        return e.getStatusCode() + " body=" + responseBody;
+    }
+
+    private static String normalizeWhitespace(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", " ").trim();
+    }
+
+    private static String truncateMessage(String value) {
+        if (value == null || value.length() <= 1000) {
+            return value;
+        }
+        return value.substring(0, 1000);
     }
 
     private HttpHeaders headers() {

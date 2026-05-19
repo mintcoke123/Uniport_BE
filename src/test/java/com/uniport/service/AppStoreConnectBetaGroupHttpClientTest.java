@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -118,5 +119,116 @@ class AppStoreConnectBetaGroupHttpClientTest {
         assertTrue(result.added());
         assertEquals("tester-1", result.betaTesterId());
         assertEquals("group-1", result.groupId());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void addTesterToInternalGroupFallsBackToTesterRelationshipWhenGroupRelationshipIsRejected() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        AppStoreConnectTokenProvider tokenProvider = mock(AppStoreConnectTokenProvider.class);
+        when(tokenProvider.createToken()).thenReturn("jwt-token");
+        when(restTemplate.exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com"),
+                eq(HttpMethod.GET),
+                org.mockito.ArgumentMatchers.any(HttpEntity.class),
+                eq(Map.class)
+        )).thenReturn(ResponseEntity.ok(Map.of(
+                "data", List.of(Map.of("id", "tester-1"))
+        )));
+        when(restTemplate.exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/betaTesters"),
+                eq(HttpMethod.POST),
+                org.mockito.ArgumentMatchers.any(HttpEntity.class),
+                eq(Map.class)
+        )).thenThrow(new HttpClientErrorException(
+                org.springframework.http.HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                "{\"errors\":[{\"detail\":\"group relationship rejected\"}]}".getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8
+        ));
+        when(restTemplate.exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/betaTesters/tester-1/relationships/betaGroups"),
+                eq(HttpMethod.POST),
+                org.mockito.ArgumentMatchers.any(HttpEntity.class),
+                eq(Map.class)
+        )).thenReturn(ResponseEntity.noContent().build());
+        AppStoreConnectBetaGroupHttpClient client = new AppStoreConnectBetaGroupHttpClient(
+                restTemplate,
+                tokenProvider,
+                "app-1",
+                "group-1",
+                "",
+                "https://api.appstoreconnect.apple.com"
+        );
+
+        AppStoreConnectBetaGroupSyncResult result = client.addTesterToInternalGroup("ios@example.com");
+
+        ArgumentCaptor<HttpEntity> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/betaTesters/tester-1/relationships/betaGroups"),
+                eq(HttpMethod.POST),
+                captor.capture(),
+                eq(Map.class)
+        );
+        Map<String, Object> body = (Map<String, Object>) captor.getValue().getBody();
+        List<Map<String, String>> data = (List<Map<String, String>>) body.get("data");
+        assertEquals("betaGroups", data.get(0).get("type"));
+        assertEquals("group-1", data.get(0).get("id"));
+        assertTrue(result.added());
+        assertEquals("tester-1", result.betaTesterId());
+        assertEquals("group-1", result.groupId());
+    }
+
+    @Test
+    void addTesterToInternalGroupIncludesAppleResponseBodyWhenBothRelationshipDirectionsFail() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        AppStoreConnectTokenProvider tokenProvider = mock(AppStoreConnectTokenProvider.class);
+        when(tokenProvider.createToken()).thenReturn("jwt-token");
+        when(restTemplate.exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/betaTesters?filter%5Bemail%5D=ios%40example.com"),
+                eq(HttpMethod.GET),
+                org.mockito.ArgumentMatchers.any(HttpEntity.class),
+                eq(Map.class)
+        )).thenReturn(ResponseEntity.ok(Map.of(
+                "data", List.of(Map.of("id", "tester-1"))
+        )));
+        when(restTemplate.exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/betaTesters"),
+                eq(HttpMethod.POST),
+                org.mockito.ArgumentMatchers.any(HttpEntity.class),
+                eq(Map.class)
+        )).thenThrow(new HttpClientErrorException(
+                org.springframework.http.HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                "{\"errors\":[{\"detail\":\"group rejected\"}]}".getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8
+        ));
+        when(restTemplate.exchange(
+                eq("https://api.appstoreconnect.apple.com/v1/betaTesters/tester-1/relationships/betaGroups"),
+                eq(HttpMethod.POST),
+                org.mockito.ArgumentMatchers.any(HttpEntity.class),
+                eq(Map.class)
+        )).thenThrow(new HttpClientErrorException(
+                org.springframework.http.HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                "{\"errors\":[{\"detail\":\"tester rejected\"}]}".getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8
+        ));
+        AppStoreConnectBetaGroupHttpClient client = new AppStoreConnectBetaGroupHttpClient(
+                restTemplate,
+                tokenProvider,
+                "app-1",
+                "group-1",
+                "",
+                "https://api.appstoreconnect.apple.com"
+        );
+
+        AppStoreConnectBetaGroupSyncResult result = client.addTesterToInternalGroup("ios@example.com");
+
+        assertFalse(result.added());
+        assertTrue(result.message().contains("groupRelationship=400 BAD_REQUEST"));
+        assertTrue(result.message().contains("group rejected"));
+        assertTrue(result.message().contains("testerRelationship=400 BAD_REQUEST"));
+        assertTrue(result.message().contains("tester rejected"));
     }
 }
