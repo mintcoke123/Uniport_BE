@@ -15,20 +15,6 @@ import java.util.Locale;
 @Service
 public class InvestmentIssueService {
 
-    private enum InvestmentIssueCategory {
-        ALL("전체"),
-        MARKET("시황"),
-        THEME("테마"),
-        COMPANY("종목"),
-        OVERSEAS("해외");
-
-        private final String label;
-
-        InvestmentIssueCategory(String label) {
-            this.label = label;
-        }
-    }
-
     @Transactional(readOnly = true)
     public InvestmentIssueListResponseDTO getIssueList(String category, String cursor, Integer size) {
         InvestmentIssueCategory selectedCategory = parseCategory(category);
@@ -64,7 +50,7 @@ public class InvestmentIssueService {
         return Arrays.stream(InvestmentIssueCategory.values())
                 .map(category -> InvestmentIssueCategoryDTO.builder()
                         .category(category.name())
-                        .label(category.label)
+                        .label(category.label())
                         .build())
                 .toList();
     }
