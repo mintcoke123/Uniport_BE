@@ -62,6 +62,30 @@ class MatchingRoomEndingSchedulerTest {
         assertEquals("team-81", reloadedUser.getTeamId());
     }
 
+    @Test
+    void runEndsLegacyStartedRoomsWithoutEndTimeAfterSevenDays() {
+        Instant createdAt = Instant.now().minusSeconds(8 * 24 * 60 * 60);
+        MatchingRoom room = MatchingRoom.builder()
+                .name("레거시 종료 대상 방")
+                .capacity(1)
+                .memberCount(1)
+                .status("started")
+                .visibility("PUBLIC")
+                .createdAt(createdAt)
+                .endedAt(null)
+                .build();
+        entityManager.persist(room);
+        entityManager.flush();
+
+        scheduler.run();
+
+        entityManager.flush();
+        entityManager.clear();
+        MatchingRoom endedRoom = matchingRoomRepository.findById(room.getId()).orElseThrow();
+        assertEquals("ended", endedRoom.getStatus());
+        assertEquals(createdAt.plusSeconds(7 * 24 * 60 * 60), endedRoom.getEndedAt());
+    }
+
     private User persistUser(String studentId, String nickname, String teamId) {
         User user = User.builder()
                 .studentId(studentId)
