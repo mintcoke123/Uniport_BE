@@ -1,6 +1,8 @@
 package com.uniport.controller;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -144,6 +146,12 @@ public class BetaPageController {
                 }
                 .button.secondary {
                   background: #0d7d6c;
+                }
+                .button.mail-fallback {
+                  margin-top: 10px;
+                  border: 1px solid #c8d2df;
+                  background: #ffffff;
+                  color: #0057b8;
                 }
                 .form-grid {
                   display: grid;
@@ -319,6 +327,7 @@ public class BetaPageController {
                         <span>입력한 Apple ID 이메일은 iOS TestFlight 내부 테스트 초대를 위해서만 사용됩니다.</span>
                       </label>
                       <button class="button secondary" type="submit">iPhone 베타 신청하기</button>
+                      <a id="ios-mail-link" class="button mail-fallback" href="mailto:{{CONTACT_EMAIL_URL}}?subject=Uniport%20iOS%20Beta%20신청">담당자에게 신청 내용 메일 보내기</a>
                       <p class="form-status" id="ios-form-status" role="status" aria-live="polite"></p>
                     </form>
                     <p class="manual">신청 후 Apple에서 오는 App Store Connect 초대 메일을 수락한 뒤 TestFlight를 확인하세요. 문제가 있으면 <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>로 문의해 주세요.</p>
@@ -346,18 +355,46 @@ public class BetaPageController {
                     steps.insertBefore(ios, steps.firstElementChild);
                   }
 
-                  document.getElementById("ios-form").addEventListener("submit", function (event) {
-                    event.preventDefault();
-                    const form = event.currentTarget;
-                    const button = form.querySelector("button[type='submit']");
-                    const status = document.getElementById("ios-form-status");
+                  const form = document.getElementById("ios-form");
+                  const mailLink = document.getElementById("ios-mail-link");
+
+                  function currentIosApplication() {
                     const name = document.getElementById("name").value.trim();
                     const appleEmail = document.getElementById("apple-email").value.trim();
                     const contactEmail = document.getElementById("contact-email").value.trim();
                     const device = document.getElementById("device").value;
                     const consent = document.getElementById("consent").checked;
+                    return { name: name, appleEmail: appleEmail, contactEmail: contactEmail, device: device, consent: consent };
+                  }
 
-                    if (!name || !appleEmail || !consent) {
+                  function sendIosApplicationMail(application) {
+                    const subject = "Uniport iOS Beta 신청";
+                    const body = [
+                      "이름/닉네임: " + (application.name || ""),
+                      "Apple ID 이메일: " + (application.appleEmail || ""),
+                      "연락처 이메일: " + (application.contactEmail || application.appleEmail || ""),
+                      "기기: " + (application.device || "iPhone"),
+                      "개인정보 수집 및 이용 동의: " + (application.consent ? "동의" : "미동의")
+                    ].join("\\n");
+                    return "mailto:{{CONTACT_EMAIL_URL}}?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+                  }
+
+                  function updateIosMailLink() {
+                    mailLink.href = sendIosApplicationMail(currentIosApplication());
+                  }
+
+                  form.addEventListener("input", updateIosMailLink);
+                  form.addEventListener("change", updateIosMailLink);
+                  mailLink.addEventListener("click", updateIosMailLink);
+                  updateIosMailLink();
+
+                  form.addEventListener("submit", function (event) {
+                    event.preventDefault();
+                    const button = form.querySelector("button[type='submit']");
+                    const status = document.getElementById("ios-form-status");
+                    const application = currentIosApplication();
+
+                    if (!application.name || !application.appleEmail || !application.consent) {
                       event.currentTarget.reportValidity();
                       return;
                     }
@@ -372,11 +409,11 @@ public class BetaPageController {
                         "Content-Type": "application/json"
                       },
                       body: JSON.stringify({
-                        name: name,
-                        appleIdEmail: appleEmail,
-                        contactEmail: contactEmail,
-                        device: device,
-                        consent: consent
+                        name: application.name,
+                        appleIdEmail: application.appleEmail,
+                        contactEmail: application.contactEmail,
+                        device: application.device,
+                        consent: application.consent
                       })
                     }).then(function (response) {
                       return response.json().then(function (body) {
@@ -488,7 +525,9 @@ public class BetaPageController {
     }
 
     private String withContactEmail(String html) {
-        return html.replace("{{CONTACT_EMAIL}}", HtmlUtils.htmlEscape(contactEmail));
+        return html
+                .replace("{{CONTACT_EMAIL_URL}}", URLEncoder.encode(contactEmail, StandardCharsets.UTF_8))
+                .replace("{{CONTACT_EMAIL}}", HtmlUtils.htmlEscape(contactEmail));
     }
 
     private static String trimToEmpty(String value) {

@@ -65,7 +65,10 @@ class BetaPageControllerTest {
                 .andExpect(content().string(containsString("TestFlight 내부 테스트")))
                 .andExpect(content().string(containsString("kwakkun2002@gmail.com")))
                 .andExpect(content().string(containsString("data-android-link=\"/beta/android\"")))
-                .andExpect(content().string(containsString("fetch(\"/api/beta/ios-applications\"")));
+                .andExpect(content().string(containsString("fetch(\"/api/beta/ios-applications\"")))
+                .andExpect(content().string(containsString("담당자에게 신청 내용 메일 보내기")))
+                .andExpect(content().string(containsString("sendIosApplicationMail")))
+                .andExpect(content().string(containsString("mailto:kwakkun2002%40gmail.com")));
     }
 
     @Test
