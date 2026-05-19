@@ -44,7 +44,7 @@ app:
         private-key: ${APPSTORE_CONNECT_PRIVATE_KEY:}
         app-id: ${APPSTORE_CONNECT_APP_ID:}
         invite-role: ${APPSTORE_CONNECT_INVITE_ROLE:MARKETING}
-        group-sync-enabled: ${APPSTORE_CONNECT_GROUP_SYNC_ENABLED:false}
+        group-sync-enabled: ${APPSTORE_CONNECT_GROUP_SYNC_ENABLED:${APPSTORE_CONNECT_INVITE_ENABLED:false}}
         group-sync-fixed-delay-ms: ${APPSTORE_CONNECT_GROUP_SYNC_FIXED_DELAY_MS:60000}
         internal-beta-group-id: ${APPSTORE_CONNECT_INTERNAL_BETA_GROUP_ID:}
         internal-beta-group-name: ${APPSTORE_CONNECT_INTERNAL_BETA_GROUP_NAME:uniport tester}
