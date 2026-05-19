@@ -303,7 +303,7 @@ public class NewsService {
                 category.label(),
                 defaultIfBlank(article.getTitle(), "제목 없는 뉴스"),
                 defaultIfBlank(article.getSummary(), ""),
-                buildNewsroomBody(article, category),
+                defaultIfBlank(article.getContent(), buildNewsroomBody(article, category)),
                 defaultIfBlank(article.getSourceName(), "네이버 뉴스"),
                 article.getPublishedAt(),
                 article.isFeatured(),

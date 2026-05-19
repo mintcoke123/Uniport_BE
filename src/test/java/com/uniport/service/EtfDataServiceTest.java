@@ -54,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -381,8 +382,8 @@ class EtfDataServiceTest {
         assertEquals("Apple Inc.", response.getItems().get(0).getName());
         assertEquals("AAPL", response.getItems().get(0).getSymbol());
         assertEquals("NASDAQ", response.getItems().get(0).getMarket());
-        assertEquals("https://uniportbe-production.up.railway.app/api/stock-symbols/NASDAQ/AAPL.svg?text=AAPL&bg=EEF2FF&fg=4F46E5",
-                response.getItems().get(0).getLogoUrl());
+        assertNull(response.getItems().get(0).getLogoUrl());
+        assertNotNull(response.getItems().get(0).getVisual());
     }
 
     @Test
@@ -477,7 +478,8 @@ class EtfDataServiceTest {
                     .orElseThrow(() -> new AssertionError("검색 결과 누락: " + testCase));
 
             assertEquals(true, found.getBacktestEnabled(), "추가 불가 상태: " + testCase);
-            assertNotNull(found.getLogoUrl(), "로고 URL 누락: " + testCase);
+            assertNull(found.getLogoUrl(), "fallback 로고 URL이 생성되면 안 됨: " + testCase);
+            assertNotNull(found.getVisual(), "fallback visual 누락: " + testCase);
 
             CustomEtfMutationResponseDTO created = etfDataService.createCustomEtf(user, CustomEtfCreateRequestDTO.builder()
                     .title("검수 ETF " + testCase.symbol())

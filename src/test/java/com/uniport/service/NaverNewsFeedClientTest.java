@@ -12,6 +12,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -75,6 +76,59 @@ class NaverNewsFeedClientTest {
         );
 
         assertEquals(List.of(), client.fetchLatest());
+    }
+
+    @Test
+    void fetchLatest_fetchesOriginalArticleContentWhenAvailable() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        NaverNewsFeedClient client = new NaverNewsFeedClient(
+                restTemplate,
+                true,
+                "client-id",
+                "client-secret",
+                300,
+                10,
+                List.of(NaverNewsFeedClient.FeedDefinition.market("코스피 시황"))
+        );
+        when(restTemplate.exchange(
+                eq(URI.create("https://openapi.naver.com/v1/search/news.json?query=%EC%BD%94%EC%8A%A4%ED%94%BC%20%EC%8B%9C%ED%99%A9&display=10&start=1&sort=date")),
+                eq(HttpMethod.GET),
+                org.mockito.ArgumentMatchers.<HttpEntity<Void>>any(),
+                eq(String.class)
+        )).thenReturn(ResponseEntity.ok("""
+                {
+                  "items": [
+                    {
+                      "title": "코스피, 반도체 강세에 상승 출발 - 테스트경제",
+                      "originallink": "https://example.com/full-article",
+                      "link": "https://n.news.naver.com/article/001/0000000001",
+                      "description": "검색 API 요약입니다.",
+                      "pubDate": "Mon, 11 May 2026 03:20:00 GMT"
+                    }
+                  ]
+                }
+                """));
+        when(restTemplate.exchange(
+                eq(URI.create("https://example.com/full-article")),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(String.class)
+        )).thenReturn(ResponseEntity.ok("""
+                <html>
+                  <head><script>광고 스크립트</script><style>.ad { display:none; }</style></head>
+                  <body>
+                    <article>
+                      <p>첫 번째 본문 문단입니다. 시장 흐름을 자세히 설명합니다.</p>
+                      <p>두 번째 본문 문단입니다. 투자자가 확인할 변수를 설명합니다.</p>
+                    </article>
+                  </body>
+                </html>
+                """));
+
+        List<FetchedNewsArticle> articles = client.fetchLatest();
+
+        assertEquals("첫 번째 본문 문단입니다. 시장 흐름을 자세히 설명합니다.\n\n두 번째 본문 문단입니다. 투자자가 확인할 변수를 설명합니다.",
+                articles.get(0).getContent());
     }
 
     @Test

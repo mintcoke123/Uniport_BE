@@ -253,6 +253,29 @@ class NewsServiceTest {
     }
 
     @Test
+    void getRealtimeNewsDetail_usesFetchedArticleFullContentWhenAvailable() {
+        String fullContent = "첫 번째 원문 본문 문단입니다.\n\n두 번째 원문 본문 문단입니다.";
+        when(newsFeedClient.fetchLatest()).thenReturn(List.of(
+                FetchedNewsArticle.builder()
+                        .id("naver_full_text")
+                        .category(NewsCategory.MARKET)
+                        .title("코스피 상승 출발")
+                        .summary("검색 API 요약입니다.")
+                        .content(fullContent)
+                        .sourceName("테스트경제")
+                        .publishedAt(LocalDateTime.of(2026, 5, 11, 12, 20))
+                        .featured(true)
+                        .externalUrl("https://example.com/full-text")
+                        .build()
+        ));
+
+        RealtimeNewsDetailResponseDTO response = newsService.getRealtimeNewsDetail("naver_full_text");
+
+        assertEquals(fullContent, response.getBody());
+        assertEquals(fullContent, response.getCoreSummary());
+    }
+
+    @Test
     void getNewsDetail_canResolveNaverApiArticleById() {
         when(newsFeedClient.fetchLatest()).thenReturn(List.of(
                 fetched("naver_overseas_1", NewsCategory.OVERSEAS_STOCK, false, LocalDateTime.of(2026, 5, 11, 12, 20))
