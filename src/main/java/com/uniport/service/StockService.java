@@ -141,7 +141,8 @@ public class StockService {
         List<FinancialDataItemDTO> financialData = relatedArticles.stream()
                 .findFirst()
                 .map(managedStockNewsService::extractFinancialData)
-                .orElse(List.of());
+                .filter(data -> data != null && !data.isEmpty())
+                .orElseGet(() -> companyIntroductionClient.fetchFinancialData(code));
         List<NewsItemDTO> news = relatedArticles.stream()
                 .map(article -> NewsItemDTO.builder()
                         .id(article.getId())

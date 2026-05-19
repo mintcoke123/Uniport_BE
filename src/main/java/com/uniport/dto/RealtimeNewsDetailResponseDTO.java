@@ -30,6 +30,9 @@ public class RealtimeNewsDetailResponseDTO {
     @Schema(example = "반도체 투자 심리가 회복되며 삼성전자 관련 뉴스 관심이 커지고 있어요.")
     private String summary;
 
+    @Schema(example = "뉴스 본문입니다.")
+    private String body;
+
     @Schema(example = "한국경제")
     private String sourceName;
 

@@ -222,6 +222,7 @@ class NewsServiceTest {
 
         assertEquals("hankyung_company_1", response.getNewsId());
         assertEquals("삼성전자 반등, 반도체 투자 심리 회복", response.getTitle());
+        org.junit.jupiter.api.Assertions.assertTrue(response.getBody().contains("핵심 요약"));
         org.junit.jupiter.api.Assertions.assertTrue(response.getCoreSummary().contains("AI 서버 수요 기대"));
         assertFalse(response.getSummary().equals(response.getCoreSummary()));
         assertEquals("POSITIVE", response.getSentiment());
@@ -247,6 +248,7 @@ class NewsServiceTest {
         RealtimeNewsDetailResponseDTO response = newsService.getRealtimeNewsDetail("news_duplicate_summary");
 
         assertEquals("반도체 투자 심리가 회복되고 있어요.", response.getSummary());
+        assertEquals("반도체 투자 심리가 회복되고 있어요.", response.getBody());
         assertNull(response.getCoreSummary());
     }
 

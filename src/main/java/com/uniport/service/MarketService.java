@@ -26,15 +26,18 @@ public class MarketService {
     private final KisWsSubscriptionManager kisWsSubscriptionManager;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
+    private final YahooMarketIndexClient yahooMarketIndexClient;
 
     public MarketService(KisApiService kisApiService,
                          @Lazy KisWsSubscriptionManager kisWsSubscriptionManager,
                          StockVisualAssetResolver stockVisualAssetResolver,
-                         StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
+                         StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver,
+                         YahooMarketIndexClient yahooMarketIndexClient) {
         this.kisApiService = kisApiService;
         this.kisWsSubscriptionManager = kisWsSubscriptionManager;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
+        this.yahooMarketIndexClient = yahooMarketIndexClient;
     }
 
     public List<StockPriceDTO> getVolumeRank() {
@@ -98,25 +101,15 @@ public class MarketService {
         List<MarketIndexItemDTO> list = new ArrayList<>();
         try {
             MarketIndexDTO kospi = kisApiService.getMarketIndex("KOSPI");
-            list.add(MarketIndexItemDTO.builder()
-                    .id(1L)
-                    .name(kospi.getIndexName() != null ? kospi.getIndexName() : "KOSPI")
-                    .value(kospi.getValue() != null ? kospi.getValue() : BigDecimal.ZERO)
-                    .change(kospi.getChangeAmount() != null ? kospi.getChangeAmount() : BigDecimal.ZERO)
-                    .changeRate(kospi.getChangeRate() != null ? kospi.getChangeRate() : BigDecimal.ZERO)
-                    .build());
+            list.add(toIndexItem(1L, kospi, "KOSPI"));
             MarketIndexDTO kosdaq = kisApiService.getMarketIndex("KOSDAQ");
-            list.add(MarketIndexItemDTO.builder()
-                    .id(2L)
-                    .name(kosdaq.getIndexName() != null ? kosdaq.getIndexName() : "KOSDAQ")
-                    .value(kosdaq.getValue() != null ? kosdaq.getValue() : BigDecimal.ZERO)
-                    .change(kosdaq.getChangeAmount() != null ? kosdaq.getChangeAmount() : BigDecimal.ZERO)
-                    .changeRate(kosdaq.getChangeRate() != null ? kosdaq.getChangeRate() : BigDecimal.ZERO)
-                    .build());
+            list.add(toIndexItem(2L, kosdaq, "KOSDAQ"));
+            MarketIndexDTO nasdaq = yahooMarketIndexClient.getNasdaqCompositeIndex();
+            list.add(toIndexItem(3L, nasdaq, "NASDAQ"));
         } catch (ApiException e) {
             throw e;
         } catch (Exception e) {
-            throw new ApiException("시장 지수(코스피/코스닥)를 불러오지 못했습니다. " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+            throw new ApiException("시장 지수(코스피/코스닥/나스닥)를 불러오지 못했습니다. " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
         }
         return list;
     }
@@ -178,5 +171,15 @@ public class MarketService {
         } catch (NumberFormatException e) {
             return 0L;
         }
+    }
+
+    private static MarketIndexItemDTO toIndexItem(Long id, MarketIndexDTO index, String fallbackName) {
+        return MarketIndexItemDTO.builder()
+                .id(id)
+                .name(index.getIndexName() != null ? index.getIndexName() : fallbackName)
+                .value(index.getValue() != null ? index.getValue() : BigDecimal.ZERO)
+                .change(index.getChangeAmount() != null ? index.getChangeAmount() : BigDecimal.ZERO)
+                .changeRate(index.getChangeRate() != null ? index.getChangeRate() : BigDecimal.ZERO)
+                .build();
     }
 }

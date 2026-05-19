@@ -146,6 +146,7 @@ public class NewsService {
                 .categoryLabel(realtimeCategory.label())
                 .title(article.title())
                 .summary(article.summary())
+                .body(article.body())
                 .sourceName(article.sourceName())
                 .publishedAt(toIso(article.publishedAt()))
                 .externalUrl(article.externalUrl())

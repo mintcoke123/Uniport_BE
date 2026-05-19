@@ -1,5 +1,7 @@
 package com.uniport.service;
 
+import com.uniport.dto.MarketIndexDTO;
+import com.uniport.dto.MarketIndexItemDTO;
 import com.uniport.dto.MarketStockItemDTO;
 import com.uniport.dto.StockPriceDTO;
 import com.uniport.dto.StockVisualDTO;
@@ -18,17 +20,20 @@ class MarketServiceTest {
 
     private KisApiService kisApiService;
     private StockVisualAssetResolver stockVisualAssetResolver;
+    private YahooMarketIndexClient yahooMarketIndexClient;
     private MarketService marketService;
 
     @BeforeEach
     void setUp() {
         kisApiService = mock(KisApiService.class);
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
+        yahooMarketIndexClient = mock(YahooMarketIndexClient.class);
         marketService = new MarketService(
                 kisApiService,
                 mock(KisWsSubscriptionManager.class),
                 stockVisualAssetResolver,
-                new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app")
+                new StockSymbolLogoUrlResolver("https://uniportbe-production.up.railway.app"),
+                yahooMarketIndexClient
         );
     }
 
@@ -51,12 +56,35 @@ class MarketServiceTest {
         assertEquals("삼성", response.get(0).getVisual().getText());
     }
 
+    @Test
+    void getIndicesForApi_includesKospiKosdaqAndNasdaq() {
+        when(kisApiService.getMarketIndex("KOSPI")).thenReturn(index("KOSPI", "2701.22", "12.31", "0.45"));
+        when(kisApiService.getMarketIndex("KOSDAQ")).thenReturn(index("KOSDAQ", "842.10", "-1.20", "-0.14"));
+        when(yahooMarketIndexClient.getNasdaqCompositeIndex()).thenReturn(index("NASDAQ", "17740.09", "92.40", "0.52"));
+
+        List<MarketIndexItemDTO> response = marketService.getIndicesForApi();
+
+        assertEquals(List.of("KOSPI", "KOSDAQ", "NASDAQ"), response.stream()
+                .map(MarketIndexItemDTO::getName)
+                .toList());
+    }
+
     private StockVisualDTO visual(String text) {
         return StockVisualDTO.builder()
                 .type("FALLBACK_SYMBOL")
                 .text(text)
                 .bgColor("#EEF2FF")
                 .textColor("#4F46E5")
+                .build();
+    }
+
+    private MarketIndexDTO index(String name, String value, String change, String changeRate) {
+        return MarketIndexDTO.builder()
+                .indexCode(name)
+                .indexName(name)
+                .value(new BigDecimal(value))
+                .changeAmount(new BigDecimal(change))
+                .changeRate(new BigDecimal(changeRate))
                 .build();
     }
 }

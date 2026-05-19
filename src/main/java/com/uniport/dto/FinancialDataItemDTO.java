@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 public class FinancialDataItemDTO {
 
     private String quarter;
+    private String value;
     private BigDecimal revenue;
     private BigDecimal grossProfit;
     private BigDecimal operatingProfit;

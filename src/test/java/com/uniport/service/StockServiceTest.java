@@ -1,5 +1,6 @@
 package com.uniport.service;
 
+import com.uniport.dto.FinancialDataItemDTO;
 import com.uniport.dto.InvestorSentimentDTO;
 import com.uniport.dto.StockDetailDTO;
 import com.uniport.dto.StockPriceDTO;
@@ -54,6 +55,7 @@ class StockServiceTest {
         stockVisualAssetResolver = mock(StockVisualAssetResolver.class);
         companyIntroductionClient = mock(WiseReportCompanyIntroductionClient.class);
         when(companyIntroductionClient.fetchCompanyIntroduction(anyString())).thenReturn(Optional.empty());
+        when(companyIntroductionClient.fetchFinancialData(anyString())).thenReturn(List.of());
         stockService = new StockService(
                 kisApiService,
                 mock(HoldingRepository.class),
@@ -299,6 +301,42 @@ class StockServiceTest {
         StockDetailDTO response = stockService.getStockDetail(5930L, null);
 
         assertEquals(introduction, response.getCompanyInfo());
+    }
+
+    @Test
+    void getStockDetail_usesWiseReportFinancialDataWhenManagedNewsHasNoFinancialData() {
+        StockPriceDTO price = StockPriceDTO.builder()
+                .stockCode("005930")
+                .stockName("삼성전자")
+                .currentPrice(new BigDecimal("70000"))
+                .changeAmount(new BigDecimal("1000"))
+                .changeRate(new BigDecimal("1.45"))
+                .volume(1000L)
+                .build();
+        StockMaster master = StockMaster.builder()
+                .code("005930")
+                .nameKr("삼성전자")
+                .market("KOSPI")
+                .build();
+        FinancialDataItemDTO wiseReportFinancialData = FinancialDataItemDTO.builder()
+                .quarter("2025/12")
+                .revenue(new BigDecimal("3336059"))
+                .operatingProfit(new BigDecimal("436011"))
+                .value("매출 3,336,059억원 · 영업이익 436,011억원")
+                .build();
+        when(kisApiService.getStockQuote("005930")).thenReturn(price);
+        when(stockMasterRepository.findById("005930")).thenReturn(Optional.of(master));
+        when(managedStockNewsService.getNewsForStock("005930", "삼성전자", 3)).thenReturn(List.of());
+        when(companyIntroductionClient.fetchFinancialData("005930")).thenReturn(List.of(wiseReportFinancialData));
+        when(communityService.getInvestorSentiment("005930")).thenReturn(InvestorSentimentDTO.builder().build());
+        when(communityService.getDiscussionCount("005930")).thenReturn(0);
+        when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
+
+        StockDetailDTO response = stockService.getStockDetail(5930L, null);
+
+        assertEquals(1, response.getFinancialData().size());
+        assertEquals("2025/12", response.getFinancialData().get(0).getQuarter());
+        assertEquals("매출 3,336,059억원 · 영업이익 436,011억원", response.getFinancialData().get(0).getValue());
     }
 
     @Test
