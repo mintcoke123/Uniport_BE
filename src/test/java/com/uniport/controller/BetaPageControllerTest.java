@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppC
 })
 class BetaPageControllerTest {
 
-    private static final String ANDROID_INVITE_URL = "https://appdistribution.firebase.dev/i/94610693e08bce13";
+    private static final String ANDROID_INVITE_URL = "https://appdistribution.firebase.google.com/testerapps/example/releases/invite";
 
     @Autowired
     private WebApplicationContext context;
