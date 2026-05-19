@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -135,6 +136,44 @@ class EducationV1ServiceTest {
     }
 
     @Test
+    void introRoadmapUsesAdvancedSectorSelectionWhenIntroSelectionIsMissing() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateWithAdvancedSectorsOnlyForIntroCourse()));
+        when(educationOverviewRepository.findByTrackAndSectorOrderByDayNumberAsc(eq("intro_core"), isNull()))
+                .thenReturn(coreOverviews("intro_core"));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(anyString(), any(), anyInt()))
+                .thenReturn(List.of());
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(anyString(), any(), anyInt()))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseRoadmap(user, "intro");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> selectedSectors = (List<Map<String, Object>>) response.get("selected_sectors");
+        assertEquals("robot", selectedSectors.get(0).get("sector_id"));
+        assertEquals("defense", selectedSectors.get(1).get("sector_id"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> days = (List<Map<String, Object>>) response.get("days");
+        assertEquals("robot", days.get(26).get("sector_id"));
+        assertEquals("robot", days.get(27).get("sector_id"));
+        assertEquals("defense", days.get(28).get("sector_id"));
+        assertEquals("defense", days.get(29).get("sector_id"));
+    }
+
+    @Test
+    void introSectorSelectionUsesAdvancedSectorSelectionWhenIntroSelectionIsMissing() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateWithAdvancedSectorsOnlyForIntroCourse()));
+
+        Map<String, Object> response = service.getSectorSelection(user, "intro");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> selectedSectors = (List<Map<String, Object>>) response.get("selected_sectors");
+        assertEquals(2, selectedSectors.size());
+        assertEquals("robot", selectedSectors.get(0).get("sector_id"));
+        assertEquals("defense", selectedSectors.get(1).get("sector_id"));
+    }
+
+    @Test
     void courseDayReplacesSelectedSectorPlaceholderTitleWithSelectedSectorName() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateWithSelectedSectors()));
         when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_sector"), eq("AI 반도체"), eq(1)))
@@ -170,6 +209,39 @@ class EducationV1ServiceTest {
         assertEquals("AI 반도체 Day1", response.get("title"));
         assertEquals("advanced", response.get("course_id"));
         assertEquals("sector", response.get("module_type"));
+    }
+
+    @Test
+    void introCourseDayUsesAdvancedSectorSelectionWhenIntroSelectionIsMissing() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(stateWithAdvancedSectorsOnlyForIntroCourse()));
+        when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_sector"), eq("로봇"), eq(1)))
+                .thenReturn(Optional.of(overview("intro_sector", "로봇", 1, "선택 섹터 A Day1")));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_sector"), eq("로봇"), eq(1)))
+                .thenReturn(List.of());
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_sector"), eq("로봇"), eq(1)))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseDay(user, "intro", 27);
+
+        assertEquals("로봇 Day1", response.get("title"));
+        assertEquals("intro", response.get("course_id"));
+        assertEquals("sector", response.get("module_type"));
+    }
+
+    @Test
+    void updateAdvancedSectorSelectionSeedsIntroWhenIntroSelectionIsMissing() {
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(emptyLearningState()));
+
+        service.updateSectorSelection(
+                user,
+                "advanced",
+                Map.of("selected_sector_ids", List.of("robot", "defense")));
+
+        ArgumentCaptor<LearningUserStateEntity> stateCaptor = ArgumentCaptor.forClass(LearningUserStateEntity.class);
+        verify(learningUserStateRepository).save(stateCaptor.capture());
+        String selectionsJson = stateCaptor.getValue().getEducationSectorSelectionsJson();
+        assertTrue(selectionsJson.contains("\"advanced\":[\"robot\",\"defense\"]"));
+        assertTrue(selectionsJson.contains("\"intro\":[\"robot\",\"defense\"]"));
     }
 
     @Test
@@ -688,6 +760,40 @@ class EducationV1ServiceTest {
                 .educationQuizAnswersJson("{}")
                 .educationCardProgressJson("{}")
                 .educationSectorSelectionsJson("{\"intro\":[\"ai_semiconductor\",\"quantum_computer\"]}")
+                .build();
+    }
+
+    private LearningUserStateEntity stateWithAdvancedSectorsOnlyForIntroCourse() {
+        return LearningUserStateEntity.builder()
+                .userId(1L)
+                .level(0)
+                .point(3000)
+                .streakDays(0)
+                .currentDayByCourseJson("{}")
+                .completedDaysByCourseJson("{}")
+                .submittedStepIdsJson("[]")
+                .educationCurrentDayJson("{\"intro\":27}")
+                .educationCompletedDaysJson("{}")
+                .educationQuizAnswersJson("{}")
+                .educationCardProgressJson("{}")
+                .educationSectorSelectionsJson("{\"advanced\":[\"robot\",\"defense\"]}")
+                .build();
+    }
+
+    private LearningUserStateEntity emptyLearningState() {
+        return LearningUserStateEntity.builder()
+                .userId(1L)
+                .level(0)
+                .point(0)
+                .streakDays(0)
+                .currentDayByCourseJson("{}")
+                .completedDaysByCourseJson("{}")
+                .submittedStepIdsJson("[]")
+                .educationCurrentDayJson("{}")
+                .educationCompletedDaysJson("{}")
+                .educationQuizAnswersJson("{}")
+                .educationCardProgressJson("{}")
+                .educationSectorSelectionsJson("{}")
                 .build();
     }
 

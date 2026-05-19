@@ -213,6 +213,7 @@ public class EducationV1Service {
                 .map(this::normalizeSectorId)
                 .toList();
         state.sectorSelectionsByCourse.put(course.id(), normalizedIds);
+        seedPeerCourseSectorSelectionIfMissing(course.id(), normalizedIds, state);
         persistState(user.getId(), state);
         return getSectorSelection(user, course.id());
     }
@@ -636,14 +637,30 @@ public class EducationV1Service {
 
     private List<String> selectedSectorIdsForCourse(CourseDefinition course, EducationApiState state) {
         List<String> selectedSectorIds = state.sectorSelectionsByCourse.getOrDefault(course.id(), List.of());
-        if (selectedSectorIds.size() >= REQUIRED_SECTOR_COUNT || !ADVANCED_COURSE_ID.equals(course.id())) {
+        if (selectedSectorIds.size() >= REQUIRED_SECTOR_COUNT) {
             return selectedSectorIds;
         }
-        List<String> introSelectedSectorIds = state.sectorSelectionsByCourse.getOrDefault(INTRO_COURSE_ID, List.of());
-        if (introSelectedSectorIds.size() >= REQUIRED_SECTOR_COUNT) {
-            return introSelectedSectorIds;
+        List<String> peerSelectedSectorIds = state.sectorSelectionsByCourse.getOrDefault(peerCourseId(course.id()), List.of());
+        if (peerSelectedSectorIds.size() >= REQUIRED_SECTOR_COUNT) {
+            return peerSelectedSectorIds;
         }
         return selectedSectorIds;
+    }
+
+    private void seedPeerCourseSectorSelectionIfMissing(String courseId,
+                                                        List<String> selectedSectorIds,
+                                                        EducationApiState state) {
+        if (selectedSectorIds.size() < REQUIRED_SECTOR_COUNT) {
+            return;
+        }
+        String peerCourseId = peerCourseId(courseId);
+        if (state.sectorSelectionsByCourse.getOrDefault(peerCourseId, List.of()).size() < REQUIRED_SECTOR_COUNT) {
+            state.sectorSelectionsByCourse.put(peerCourseId, new ArrayList<>(selectedSectorIds));
+        }
+    }
+
+    private String peerCourseId(String courseId) {
+        return INTRO_COURSE_ID.equals(courseId) ? ADVANCED_COURSE_ID : INTRO_COURSE_ID;
     }
 
     private DayTarget sectorDayTarget(CourseDefinition course, List<String> selectedSectorIds, int day) {

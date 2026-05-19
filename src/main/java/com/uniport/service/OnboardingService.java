@@ -291,8 +291,9 @@ public class OnboardingService {
 
         currentDays.put(courseId, 1);
         sectorSelections.put(courseId, new ArrayList<>(sectorIds));
-        if (INTRO_COURSE_ID.equals(courseId)) {
-            sectorSelections.putIfAbsent(ADVANCED_COURSE_ID, new ArrayList<>(sectorIds));
+        String peerCourseId = INTRO_COURSE_ID.equals(courseId) ? ADVANCED_COURSE_ID : INTRO_COURSE_ID;
+        if (sectorSelections.getOrDefault(peerCourseId, List.of()).size() < 2) {
+            sectorSelections.put(peerCourseId, new ArrayList<>(sectorIds));
         }
 
         learningUserStateRepository.save(LearningUserStateEntity.builder()

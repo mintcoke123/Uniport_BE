@@ -87,6 +87,47 @@ class OnboardingServiceTest {
     }
 
     @Test
+    void submitSurvey_persistsAdvancedSectorsForIntroFallbackWhenUserStartsAdvancedCourse() {
+        OnboardingService onboardingService = new OnboardingService(
+                new OnboardingQuestionProvider(),
+                new OnboardingResultProvider(),
+                userRepository,
+                userMyPagePreferenceRepository,
+                learningUserStateRepository,
+                new ProfileImageUrlService());
+
+        User user = User.builder()
+                .id(3L)
+                .studentId("20240003")
+                .nickname("advanced")
+                .build();
+
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userMyPagePreferenceRepository.findById(3L)).thenReturn(Optional.empty());
+        when(learningUserStateRepository.findById(3L)).thenReturn(Optional.empty());
+        when(learningUserStateRepository.save(any(LearningUserStateEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OnboardingSurveySubmitRequestDTO request = new OnboardingSurveySubmitRequestDTO(List.of(
+                new OnboardingSurveyAnswerDTO(1L, List.of(2L)),
+                new OnboardingSurveyAnswerDTO(2L, List.of(5L)),
+                new OnboardingSurveyAnswerDTO(3L, List.of(8L)),
+                new OnboardingSurveyAnswerDTO(4L, List.of(11L)),
+                new OnboardingSurveyAnswerDTO(5L, List.of(14L)),
+                new OnboardingSurveyAnswerDTO(6L, List.of(18L, 20L))
+        ));
+
+        OnboardingSurveyResultDTO result = onboardingService.submitSurvey(user, request);
+
+        assertEquals("기본", result.getInvestmentLevel());
+        ArgumentCaptor<LearningUserStateEntity> stateCaptor = ArgumentCaptor.forClass(LearningUserStateEntity.class);
+        verify(learningUserStateRepository).save(stateCaptor.capture());
+        LearningUserStateEntity savedState = stateCaptor.getValue();
+        assertEquals("{\"advanced\":1}", savedState.getEducationCurrentDayJson());
+        assertTrue(savedState.getEducationSectorSelectionsJson().contains("\"advanced\":[\"robot\",\"defense\"]"));
+        assertTrue(savedState.getEducationSectorSelectionsJson().contains("\"intro\":[\"robot\",\"defense\"]"));
+    }
+
+    @Test
     void getSurveyFlow_treatsMultiSectorResultAsComplete() {
         OnboardingService onboardingService = new OnboardingService(
                 new OnboardingQuestionProvider(),
