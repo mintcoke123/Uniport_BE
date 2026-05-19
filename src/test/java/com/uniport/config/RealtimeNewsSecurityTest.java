@@ -1,9 +1,12 @@
 package com.uniport.config;
 
 import com.uniport.controller.RealtimeNewsController;
+import com.uniport.controller.InvestmentIssueController;
+import com.uniport.dto.InvestmentIssueListResponseDTO;
 import com.uniport.dto.RealtimeNewsListResponseDTO;
 import com.uniport.repository.UserRepository;
 import com.uniport.service.FirebaseAuthenticationService;
+import com.uniport.service.InvestmentIssueService;
 import com.uniport.service.NewsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +43,9 @@ class RealtimeNewsSecurityTest {
     @Autowired
     private NewsService newsService;
 
+    @Autowired
+    private InvestmentIssueService investmentIssueService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -65,6 +71,21 @@ class RealtimeNewsSecurityTest {
     }
 
     @Test
+    void investmentIssueList_allowsAnonymousFrontendReads() throws Exception {
+        when(investmentIssueService.getIssueList("ALL", null, 1)).thenReturn(
+                InvestmentIssueListResponseDTO.builder()
+                        .items(List.of())
+                        .hasNext(false)
+                        .build()
+        );
+
+        mockMvc.perform(get("/api/mock-investing/investment-issues")
+                        .param("category", "ALL")
+                        .param("size", "1"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void staticAssets_allowAnonymousImageReads() throws Exception {
         mockMvc.perform(get("/assets/mypage/profile-options/dolphin.png"))
                 .andExpect(status().isNotFound());
@@ -80,8 +101,18 @@ class RealtimeNewsSecurityTest {
         }
 
         @Bean
+        InvestmentIssueController investmentIssueController(InvestmentIssueService investmentIssueService) {
+            return new InvestmentIssueController(investmentIssueService);
+        }
+
+        @Bean
         NewsService newsService() {
             return mock(NewsService.class);
+        }
+
+        @Bean
+        InvestmentIssueService investmentIssueService() {
+            return mock(InvestmentIssueService.class);
         }
 
         @Bean
