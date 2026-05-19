@@ -34,6 +34,15 @@ app:
   beta:
     android-invite-url: ${APP_BETA_ANDROID_INVITE_URL:}
     contact-email: ${APP_BETA_CONTACT_EMAIL:kwakkun2002@gmail.com}
+    ios:
+      app-store-connect:
+        enabled: ${APPSTORE_CONNECT_INVITE_ENABLED:false}
+        issuer-id: ${APPSTORE_CONNECT_ISSUER_ID:}
+        key-id: ${APPSTORE_CONNECT_KEY_ID:}
+        private-key: ${APPSTORE_CONNECT_PRIVATE_KEY:}
+        app-id: ${APPSTORE_CONNECT_APP_ID:}
+        invite-role: ${APPSTORE_CONNECT_INVITE_ROLE:MARKETING}
+        base-url: ${APPSTORE_CONNECT_BASE_URL:https://api.appstoreconnect.apple.com}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:*}
   friend-invite:

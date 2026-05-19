@@ -192,6 +192,21 @@ public class BetaPageController {
                   color: #0057b8;
                   font-weight: 700;
                 }
+                .form-status {
+                  min-height: 22px;
+                  margin: 12px 0 0;
+                  color: #405066;
+                  font-size: 14px;
+                  line-height: 1.5;
+                }
+                .form-status.success {
+                  color: #0d7d6c;
+                  font-weight: 700;
+                }
+                .form-status.error {
+                  color: #b42318;
+                  font-weight: 700;
+                }
                 .quick-links {
                   display: flex;
                   flex-wrap: wrap;
@@ -304,8 +319,9 @@ public class BetaPageController {
                         <span>입력한 Apple ID 이메일은 iOS TestFlight 내부 테스트 초대를 위해서만 사용됩니다.</span>
                       </label>
                       <button class="button secondary" type="submit">iPhone 베타 신청하기</button>
+                      <p class="form-status" id="ios-form-status" role="status" aria-live="polite"></p>
                     </form>
-                    <p class="manual">메일 앱이 열리지 않으면 <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>로 Apple ID 이메일을 보내주세요.</p>
+                    <p class="manual">신청 후 Apple에서 오는 App Store Connect 초대 메일을 수락한 뒤 TestFlight를 확인하세요. 문제가 있으면 <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>로 문의해 주세요.</p>
                   </section>
                 </div>
 
@@ -332,6 +348,9 @@ public class BetaPageController {
 
                   document.getElementById("ios-form").addEventListener("submit", function (event) {
                     event.preventDefault();
+                    const form = event.currentTarget;
+                    const button = form.querySelector("button[type='submit']");
+                    const status = document.getElementById("ios-form-status");
                     const name = document.getElementById("name").value.trim();
                     const appleEmail = document.getElementById("apple-email").value.trim();
                     const contactEmail = document.getElementById("contact-email").value.trim();
@@ -343,16 +362,38 @@ public class BetaPageController {
                       return;
                     }
 
-                    const subject = "Uniport iOS 베타 신청";
-                    const body = [
-                      "이름/닉네임: " + name,
-                      "Apple ID 이메일: " + appleEmail,
-                      "연락처 이메일: " + (contactEmail || appleEmail),
-                      "기기: " + device,
-                      "동의: iOS TestFlight 내부 테스트 초대를 위한 Apple ID 이메일 사용에 동의"
-                    ].join("\\n");
+                    status.className = "form-status";
+                    status.textContent = "신청을 접수하는 중입니다.";
+                    button.disabled = true;
 
-                    window.location.href = "mailto:{{CONTACT_EMAIL}}?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+                    fetch("/api/beta/ios-applications", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json"
+                      },
+                      body: JSON.stringify({
+                        name: name,
+                        appleIdEmail: appleEmail,
+                        contactEmail: contactEmail,
+                        device: device,
+                        consent: consent
+                      })
+                    }).then(function (response) {
+                      return response.json().then(function (body) {
+                        if (!response.ok) {
+                          throw new Error(body.message || "신청 처리에 실패했습니다.");
+                        }
+                        return body;
+                      });
+                    }).then(function (body) {
+                      status.className = body.status === "USER_INVITE_SENT" ? "form-status success" : "form-status error";
+                      status.textContent = body.message || "신청이 접수되었습니다. Apple 초대 메일을 확인해 주세요.";
+                    }).catch(function (error) {
+                      status.className = "form-status error";
+                      status.textContent = error.message || "신청 처리에 실패했습니다. 현장 담당자에게 문의해 주세요.";
+                    }).finally(function () {
+                      button.disabled = false;
+                    });
                   });
                 })();
               </script>

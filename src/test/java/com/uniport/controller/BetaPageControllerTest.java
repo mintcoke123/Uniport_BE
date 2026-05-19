@@ -64,7 +64,8 @@ class BetaPageControllerTest {
                 .andExpect(content().string(containsString("Firebase App Distribution")))
                 .andExpect(content().string(containsString("TestFlight 내부 테스트")))
                 .andExpect(content().string(containsString("kwakkun2002@gmail.com")))
-                .andExpect(content().string(containsString("data-android-link=\"/beta/android\"")));
+                .andExpect(content().string(containsString("data-android-link=\"/beta/android\"")))
+                .andExpect(content().string(containsString("fetch(\"/api/beta/ios-applications\"")));
     }
 
     @Test
