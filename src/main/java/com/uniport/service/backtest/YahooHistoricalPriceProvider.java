@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.entity.AssetMaster;
 import com.uniport.repository.AssetMasterRepository;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -28,7 +27,6 @@ import java.util.Locale;
 import java.util.Optional;
 
 @Service
-@Primary
 public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

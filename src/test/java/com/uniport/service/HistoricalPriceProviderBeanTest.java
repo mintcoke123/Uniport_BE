@@ -3,6 +3,7 @@ package com.uniport.service;
 import com.uniport.repository.AssetMasterRepository;
 import com.uniport.repository.AssetPriceDailyRepository;
 import com.uniport.service.backtest.CachedFallbackHistoricalPriceProvider;
+import com.uniport.service.backtest.CompositeHistoricalPriceProvider;
 import com.uniport.service.backtest.FxRateProvider;
 import com.uniport.service.backtest.HistoricalPriceProvider;
 import com.uniport.service.backtest.KisHistoricalPriceProvider;
@@ -25,6 +26,7 @@ class HistoricalPriceProviderBeanTest {
             .withBean(KisApiService.class, () -> mock(KisApiService.class))
             .withBean(RestTemplate.class, () -> mock(RestTemplate.class))
             .withBean(FxRateProvider.class, () -> (currency, date) -> BigDecimal.ONE)
+            .withBean(CompositeHistoricalPriceProvider.class)
             .withBean(YahooHistoricalPriceProvider.class)
             .withBean(CachedFallbackHistoricalPriceProvider.class)
             .withBean(KisHistoricalPriceProvider.class)
@@ -32,9 +34,9 @@ class HistoricalPriceProviderBeanTest {
             .withPropertyValues("backtest.price-fallback.enabled=true");
 
     @Test
-    void historicalPriceProviderBeanDefaultsToYahooOnDemandImplementation() {
+    void historicalPriceProviderBeanDefaultsToCompositeOnDemandImplementation() {
         contextRunner.run(context ->
-                assertInstanceOf(YahooHistoricalPriceProvider.class, context.getBean(HistoricalPriceProvider.class)));
+                assertInstanceOf(CompositeHistoricalPriceProvider.class, context.getBean(HistoricalPriceProvider.class)));
     }
 
     @Test
