@@ -33,6 +33,9 @@ logging:
 # CORS (env: APP_CORS_ALLOWED_ORIGINS. 프로덕션에서는 허용 오리진 제한)
 app:
   public-base-url: ${APP_PUBLIC_BASE_URL:${APP_FRIEND_INVITE_BASE_URL:https://uniportbe-production.up.railway.app}}
+  beta:
+    android-invite-url: ${APP_BETA_ANDROID_INVITE_URL:}
+    contact-email: ${APP_BETA_CONTACT_EMAIL:kwakkun2002@gmail.com}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:*}
   friend-invite:

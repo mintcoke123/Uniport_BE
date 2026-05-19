@@ -52,6 +52,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/favicon.ico",
+                                "/beta",
+                                "/beta.html",
+                                "/beta/android",
+                                "/beta/ios",
                                 "/privacy",
                                 "/privacy.html",
                                 "/support",
