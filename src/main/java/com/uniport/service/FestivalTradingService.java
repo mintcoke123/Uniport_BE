@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -28,6 +29,7 @@ public class FestivalTradingService {
 
     private static final BigDecimal START_CASH = new BigDecimal("100000000");
     private static final BigDecimal QUALIFIED_RETURN_RATE = new BigDecimal("2.0");
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
     private static final String QUALIFIED_PRIZE = "키링";
     private static final String PARTICIPATION_PRIZE = "간식";
     private static final String FIRST_PRIZE = "상품권 3만 원";
@@ -58,7 +60,7 @@ public class FestivalTradingService {
                 .startCash(START_CASH)
                 .tradeCount(0)
                 .unfilledOrderCount(0)
-                .startedAt(LocalDateTime.now())
+                .startedAt(nowInKorea())
                 .tradingStartedAt(null)
                 .build());
 
@@ -77,7 +79,7 @@ public class FestivalTradingService {
             return toSessionState(session);
         }
 
-        session.setTradingStartedAt(LocalDateTime.now());
+        session.setTradingStartedAt(nowInKorea());
         sessionRepository.save(session);
         return toSessionState(session);
     }
@@ -118,7 +120,7 @@ public class FestivalTradingService {
         session.setTradeHistoryJson(writeJson(request.getTradeHistory()));
         session.setBasePrize(resolveBasePrize(returnRate));
         session.setFinalPrize(session.getBasePrize());
-        session.setEndedAt(LocalDateTime.now());
+        session.setEndedAt(nowInKorea());
         sessionRepository.save(session);
 
         List<FestivalLeaderboardItemDTO> leaderboard = buildLeaderboard();
@@ -311,6 +313,10 @@ public class FestivalTradingService {
             throw new ApiException(fieldName + " is required", HttpStatus.BAD_REQUEST);
         }
         return trimmed;
+    }
+
+    private LocalDateTime nowInKorea() {
+        return LocalDateTime.now(KOREA_ZONE);
     }
 
     private BigDecimal requireAmount(BigDecimal value, String fieldName) {
