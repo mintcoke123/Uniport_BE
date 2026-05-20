@@ -69,7 +69,7 @@ button:disabled {
   height: 100dvh;
   color: var(--profile-ink);
   background: linear-gradient(180deg, var(--profile-top), var(--profile-bottom));
-  padding-bottom: calc(118px + env(safe-area-inset-bottom));
+  padding-bottom: calc(78px + env(safe-area-inset-bottom));
   overflow-x: hidden;
   overflow-y: hidden;
 }
@@ -359,7 +359,7 @@ button:disabled {
   bottom: calc(0px + env(safe-area-inset-bottom));
   width: min(100vw, var(--surface-width));
   margin: 0;
-  gap: 6px;
+  gap: 0;
   padding: 6px 20px calc(8px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, rgba(15, 84, 157, 0), rgba(15, 84, 157, 0.94) 30%, var(--profile-bottom) 100%);
   transform: translateX(-50%);
@@ -402,6 +402,7 @@ button:disabled {
 }
 
 .notice {
+  margin: 0;
   min-height: 42px;
   padding: 12px 14px;
   border-radius: 14px;
@@ -430,23 +431,33 @@ button:disabled {
 .note-created {
   align-items: center;
   justify-content: flex-start;
-  padding-top: 88px;
+  min-height: 0;
+  padding-top: clamp(46px, 9dvh, 88px);
   text-align: center;
+}
+
+.note-screen {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .note-title {
   margin: 0;
   color: var(--text);
-  font-size: 22px;
+  font-size: clamp(20px, 5.7vw, 22px);
   font-weight: 900;
-  line-height: 1.6;
+  line-height: 1.48;
 }
 
 .note-illustration {
   display: block;
-  width: min(382px, calc(100vw - 8px));
+  width: min(360px, calc(100vw - 34px));
+  max-height: min(448px, calc(100dvh - 312px));
   max-width: none;
-  margin: 24px auto 0;
+  margin: clamp(14px, 3dvh, 24px) auto 0;
+  object-fit: contain;
   transform: translateX(-2px);
 }
 
@@ -515,6 +526,8 @@ button:disabled {
   z-index: 1;
   display: flex;
   flex-direction: column;
+  align-self: center;
+  width: min(100%, 342px);
   height: clamp(260px, calc(100dvh - 282px), 550px);
   min-height: 0;
   margin-top: clamp(12px, 3dvh, 64px);
@@ -529,26 +542,27 @@ button:disabled {
 .profile-card::before,
 .profile-card::after {
   position: absolute;
+  display: none;
   z-index: -1;
-  width: 85%;
-  height: 86%;
+  width: 80%;
+  height: 82%;
   border-radius: 30px;
   content: "";
 }
 
 .profile-card::before {
-  top: -24px;
-  left: -12px;
+  top: 8px;
+  left: 4px;
   background: color-mix(in srgb, var(--profile-card) 64%, var(--profile-top));
-  transform: rotate(-9deg);
+  transform: rotate(-6deg);
   opacity: 0.8;
 }
 
 .profile-card::after {
-  top: -18px;
-  right: -14px;
+  top: 12px;
+  right: 4px;
   background: rgba(255, 255, 255, 0.18);
-  transform: rotate(7deg);
+  transform: rotate(5deg);
 }
 
 .profile-brand-logo {
@@ -590,8 +604,8 @@ button:disabled {
 .mascot {
   display: grid;
   place-items: center;
-  width: min(250px, 84%);
-  height: clamp(96px, 23dvh, 266px);
+  width: min(320px, 96%);
+  height: clamp(150px, 33dvh, 330px);
   margin: clamp(8px, 2dvh, 22px) auto 6px;
   border-radius: 30px;
   background: transparent;
@@ -602,6 +616,8 @@ button:disabled {
 
 .mascot-image {
   display: block;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -624,7 +640,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  height: clamp(240px, calc(100dvh - 304px), 552px);
+  height: clamp(240px, calc(100dvh - 286px), 552px);
   min-height: 0;
   margin-top: 14px;
   padding: clamp(34px, 8dvh, 70px) 16px 16px;
@@ -749,7 +765,7 @@ button:disabled {
   position: relative;
   display: grid;
   place-items: center;
-  height: clamp(240px, calc(100dvh - 304px), 552px);
+  height: clamp(240px, calc(100dvh - 286px), 552px);
   min-height: 0;
   margin-top: 14px;
 }
@@ -809,7 +825,7 @@ button:disabled {
 
 @media (max-height: 700px) {
   .screen.result {
-    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+    padding-bottom: calc(62px + env(safe-area-inset-bottom));
   }
 
   .screen.result .content.top {
@@ -817,7 +833,7 @@ button:disabled {
   }
 
   .screen.result .bottom-bar {
-    gap: 4px;
+    gap: 0;
     padding: 4px 20px calc(6px + env(safe-area-inset-bottom));
   }
 
@@ -852,7 +868,8 @@ button:disabled {
   }
 
   .profile-card {
-    height: calc(100dvh - 222px);
+    width: min(100%, 330px);
+    height: calc(100dvh - 214px);
     margin-top: 8px;
     padding: 12px 14px 10px;
     border-radius: 24px;
@@ -865,13 +882,13 @@ button:disabled {
   }
 
   .profile-card::before {
-    top: -14px;
-    left: -8px;
+    top: 4px;
+    left: 2px;
   }
 
   .profile-card::after {
-    top: -10px;
-    right: -8px;
+    top: 6px;
+    right: 2px;
   }
 
   .profile-brand-logo {
@@ -895,8 +912,8 @@ button:disabled {
   }
 
   .mascot {
-    width: min(188px, 64%);
-    height: clamp(104px, 20dvh, 136px);
+    width: min(236px, 82%);
+    height: clamp(172px, 38dvh, 230px);
     margin: 6px auto 4px;
   }
 
@@ -908,7 +925,7 @@ button:disabled {
 
   .result-section {
     gap: 4px;
-    height: calc(100dvh - 226px);
+    height: calc(100dvh - 208px);
     margin-top: 8px;
     padding: 14px 12px 6px;
     border-radius: 24px;
@@ -939,7 +956,7 @@ button:disabled {
   }
 
   .section-subtitle {
-    margin-bottom: 5px;
+    margin-bottom: 4px;
     font-size: 12px;
     line-height: 1.35;
   }
@@ -950,15 +967,15 @@ button:disabled {
   }
 
   .bullet-list {
-    gap: 5px;
+    gap: 4px;
   }
 
   .bullet-list li {
     gap: 2px;
-    padding: 6px 10px;
+    padding: 5px 10px;
     border-radius: 12px;
     font-size: 12px;
-    line-height: 1.35;
+    line-height: 1.32;
     box-shadow: 0 2px 0 color-mix(in srgb, var(--profile-card) 74%, var(--profile-top));
   }
 
@@ -966,7 +983,7 @@ button:disabled {
     display: -webkit-box;
     overflow: hidden;
     font-size: 13px;
-    line-height: 1.3;
+    line-height: 1.24;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
@@ -976,7 +993,7 @@ button:disabled {
     overflow: hidden;
     margin-top: 1px;
     font-size: 11px;
-    line-height: 1.3;
+    line-height: 1.24;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 1;
   }
@@ -991,7 +1008,7 @@ button:disabled {
   }
 
   .complete-panel {
-    height: calc(100dvh - 226px);
+    height: calc(100dvh - 208px);
     margin-top: 8px;
   }
 
@@ -1013,6 +1030,12 @@ button:disabled {
     bottom: 10px;
     font-size: 12px;
     line-height: 1.45;
+  }
+}
+
+@media (max-height: 540px) {
+  .profile-card {
+    height: calc(100dvh - 180px);
   }
 }
 

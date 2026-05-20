@@ -356,7 +356,7 @@
 
   function renderIntro() {
     var name = escapeHtml(state.name || "유니포트");
-    app.innerHTML = '<section class="screen">' +
+    app.innerHTML = '<section class="screen note-screen">' +
       topbar(0, 6) +
       '<div class="content note-created">' +
       '<h1 class="note-title">' + name + '<span class="title-tail">님의</span><br>첫 투자 노트가 생성되었어요</h1>' +
@@ -369,7 +369,6 @@
   function renderResultPage(kind) {
     var profile = profiles[state.resultKey] || profiles.turtle;
     var vars = profileVars(profile);
-    var notice = reservationNotice();
     var content = "";
     var action = "next";
     var button = "다음";
@@ -398,7 +397,7 @@
     app.innerHTML = '<section class="screen result" style="' + vars + '">' +
       topbar(active, 5, "rgba(255,255,255,0.92)") +
       '<div class="content top">' + content + "</div>" +
-      '<div class="bottom-bar">' + notice + '<button class="cta" type="button" data-action="' + action + '">' + button + "</button></div>" +
+      '<div class="bottom-bar"><button class="cta" type="button" data-action="' + action + '">' + button + "</button></div>" +
       "</section>";
   }
 
