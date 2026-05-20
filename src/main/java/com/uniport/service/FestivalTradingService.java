@@ -202,6 +202,16 @@ public class FestivalTradingService {
                 .build();
     }
 
+    @Transactional
+    public void deleteCompletedSession(Long sessionId) {
+        FestivalTradingSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ApiException("festival session not found", HttpStatus.NOT_FOUND));
+        if (session.getEndedAt() == null) {
+            throw new ApiException("only completed festival sessions can be deleted", HttpStatus.BAD_REQUEST);
+        }
+        sessionRepository.delete(session);
+    }
+
     private FestivalSessionStartResponseDTO toSessionState(FestivalTradingSession session) {
         String status = resolveStatus(session);
         return FestivalSessionStartResponseDTO.builder()
