@@ -448,7 +448,7 @@
     if (state.reservation.status === "failure") {
       return '<p class="notice failure">사전등록 저장 실패: ' + escapeHtml(state.reservation.message) + "</p>";
     }
-    if (state.reservation.status === "info") {
+    if (state.reservation.status === "info" || state.reservation.status === "saved") {
       return '<p class="notice success">' + escapeHtml(state.reservation.message) + "</p>";
     }
     return '<p class="notice">결과 화면은 표시되지만, 저장 완료 여부는 서버 응답 후 확인돼요.</p>';
