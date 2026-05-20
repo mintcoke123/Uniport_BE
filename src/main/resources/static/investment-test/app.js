@@ -448,6 +448,9 @@
     if (state.reservation.status === "failure") {
       return '<p class="notice failure">사전등록 저장 실패: ' + escapeHtml(state.reservation.message) + "</p>";
     }
+    if (state.reservation.status === "info") {
+      return '<p class="notice success">' + escapeHtml(state.reservation.message) + "</p>";
+    }
     return '<p class="notice">결과 화면은 표시되지만, 저장 완료 여부는 서버 응답 후 확인돼요.</p>';
   }
 
@@ -721,7 +724,7 @@
     }
     if (action === "study") {
       state.reservation = {
-        status: "saved",
+        status: "info",
         message: "30일 투자 공부는 정식 출시 때 열릴 예정이에요. 행사 스태프에게 이 화면을 보여주세요."
       };
       render();
