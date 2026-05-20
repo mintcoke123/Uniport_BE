@@ -3,6 +3,7 @@
 
   var app = document.getElementById("app");
   var reservationEndpoint = "/api/investment-test/reservations";
+  var launchNoticeUrl = "https://www.instagram.com/uniport_official_/";
 
   var state = {
     step: "welcome",
@@ -281,7 +282,7 @@
       '<img class="hero-logo" src="/investment-test/assets/uniport-logo.png" alt="Uniport">' +
       '<p class="eyebrow">Uniport Festival Test</p>' +
       '<h1 class="title">유니포트에 오신 걸\n환영해요!</h1>' +
-      '<p class="subtitle">1-2분이면 나의 첫 투자 성향과\n스티커 타입을 확인할 수 있어요.</p>' +
+      '<p class="subtitle">1-2분이면 나의 투자성향을 알려주고,\n거기에 맞는 캐릭터 스티커를 나눠줘요.</p>' +
       "</div>" +
       bottomButton("다음", false, "next") +
       "</section>";
@@ -389,8 +390,8 @@
       content = resultStageHeader(profile) + resultSection(profile.title + "을 위한\n추천 투자 전략", "성공적인 투자를 위한 핵심 가이드를 드릴게요", profile.strategies, "strategy");
     } else {
       active = 4;
-      button = "30일 투자 공부 하러가기";
-      action = "study";
+      button = "정식 출시 알림 받으러 가기";
+      action = "launchNotice";
       content = resultStageHeader(profile) + '<div class="complete-panel"><div class="complete-stamp"><span>Diagnosis</span><strong>Complete</strong></div><p class="complete-helper">' + profile.sticker + '<br>행사 스태프에게 이 화면을 보여주세요.</p></div>';
     }
 
@@ -721,12 +722,8 @@
       restart();
       return;
     }
-    if (action === "study") {
-      state.reservation = {
-        status: "info",
-        message: "30일 투자 공부는 정식 출시 때 열릴 예정이에요. 행사 스태프에게 이 화면을 보여주세요."
-      };
-      render();
+    if (action === "launchNotice") {
+      window.location.href = launchNoticeUrl;
     }
   });
 
