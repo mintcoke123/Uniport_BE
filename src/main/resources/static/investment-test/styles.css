@@ -67,6 +67,7 @@ button:disabled {
 .screen.result {
   color: var(--profile-ink);
   background: linear-gradient(180deg, var(--profile-top), var(--profile-bottom));
+  padding-bottom: calc(132px + env(safe-area-inset-bottom));
 }
 
 .topbar {
@@ -349,6 +350,25 @@ button:disabled {
   padding-top: 22px;
 }
 
+.screen.result .bottom-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(0px + env(safe-area-inset-bottom));
+  width: min(100vw, var(--surface-width));
+  margin: 0;
+  padding: 12px 20px calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(15, 84, 157, 0), rgba(15, 84, 157, 0.94) 30%, var(--profile-bottom) 100%);
+  transform: translateX(-50%);
+}
+
+.screen.result .notice {
+  min-height: 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .cta {
   width: 100%;
   min-height: 56px;
@@ -398,6 +418,29 @@ button:disabled {
   text-align: center;
 }
 
+.note-created {
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 88px;
+  text-align: center;
+}
+
+.note-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.6;
+}
+
+.note-illustration {
+  display: block;
+  width: min(382px, calc(100vw - 8px));
+  max-width: none;
+  margin: 24px auto 0;
+  transform: translateX(-2px);
+}
+
 .note-mark {
   display: grid;
   place-items: center;
@@ -433,6 +476,29 @@ button:disabled {
   font-size: 30px;
   font-weight: 900;
   line-height: 1.25;
+}
+
+.result-stage-header {
+  position: relative;
+  z-index: 3;
+  margin-top: 32px;
+  text-align: center;
+}
+
+.result-stage-header p {
+  margin: 0;
+  color: var(--profile-soft);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.result-stage-header h1 {
+  margin: 2px 0 0;
+  color: var(--profile-title);
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.4;
 }
 
 .profile-card {
@@ -544,32 +610,74 @@ button:disabled {
 }
 
 .result-section {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
+  min-height: 552px;
+  margin-top: 34px;
+  padding: 70px 20px 28px;
+  border: 1px solid var(--profile-border);
+  border-radius: 30px;
+  color: var(--profile-card-ink);
+  background: var(--profile-card);
+  box-shadow: 0 20px 0 rgba(255, 255, 255, 0.14), 0 28px 60px rgba(0, 0, 0, 0.18);
+  transform: rotate(-4.9deg);
 }
 
-.section-kicker {
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 13px;
-  font-weight: 900;
+.result-section::before,
+.result-section::after {
+  position: absolute;
+  z-index: -1;
+  border-radius: 30px;
+  content: "";
+}
+
+.result-section::before {
+  inset: -26px 10px auto -20px;
+  height: 100%;
+  background: color-mix(in srgb, var(--profile-card) 62%, var(--profile-top));
+  transform: rotate(9deg);
+  opacity: 0.62;
+}
+
+.result-section::after {
+  inset: -16px -18px auto 20px;
+  height: 96%;
+  background: rgba(255, 255, 255, 0.18);
+  transform: rotate(5deg);
+}
+
+.result-section > * {
+  transform: rotate(4.9deg);
 }
 
 .section-title {
   margin: 0;
-  color: #fff;
-  font-size: 27px;
+  color: var(--profile-card-ink);
+  font-size: 20px;
   font-weight: 900;
-  line-height: 1.35;
+  line-height: 1.4;
+  text-align: center;
+  white-space: pre-line;
+}
+
+.section-subtitle {
+  margin: 0 0 18px;
+  color: var(--profile-body, var(--profile-soft));
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+  text-align: center;
 }
 
 .info-card {
-  padding: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 26px;
+  padding: 16px;
+  border: 0;
+  border-radius: 20px;
   color: var(--profile-card-ink);
-  background: var(--profile-card);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.13);
+  background: var(--profile-surface, rgba(255, 255, 255, 0.64));
+  box-shadow: none;
 }
 
 .bullet-list {
@@ -583,24 +691,21 @@ button:disabled {
 
 .bullet-list li {
   display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 4px;
   color: color-mix(in srgb, var(--profile-card-ink) 82%, black);
-  font-size: 15px;
+  min-height: 66px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--profile-card) 74%, var(--profile-top));
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.48;
 }
 
 .bullet-list li::before {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  color: #fff;
-  background: var(--profile-top);
-  font-size: 12px;
-  content: "✓";
+  display: none;
 }
 
 .bullet-list strong {
@@ -616,6 +721,78 @@ button:disabled {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.5;
+}
+
+.principles .bullet-list li {
+  min-height: 78px;
+  box-shadow: none;
+}
+
+.strategy .bullet-list li {
+  min-height: auto;
+  background: transparent;
+  box-shadow: none;
+}
+
+.complete-panel {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 552px;
+  margin-top: 34px;
+}
+
+.complete-panel::before {
+  position: absolute;
+  inset: 14px 12px;
+  border: 1px solid var(--profile-border);
+  border-radius: 30px;
+  background: var(--profile-card);
+  opacity: 0.3;
+  transform: rotate(-4.9deg);
+  content: "";
+}
+
+.complete-stamp {
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 234px;
+  height: 234px;
+  border-radius: 50%;
+  color: var(--danger);
+  background: rgba(255, 255, 255, 0.96);
+  font-family: "Noto Sans KR", "Pretendard", system-ui, sans-serif;
+  text-transform: uppercase;
+  transform: rotate(-12deg);
+}
+
+.complete-stamp span {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.complete-stamp strong {
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.complete-helper {
+  position: absolute;
+  z-index: 2;
+  bottom: 36px;
+  left: 20px;
+  right: 20px;
+  margin: 0;
+  color: var(--profile-title);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.6;
+  text-align: center;
 }
 
 @supports not (color: color-mix(in srgb, #000, #fff)) {

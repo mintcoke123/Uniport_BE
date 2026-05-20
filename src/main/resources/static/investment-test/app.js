@@ -43,7 +43,7 @@
     },
     {
       id: "term",
-      title: "이 앱에서 투자기간를\n어느 정도 기간 가져가고 싶어?",
+      title: "이 앱에서 투자기간을\n어느 정도 기간 가져가고 싶어?",
       subtitle: "목표 기간을 골라줘",
       icon: ["1Y", "3Y", "10Y"],
       options: [
@@ -356,13 +356,12 @@
   function renderIntro() {
     var name = escapeHtml(state.name || "유니포트");
     app.innerHTML = '<section class="screen">' +
-      topbar(null, null) +
-      '<div class="content">' +
-      '<div class="intro-card"><div class="note-mark">N</div><p class="eyebrow">진단 결과 보기</p>' +
-      '<h1 class="title">' + name + '<span class="title-tail">님의</span>\n첫 투자 노트가 생성되었어요</h1>' +
-      '<p class="subtitle">결과와 함께 사전등록 저장을 진행할게요.</p></div>' +
+      topbar(0, 6) +
+      '<div class="content note-created">' +
+      '<h1 class="note-title">' + name + '<span class="title-tail">님의</span><br>첫 투자 노트가 생성되었어요</h1>' +
+      '<img class="note-illustration" src="/investment-test/assets/note-created.png" alt="첫 투자 노트 생성 일러스트">' +
       "</div>" +
-      bottomButton("결과 확인", false, "result") +
+      bottomButton("진단 결과 보기", false, "result") +
       "</section>";
   }
 
@@ -381,18 +380,18 @@
         '<div class="profile-card"><div class="profile-brand">UNIPORT</div><h2 class="profile-name">' + profile.title + '</h2><p class="profile-summary">' + profile.summary + '</p><div class="level-pill">Lv.1</div><div class="mascot">' + mascotMarkup(profile) + '</div><div class="sticker-label">' + profile.sticker + '</div></div>';
     } else if (kind === "analysis") {
       active = 1;
-      content = resultSection("성향 분석", "내 투자 캐릭터는?", profile.traits);
+      content = resultStageHeader(profile) + resultSection(profile.title + "의\n투자 성향을 분석했어요", "이런 투자자일 확률이 높아요!", profile.traits, "analysis");
     } else if (kind === "principles") {
       active = 2;
-      content = resultSection("투자 원칙", "처음부터 지키면 좋은 기준", profile.principles);
+      content = resultStageHeader(profile) + resultSection("나만의 투자원칙", "이것만은 지키면서 투자해봐요!", profile.principles, "principles");
     } else if (kind === "strategy") {
       active = 3;
-      content = resultSection("추천 전략", "나에게 맞는 첫 포트폴리오", profile.strategies);
+      content = resultStageHeader(profile) + resultSection(profile.title + "을 위한\n추천 투자 전략", "성공적인 투자를 위한 핵심 가이드를 드릴게요", profile.strategies, "strategy");
     } else {
       active = 4;
       button = "30일 투자 공부 하러가기";
-      action = "restart";
-      content = '<div class="result-section"><p class="section-kicker">Diagnosis</p><h1 class="section-title">Complete</h1><div class="info-card"><ul class="bullet-list"><li>' + profile.sticker + '</li><li>행사 스태프에게 이 화면을 보여주세요.</li><li>관심 키워드: ' + state.interests.map(escapeHtml).join(", ") + "</li></ul></div></div>";
+      action = "study";
+      content = resultStageHeader(profile) + '<div class="complete-panel"><div class="complete-stamp"><span>Diagnosis</span><strong>Complete</strong></div><p class="complete-helper">' + profile.sticker + '<br>행사 스태프에게 이 화면을 보여주세요.</p></div>';
     }
 
     app.innerHTML = '<section class="screen result" style="' + vars + '">' +
@@ -402,8 +401,12 @@
       "</section>";
   }
 
-  function resultSection(kicker, title, items) {
-    return '<div class="result-section"><p class="section-kicker">' + kicker + '</p><h1 class="section-title">' + title + '</h1><div class="info-card"><ul class="bullet-list">' +
+  function resultStageHeader(profile) {
+    return '<div class="result-stage-header"><p>' + escapeHtml(state.name || "유니포트") + '님의 투자성향은</p><h1>' + profile.title + '</h1></div>';
+  }
+
+  function resultSection(title, subtitle, items, kind) {
+    return '<div class="result-section ' + kind + '"><h1 class="section-title">' + title + '</h1><p class="section-subtitle">' + subtitle + '</p><div class="info-card"><ul class="bullet-list">' +
       items.map(function (item) { return "<li>" + formatListItem(item) + "</li>"; }).join("") +
       "</ul></div></div>";
   }
@@ -714,6 +717,14 @@
     }
     if (action === "restart") {
       restart();
+      return;
+    }
+    if (action === "study") {
+      state.reservation = {
+        status: "saved",
+        message: "30일 투자 공부는 정식 출시 때 열릴 예정이에요. 행사 스태프에게 이 화면을 보여주세요."
+      };
+      render();
     }
   });
 
