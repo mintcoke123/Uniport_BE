@@ -56,10 +56,15 @@ class PrivacyPolicyPageControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
                 .andExpect(content().string(containsString("Uniport 개인정보처리방침")))
-                .andExpect(content().string(containsString("시행일: 2026년 5월 14일")))
+                .andExpect(content().string(containsString("시행일: 2026년 5월 20일")))
+                .andExpect(content().string(containsString("Google AdMob을 통해 앱 내 광고를 표시할 수 있습니다")))
+                .andExpect(content().string(containsString("id=\"account-deletion\"")))
+                .andExpect(content().string(containsString("계정 삭제 안내")))
+                .andExpect(content().string(containsString("회원 탈퇴 또는 계정 삭제를 선택합니다")))
                 .andExpect(content().string(containsString("11. 문의")))
                 .andExpect(content().string(containsString("kwakkun2002@gmail.com")))
                 .andExpect(content().string(containsString("mailto:kwakkun2002@gmail.com")))
+                .andExpect(content().string(not(containsString("광고 SDK, 광고 식별자 기반 추적, 타사 광고 네트워크를 현재 사용하지 않습니다"))))
                 .andExpect(content().string(not(containsString("KIS " + "Open API"))))
                 .andExpect(content().string(not(containsString("Naver " + "News API"))));
     }
