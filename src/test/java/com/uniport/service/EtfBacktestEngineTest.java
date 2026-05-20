@@ -19,17 +19,23 @@ class EtfBacktestEngineTest {
     private final EtfBacktestEngine engine = new EtfBacktestEngine();
 
     @Test
-    void runBacktest_appliesDailyReturnsAndCalculatesTotalReturn() {
+    void runBacktest_appliesMonthEndReturnsAndCalculatesTotalReturn() {
         BacktestRequest request = BacktestRequest.builder()
                 .principalAmountKrw(BigDecimal.valueOf(100))
                 .transactionFeeRate(BigDecimal.ZERO)
                 .slippageRate(BigDecimal.ZERO)
                 .holdings(List.of(new BacktestHolding("KRX_000001", "테스트", BigDecimal.valueOf(100))))
                 .priceSeriesBySecurityId(Map.of("KRX_000001", List.of(
-                        point("2026-01-02", "100"),
-                        point("2026-01-03", "110"),
-                        point("2026-01-04", "99")
+                        point("2026-01-02", "95"),
+                        point("2026-01-31", "100"),
+                        point("2026-02-28", "110"),
+                        point("2026-03-31", "99")
                 )))
+                .benchmarkSeries(List.of(
+                        point("2026-01-31", "100"),
+                        point("2026-02-28", "105"),
+                        point("2026-03-31", "101")
+                ))
                 .build();
 
         BacktestResult result = engine.run(request);
@@ -46,11 +52,17 @@ class EtfBacktestEngineTest {
                 .slippageRate(BigDecimal.ZERO)
                 .holdings(List.of(new BacktestHolding("KRX_000001", "테스트", BigDecimal.valueOf(100))))
                 .priceSeriesBySecurityId(Map.of("KRX_000001", List.of(
-                        point("2026-01-02", "100"),
-                        point("2026-01-03", "120"),
-                        point("2026-01-04", "90"),
-                        point("2026-01-05", "110")
+                        point("2026-01-31", "100"),
+                        point("2026-02-28", "120"),
+                        point("2026-03-31", "90"),
+                        point("2026-04-30", "110")
                 )))
+                .benchmarkSeries(List.of(
+                        point("2026-01-31", "100"),
+                        point("2026-02-28", "100"),
+                        point("2026-03-31", "100"),
+                        point("2026-04-30", "100")
+                ))
                 .build();
 
         BacktestResult result = engine.run(request);
@@ -73,21 +85,26 @@ class EtfBacktestEngineTest {
                 )
         );
 
-        assertEquals(0, new BigDecimal("225.00").compareTo(runWithPolicy("MONTHLY", prices).finalNavKrw()));
-        assertEquals(0, new BigDecimal("200.00").compareTo(runWithPolicy("QUARTERLY", prices).finalNavKrw()));
-        assertEquals(0, new BigDecimal("200.00").compareTo(runWithPolicy("SEMI_ANNUAL", prices).finalNavKrw()));
-        assertEquals(0, new BigDecimal("200.00").compareTo(runWithPolicy("NONE", prices).finalNavKrw()));
+        assertEquals(0, new BigDecimal("2200.00").compareTo(runWithPolicy("MONTHLY", prices).finalNavKrw()));
+        assertEquals(0, new BigDecimal("2000.00").compareTo(runWithPolicy("QUARTERLY", prices).finalNavKrw()));
+        assertEquals(0, new BigDecimal("2000.00").compareTo(runWithPolicy("SEMI_ANNUAL", prices).finalNavKrw()));
+        assertEquals(0, new BigDecimal("2000.00").compareTo(runWithPolicy("NONE", prices).finalNavKrw()));
     }
 
     private BacktestResult runWithPolicy(String policy, Map<String, List<BacktestPricePoint>> prices) {
         return engine.run(BacktestRequest.builder()
-                .principalAmountKrw(BigDecimal.valueOf(100))
+                .principalAmountKrw(BigDecimal.valueOf(1_000))
                 .transactionFeeRate(BigDecimal.ZERO)
                 .slippageRate(BigDecimal.ZERO)
                 .rebalancePolicy(policy)
                 .holdings(List.of(
                         new BacktestHolding("KRX_A", "A", BigDecimal.valueOf(50)),
                         new BacktestHolding("KRX_B", "B", BigDecimal.valueOf(50))
+                ))
+                .benchmarkSeries(List.of(
+                        point("2026-01-02", "100"),
+                        point("2026-02-02", "100"),
+                        point("2026-04-02", "100")
                 ))
                 .priceSeriesBySecurityId(prices)
                 .build());

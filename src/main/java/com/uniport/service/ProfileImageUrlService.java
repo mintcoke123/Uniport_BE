@@ -81,6 +81,17 @@ public class ProfileImageUrlService {
         return profileOptionImageUrl(profileOptionCodeForCharacterName(user == null ? null : user.getInvestmentProfileResult()));
     }
 
+    public String resolveSelectedCharacterProfileImageUrl(User user, UserMyPagePreference preference) {
+        if (preference != null && preference.getSelectedCharacterCode() != null && !preference.getSelectedCharacterCode().isBlank()) {
+            return profileOptionImageUrl(preference.getSelectedCharacterCode());
+        }
+        String savedProfileOptionCode = profileOptionCodeForProfileImageValue(user == null ? null : user.getProfileImageUrl());
+        if (savedProfileOptionCode != null) {
+            return profileOptionImageUrl(savedProfileOptionCode);
+        }
+        return profileOptionImageUrl(profileOptionCodeForCharacterName(user == null ? null : user.getInvestmentProfileResult()));
+    }
+
     private String profileOptionCodeForProfileImageValue(String profileImageUrl) {
         if (profileImageUrl == null || profileImageUrl.isBlank()) {
             return null;
