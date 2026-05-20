@@ -240,7 +240,7 @@
   }
 
   function canGoBack() {
-    return currentIndex() > 0 && state.step !== "complete";
+    return currentIndex() > 0;
   }
 
   function setStep(step) {
