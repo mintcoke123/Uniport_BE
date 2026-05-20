@@ -28,8 +28,8 @@ class InvestmentTestReservationControllerTest {
                 .thenReturn(InvestmentTestReservationResponseDTO.builder()
                         .id(15L)
                         .name("김유니")
-                        .contactType("PHONE")
-                        .contactValue("01012345678")
+                        .contactType("EMAIL")
+                        .contactValue("kim@example.com")
                         .resultKey("turtle")
                         .resultTitle("조심스러운 거북이형")
                         .message("투자성향 테스트 사전예약이 저장됐습니다.")
@@ -44,7 +44,7 @@ class InvestmentTestReservationControllerTest {
                         .content("""
                                 {
                                   "name": "김유니",
-                                  "contact": "010-1234-5678",
+                                  "contact": "kim@example.com",
                                   "consent": true,
                                   "resultKey": "turtle",
                                   "resultTitle": "조심스러운 거북이형",
@@ -55,8 +55,8 @@ class InvestmentTestReservationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(15))
                 .andExpect(jsonPath("$.name").value("김유니"))
-                .andExpect(jsonPath("$.contactType").value("PHONE"))
-                .andExpect(jsonPath("$.contactValue").value("01012345678"))
+                .andExpect(jsonPath("$.contactType").value("EMAIL"))
+                .andExpect(jsonPath("$.contactValue").value("kim@example.com"))
                 .andExpect(jsonPath("$.resultKey").value("turtle"))
                 .andExpect(jsonPath("$.resultTitle").value("조심스러운 거북이형"))
                 .andExpect(jsonPath("$.message").value("투자성향 테스트 사전예약이 저장됐습니다."));
@@ -65,6 +65,6 @@ class InvestmentTestReservationControllerTest {
                 ArgumentCaptor.forClass(InvestmentTestReservationRequestDTO.class);
         verify(service).submit(captor.capture(), eq("Mozilla/5.0"));
         assertEquals("김유니", captor.getValue().getName());
-        assertEquals("010-1234-5678", captor.getValue().getContact());
+        assertEquals("kim@example.com", captor.getValue().getContact());
     }
 }

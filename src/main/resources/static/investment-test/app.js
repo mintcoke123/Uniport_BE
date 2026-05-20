@@ -278,7 +278,7 @@
   function renderWelcome() {
     app.innerHTML = '<section class="screen">' +
       '<div class="content">' +
-      '<div class="hero-badge">U</div>' +
+      '<img class="hero-logo" src="/investment-test/assets/uniport-logo.png" alt="Uniport">' +
       '<p class="eyebrow">Uniport Festival Test</p>' +
       '<h1 class="title">유니포트에 오신 걸\n환영해요!</h1>' +
       '<p class="subtitle">1-2분이면 나의 첫 투자 성향과\n스티커 타입을 확인할 수 있어요.</p>' +
@@ -292,11 +292,11 @@
       topbar(null, null) +
       '<div class="content top">' +
       '<h1 class="title">당신의 이름을\n알려주세요!</h1>' +
-      '<p class="subtitle">테스트 결과 저장과 출시 알림을 위해\n연락처와 동의가 필요해요.</p>' +
+      '<p class="subtitle">테스트 결과 저장과 출시 알림을 위해\n이메일과 동의가 필요해요.</p>' +
       '<div class="form-stack">' +
       '<div class="field"><label for="name">이름</label><input id="name" class="text-field" maxlength="10" value="' + escapeHtml(state.name) + '" placeholder="최대 10자 이내"><p class="helper">최대 10자 이내</p></div>' +
-      '<div class="field"><label for="contact">휴대폰 번호 또는 이메일</label><input id="contact" class="text-field" value="' + escapeHtml(state.contact) + '" placeholder="010-1234-5678 또는 uniport@email.com"></div>' +
-      '<label class="consent-card"><input id="consent" type="checkbox"' + (state.consent ? " checked" : "") + '><span>Uniport 공식 출시 및 이벤트 안내를 위해 이름과 연락처, 테스트 결과를 저장하는 데 동의합니다.</span></label>' +
+      '<div class="field"><label for="contact">이메일</label><input id="contact" class="text-field" type="email" inputmode="email" autocomplete="email" value="' + escapeHtml(state.contact) + '" placeholder="uniport@email.com"></div>' +
+      '<label class="consent-card"><input id="consent" type="checkbox"' + (state.consent ? " checked" : "") + '><span>Uniport 공식 출시 및 이벤트 안내를 위해 이름과 이메일, 테스트 결과를 저장하는 데 동의합니다.</span></label>' +
       '<p class="error-text" id="form-error"></p>' +
       "</div></div>" +
       bottomButton("다음", false, "profileNext") +
@@ -377,7 +377,7 @@
     if (kind === "result") {
       active = 0;
       content = '<div class="result-header"><p class="result-owner">' + escapeHtml(state.name || "유니포트") + '님의 투자성향은</p><h1 class="result-title">' + profile.title + '</h1></div>' +
-        '<div class="profile-card"><div class="profile-brand">UNIPORT</div><h2 class="profile-name">' + profile.title + '</h2><p class="profile-summary">' + profile.summary + '</p><div class="level-pill">Lv.1</div><div class="mascot">' + mascotMarkup(profile) + '</div><div class="sticker-label">' + profile.sticker + '</div></div>';
+        '<div class="profile-card"><img class="profile-brand-logo" src="/investment-test/assets/uniport-logo.png" alt="Uniport"><h2 class="profile-name">' + profile.title + '</h2><p class="profile-summary">' + profile.summary + '</p><div class="level-pill">Lv.1</div><div class="mascot">' + mascotMarkup(profile) + '</div><div class="sticker-label">' + profile.sticker + '</div></div>';
     } else if (kind === "analysis") {
       active = 1;
       content = resultStageHeader(profile) + resultSection(profile.title + "의\n투자 성향을 분석했어요", "이런 투자자일 확률이 높아요!", profile.traits, "analysis");
@@ -469,7 +469,7 @@
       return false;
     }
     if (!isValidContact(contact)) {
-      error.textContent = "휴대폰 번호 또는 이메일을 정확히 입력해주세요.";
+      error.textContent = "이메일을 정확히 입력해주세요.";
       return false;
     }
     if (!consent) {
@@ -484,9 +484,8 @@
   }
 
   function isValidContact(contact) {
-    var compactPhone = contact.replace(/[^\d]/g, "");
     var email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return /^01[016789]\d{7,8}$/.test(compactPhone) || email.test(contact);
+    return email.test(contact);
   }
 
   function toggleInterest(keyword) {

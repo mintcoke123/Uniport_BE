@@ -168,19 +168,11 @@ button:disabled {
   white-space: pre-line;
 }
 
-.hero-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 112px;
-  height: 112px;
+.hero-logo {
+  display: block;
+  width: min(218px, 68vw);
+  height: auto;
   margin: 0 auto 36px;
-  border-radius: 38px;
-  color: var(--blue);
-  background: linear-gradient(145deg, #eaf6ff, #ffffff);
-  box-shadow: inset 0 0 0 1px #d9efff, 0 18px 40px rgba(31, 160, 255, 0.16);
-  font-size: 48px;
-  font-weight: 900;
 }
 
 .form-stack,
@@ -541,12 +533,12 @@ button:disabled {
   transform: rotate(7deg);
 }
 
-.profile-brand {
-  color: color-mix(in srgb, var(--profile-card-ink) 38%, white);
-  font-size: 11px;
-  font-weight: 900;
-  text-align: center;
-  letter-spacing: 1px;
+.profile-brand-logo {
+  display: block;
+  width: 104px;
+  height: auto;
+  margin: 0 auto;
+  object-fit: contain;
 }
 
 .profile-name {
@@ -801,7 +793,6 @@ button:disabled {
     background: var(--profile-card);
   }
 
-  .profile-brand,
   .profile-summary,
   .bullet-list li {
     color: var(--profile-card-ink);

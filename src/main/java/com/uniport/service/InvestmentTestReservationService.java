@@ -22,7 +22,6 @@ import java.util.regex.Pattern;
 public class InvestmentTestReservationService {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
-    private static final Pattern PHONE_PATTERN = Pattern.compile("^01\\d{8,9}$");
     private static final Set<String> VALID_RESULT_KEYS = Set.of(
             "turtle",
             "cheetah",
@@ -96,17 +95,11 @@ public class InvestmentTestReservationService {
     }
 
     private Contact normalizeContact(String value) {
-        String contact = requireText(value, "contact is required");
-        String email = contact.toLowerCase(Locale.ROOT);
+        String email = requireText(value, "email is required").toLowerCase(Locale.ROOT);
         if (EMAIL_PATTERN.matcher(email).matches()) {
             return new Contact("EMAIL", email);
         }
-
-        String phone = contact.replaceAll("[\\s-]", "");
-        if (PHONE_PATTERN.matcher(phone).matches()) {
-            return new Contact("PHONE", phone);
-        }
-        throw new ApiException("valid email or Korean mobile phone is required", HttpStatus.BAD_REQUEST);
+        throw new ApiException("valid email is required", HttpStatus.BAD_REQUEST);
     }
 
     private String normalizeResultKey(String value) {

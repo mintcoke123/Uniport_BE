@@ -23,9 +23,9 @@ import static org.mockito.Mockito.when;
 class InvestmentTestReservationServiceTest {
 
     @Test
-    void submitStoresPhoneReservationWithNormalizedContactAndJsonPayloads() {
+    void submitStoresEmailReservationWithNormalizedContactAndJsonPayloads() {
         InvestmentTestReservationRepository repository = mock(InvestmentTestReservationRepository.class);
-        when(repository.findByContactTypeAndContactValue("PHONE", "01012345678")).thenReturn(Optional.empty());
+        when(repository.findByContactTypeAndContactValue("EMAIL", "kim@example.com")).thenReturn(Optional.empty());
         when(repository.save(any(InvestmentTestReservation.class))).thenAnswer(invocation -> {
             InvestmentTestReservation reservation = invocation.getArgument(0);
             reservation.setId(12L);
@@ -35,7 +35,7 @@ class InvestmentTestReservationServiceTest {
 
         InvestmentTestReservationResponseDTO response = service.submit(InvestmentTestReservationRequestDTO.builder()
                 .name(" 김유니 ")
-                .contact("010-1234-5678")
+                .contact("KIM@EXAMPLE.COM")
                 .consent(true)
                 .resultKey("turtle")
                 .resultTitle("조심스러운 거북이형")
@@ -47,16 +47,16 @@ class InvestmentTestReservationServiceTest {
         verify(repository).save(captor.capture());
         InvestmentTestReservation saved = captor.getValue();
         assertEquals("김유니", saved.getName());
-        assertEquals("PHONE", saved.getContactType());
-        assertEquals("01012345678", saved.getContactValue());
+        assertEquals("EMAIL", saved.getContactType());
+        assertEquals("kim@example.com", saved.getContactValue());
         assertEquals("turtle", saved.getResultKey());
         assertEquals("조심스러운 거북이형", saved.getResultTitle());
         assertEquals("[\"AI 반도체\",\"배당주\"]", saved.getInterestKeywordsJson());
         assertEquals("{\"goal\":\"steady\",\"risk\":\"hold\"}", saved.getAnswersJson());
         assertEquals("Mozilla/5.0", saved.getUserAgent());
         assertEquals(12L, response.getId());
-        assertEquals("PHONE", response.getContactType());
-        assertEquals("01012345678", response.getContactValue());
+        assertEquals("EMAIL", response.getContactType());
+        assertEquals("kim@example.com", response.getContactValue());
     }
 
     @Test
@@ -83,13 +83,13 @@ class InvestmentTestReservationServiceTest {
     @Test
     void submitAcceptsOwlResultKeyFromCurrentFigmaProfiles() {
         InvestmentTestReservationRepository repository = mock(InvestmentTestReservationRepository.class);
-        when(repository.findByContactTypeAndContactValue("PHONE", "01087654321")).thenReturn(Optional.empty());
+        when(repository.findByContactTypeAndContactValue("EMAIL", "owl@example.com")).thenReturn(Optional.empty());
         when(repository.save(any(InvestmentTestReservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
         InvestmentTestReservationService service = new InvestmentTestReservationService(repository);
 
         service.submit(InvestmentTestReservationRequestDTO.builder()
                 .name("김유니")
-                .contact("010-8765-4321")
+                .contact("owl@example.com")
                 .consent(true)
                 .resultKey("owl")
                 .resultTitle("전략짜는 올빼미형")
@@ -109,7 +109,7 @@ class InvestmentTestReservationServiceTest {
 
         ApiException exception = assertThrows(ApiException.class, () -> service.submit(InvestmentTestReservationRequestDTO.builder()
                 .name("김유니")
-                .contact("01012345678")
+                .contact("user@example.com")
                 .consent(false)
                 .resultKey("turtle")
                 .resultTitle("조심스러운 거북이형")
@@ -136,6 +136,23 @@ class InvestmentTestReservationServiceTest {
     }
 
     @Test
+    void submitRejectsPhoneContact() {
+        InvestmentTestReservationService service = new InvestmentTestReservationService(
+                mock(InvestmentTestReservationRepository.class)
+        );
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.submit(InvestmentTestReservationRequestDTO.builder()
+                .name("김유니")
+                .contact("01012345678")
+                .consent(true)
+                .resultKey("turtle")
+                .resultTitle("조심스러운 거북이형")
+                .build(), null));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+    }
+
+    @Test
     void submitRejectsNameLongerThanTenCodePoints() {
         InvestmentTestReservationService service = new InvestmentTestReservationService(
                 mock(InvestmentTestReservationRepository.class)
@@ -143,7 +160,7 @@ class InvestmentTestReservationServiceTest {
 
         ApiException exception = assertThrows(ApiException.class, () -> service.submit(InvestmentTestReservationRequestDTO.builder()
                 .name("가나다라마바사아자차카")
-                .contact("01012345678")
+                .contact("user@example.com")
                 .consent(true)
                 .resultKey("turtle")
                 .resultTitle("조심스러운 거북이형")
@@ -157,8 +174,8 @@ class InvestmentTestReservationServiceTest {
         InvestmentTestReservation existing = InvestmentTestReservation.builder()
                 .id(5L)
                 .name("이전")
-                .contactType("PHONE")
-                .contactValue("01012345678")
+                .contactType("EMAIL")
+                .contactValue("existing@example.com")
                 .consent(true)
                 .resultKey("turtle")
                 .resultTitle("이전 결과")
@@ -166,13 +183,13 @@ class InvestmentTestReservationServiceTest {
                 .answersJson("{}")
                 .build();
         InvestmentTestReservationRepository repository = mock(InvestmentTestReservationRepository.class);
-        when(repository.findByContactTypeAndContactValue("PHONE", "01012345678")).thenReturn(Optional.of(existing));
+        when(repository.findByContactTypeAndContactValue("EMAIL", "existing@example.com")).thenReturn(Optional.of(existing));
         when(repository.save(any(InvestmentTestReservation.class))).thenAnswer(invocation -> invocation.getArgument(0));
         InvestmentTestReservationService service = new InvestmentTestReservationService(repository);
 
         InvestmentTestReservationResponseDTO response = service.submit(InvestmentTestReservationRequestDTO.builder()
                 .name("새이름")
-                .contact("010 1234 5678")
+                .contact("EXISTING@EXAMPLE.COM")
                 .consent(true)
                 .resultKey("surfer")
                 .resultTitle("파도타는 서퍼형")
@@ -184,6 +201,8 @@ class InvestmentTestReservationServiceTest {
         verify(repository).save(captor.capture());
         assertEquals(5L, captor.getValue().getId());
         assertEquals("새이름", captor.getValue().getName());
+        assertEquals("EMAIL", captor.getValue().getContactType());
+        assertEquals("existing@example.com", captor.getValue().getContactValue());
         assertEquals("surfer", captor.getValue().getResultKey());
         assertEquals("[\"ETF\"]", captor.getValue().getInterestKeywordsJson());
         assertEquals("Updated UA", captor.getValue().getUserAgent());
