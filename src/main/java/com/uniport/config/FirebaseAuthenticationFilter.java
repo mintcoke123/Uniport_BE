@@ -154,13 +154,28 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private FirebaseAuthenticatedUser authenticatePrincipal(String idToken) {
+        Exception firebaseAuthenticationFailure;
         try {
             return firebaseAuthenticationService.authenticate(idToken);
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            firebaseAuthenticationFailure = ex;
+            log.warn("[firebase-auth-filter] Firebase authentication failed; trying app JWT fallback: exception={}, message={}",
+                    ex.getClass().getName(), ex.getMessage());
+        }
+
+        try {
             Long userId = jwtUtil.getUserIdFromToken(idToken);
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new ApiException("User not found", org.springframework.http.HttpStatus.UNAUTHORIZED));
             return new FirebaseAuthenticatedUser(user, user.getFirebaseUid(), user.getEmail());
+        } catch (Exception jwtException) {
+            if (firebaseAuthenticationFailure instanceof ApiException apiException) {
+                throw apiException;
+            }
+            if (firebaseAuthenticationFailure instanceof IllegalArgumentException illegalArgumentException) {
+                throw illegalArgumentException;
+            }
+            throw jwtException;
         }
     }
 

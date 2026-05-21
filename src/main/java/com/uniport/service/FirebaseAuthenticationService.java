@@ -13,6 +13,7 @@ import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.config.FirebaseProperties;
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
+import com.uniport.repository.UserAuthIdentityRepository;
 import com.uniport.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,15 +45,18 @@ public class FirebaseAuthenticationService {
 
     private final FirebaseProperties firebaseProperties;
     private final UserRepository userRepository;
+    private final UserAuthIdentityRepository userAuthIdentityRepository;
     private final PasswordEncoder passwordEncoder;
 
     private volatile FirebaseApp firebaseApp;
 
     public FirebaseAuthenticationService(FirebaseProperties firebaseProperties,
                                          UserRepository userRepository,
+                                         UserAuthIdentityRepository userAuthIdentityRepository,
                                          PasswordEncoder passwordEncoder) {
         this.firebaseProperties = firebaseProperties;
         this.userRepository = userRepository;
+        this.userAuthIdentityRepository = userAuthIdentityRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -87,11 +91,16 @@ public class FirebaseAuthenticationService {
 
     private User resolveUser(FirebaseToken firebaseToken) {
         String uid = trim(firebaseToken.getUid());
-        return userRepository.findByFirebaseUid(uid)
-                .map(existing -> updateExistingUser(existing, firebaseToken))
+        return userAuthIdentityRepository.findByFirebaseUid(uid)
+                .map(identity -> updateExistingUser(identity.getUser(), firebaseToken))
+                .or(() -> userRepository.findByFirebaseUid(uid)
+                        .map(existing -> rememberAuthIdentity(
+                                updateExistingUser(existing, firebaseToken),
+                                firebaseToken
+                        )))
                 .orElseGet(() -> findOrLinkExistingUserByEmail(firebaseToken)
                         .map(existing -> linkExistingUser(existing, firebaseToken))
-                        .orElseGet(() -> createInitialUser(firebaseToken)));
+                        .orElseGet(() -> rememberAuthIdentity(createInitialUser(firebaseToken), firebaseToken)));
     }
 
     private java.util.Optional<User> findOrLinkExistingUserByEmail(FirebaseToken firebaseToken) {
@@ -107,6 +116,11 @@ public class FirebaseAuthenticationService {
         String existingUid = trim(existingUser.getFirebaseUid());
 
         if (!existingUid.isBlank() && !existingUid.equals(uid)) {
+            if (firebaseToken.isEmailVerified()) {
+                log.info("[firebase-auth] Reusing existing user for verified Firebase email: userId={}, email={}, existingUid={}, incomingUid={}",
+                        existingUser.getId(), existingUser.getEmail(), existingUid, uid);
+                return rememberAuthIdentity(updateExistingUser(existingUser, firebaseToken), firebaseToken);
+            }
             log.warn("[firebase-auth] Email already linked to another Firebase UID: email={}, existingUid={}, incomingUid={}",
                     existingUser.getEmail(), existingUid, uid);
             throw new ApiException("Email already linked to another Firebase account", HttpStatus.CONFLICT,
@@ -119,7 +133,45 @@ public class FirebaseAuthenticationService {
                     existingUser.getId(), existingUser.getEmail(), uid);
         }
 
-        return updateExistingUser(existingUser, firebaseToken);
+        return rememberAuthIdentity(updateExistingUser(existingUser, firebaseToken), firebaseToken);
+    }
+
+    private User rememberAuthIdentity(User user, FirebaseToken firebaseToken) {
+        String uid = trim(firebaseToken.getUid());
+        if (uid.isBlank()) {
+            return user;
+        }
+        if (userAuthIdentityRepository.findByFirebaseUid(uid).isPresent()) {
+            return user;
+        }
+
+        String providerId = resolveProviderId(firebaseToken);
+        int inserted = userAuthIdentityRepository.insertIgnore(
+                user.getId(),
+                uid,
+                providerId,
+                blankToNull(trim(firebaseToken.getEmail())),
+                firebaseToken.isEmailVerified()
+        );
+        if (inserted > 0) {
+            log.info("[firebase-auth] Linked Firebase identity to user: userId={}, providerId={}, uid={}",
+                    user.getId(), providerId, uid);
+        }
+        return user;
+    }
+
+    private String resolveProviderId(FirebaseToken firebaseToken) {
+        Map<String, Object> claims = firebaseToken.getClaims();
+        if (claims == null) {
+            return null;
+        }
+        Object firebaseClaim = claims.get("firebase");
+        if (!(firebaseClaim instanceof Map<?, ?> firebaseMap)) {
+            return null;
+        }
+        Object providerId = firebaseMap.get("sign_in_provider");
+        String value = providerId instanceof String text ? trim(text) : "";
+        return value.isBlank() ? null : value;
     }
 
     private FirebaseToken verifyToken(String idToken) {

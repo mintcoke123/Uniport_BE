@@ -1,0 +1,42 @@
+package com.uniport.repository;
+
+import com.uniport.entity.UserAuthIdentity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.Optional;
+
+public interface UserAuthIdentityRepository extends JpaRepository<UserAuthIdentity, Long> {
+
+    Optional<UserAuthIdentity> findByFirebaseUid(String firebaseUid);
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO user_auth_identities (
+                user_id,
+                firebase_uid,
+                provider_id,
+                email,
+                email_verified,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                :userId,
+                :firebaseUid,
+                :providerId,
+                :email,
+                :emailVerified,
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (firebase_uid) DO NOTHING
+            """, nativeQuery = true)
+    int insertIgnore(@Param("userId") Long userId,
+                     @Param("firebaseUid") String firebaseUid,
+                     @Param("providerId") String providerId,
+                     @Param("email") String email,
+                     @Param("emailVerified") boolean emailVerified);
+}
