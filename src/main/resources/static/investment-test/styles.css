@@ -318,31 +318,6 @@ button:disabled {
   line-height: 1.5;
 }
 
-.interest-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 26px;
-}
-
-.interest-card {
-  min-height: 54px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  color: #525252;
-  background: var(--soft);
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.interest-card.selected {
-  border-color: #8bd0ff;
-  color: #1378c3;
-  background: #e8f5ff;
-  box-shadow: 0 4px 0 #bfe6ff;
-}
-
 .bottom-bar {
   position: relative;
   z-index: 2;
@@ -363,6 +338,10 @@ button:disabled {
   padding: 6px 20px calc(8px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, rgba(15, 84, 157, 0), rgba(15, 84, 157, 0.94) 30%, var(--profile-bottom) 100%);
   transform: translateX(-50%);
+}
+
+.screen.result .bottom-bar.has-secondary {
+  gap: 8px;
 }
 
 .screen.result .notice {
@@ -393,6 +372,17 @@ button:disabled {
   color: var(--text);
   background: #f2f2f2;
   box-shadow: 0 4px 0 #d4d4d4;
+}
+
+.text-cta {
+  width: 100%;
+  min-height: 34px;
+  color: rgba(255, 255, 255, 0.92);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .cta:disabled {

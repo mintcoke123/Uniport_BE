@@ -11,7 +11,6 @@
     contact: "",
     consent: false,
     answers: {},
-    interests: [],
     resultKey: null,
     reservation: {
       status: "idle",
@@ -76,8 +75,6 @@
       ]
     }
   ];
-
-  var keywords = ["AI 반도체", "로봇", "방산", "자율주행", "양자컴퓨터", "2차전지", "전력기기", "바이오", "원전", "우주/로켓"];
 
   var profiles = {
     turtle: {
@@ -224,7 +221,7 @@
     researcher: { id: 8, risk: 2.2, term: 2.8, style: 1.6, involvement: 3.0 }
   };
   var questionSteps = questions.map(function (_, index) { return "q" + index; });
-  var stepOrder = ["welcome", "profile", "start"].concat(questionSteps, ["interests", "intro", "result", "analysis", "principles", "strategy", "complete"]);
+  var stepOrder = ["welcome", "profile", "start"].concat(questionSteps, ["intro", "result", "principles"]);
 
   function escapeHtml(value) {
     return String(value)
@@ -246,6 +243,14 @@
   function setStep(step) {
     state.step = step;
     render();
+  }
+
+  function resetGeneratedResult() {
+    state.resultKey = null;
+    state.reservation = {
+      status: "idle",
+      message: ""
+    };
   }
 
   function goBack() {
@@ -336,33 +341,15 @@
       "</section>";
   }
 
-  function renderInterests() {
-    var cards = keywords.map(function (keyword) {
-      var selected = state.interests.indexOf(keyword) >= 0;
-      return '<button class="interest-card' + (selected ? " selected" : "") + '" type="button" data-action="interest" data-keyword="' + escapeHtml(keyword) + '">' + keyword + "</button>";
-    }).join("");
-
-    app.innerHTML = '<section class="screen">' +
-      topbar(6, 7) +
-      '<div class="content top">' +
-      '<h1 class="question-title">현재 가장 관심 있는\n투자분야가 있다면?</h1>' +
-      '<p class="subtitle">관심 있는 키워드를 모두 선택해주세요. (최대 2개)</p>' +
-      '<div class="interest-grid">' + cards + "</div>" +
-      '<p class="error-text" id="interest-error"></p>' +
-      "</div>" +
-      bottomButton("진단 결과 보기", state.interests.length === 0, "showIntro") +
-      "</section>";
-  }
-
   function renderIntro() {
     var name = escapeHtml(state.name || "유니포트");
     app.innerHTML = '<section class="screen note-screen">' +
-      topbar(0, 6) +
+      topbar(6, 7) +
       '<div class="content note-created">' +
       '<h1 class="note-title">' + name + '<span class="title-tail">님의</span><br>첫 투자 노트가 생성되었어요</h1>' +
       '<img class="note-illustration" src="/investment-test/assets/note-created.png" alt="첫 투자 노트 생성 일러스트">' +
       "</div>" +
-      bottomButton("진단 결과 보기", false, "result") +
+      bottomButton("캐릭터 스티커 확인하기", false, "result") +
       "</section>";
   }
 
@@ -372,10 +359,16 @@
     var content = "";
     var action = "next";
     var button = "다음";
+    var secondaryAction = null;
+    var secondaryButton = null;
     var active = null;
 
     if (kind === "result") {
       active = 0;
+      button = "유니포트 인스타그램 보러가기";
+      action = "launchNotice";
+      secondaryButton = "투자원칙도 보기";
+      secondaryAction = "principles";
       content = '<div class="result-header"><p class="result-owner">' + escapeHtml(state.name || "유니포트") + '님의 투자성향은</p><h1 class="result-title">' + profile.title + '</h1></div>' +
         '<div class="profile-card"><img class="profile-brand-logo" src="/investment-test/assets/uniport-logo.png" alt="Uniport"><h2 class="profile-name">' + profile.title + '</h2><p class="profile-summary">' + profile.summary + '</p><div class="level-pill">Lv.1</div><div class="mascot">' + mascotMarkup(profile) + '</div><div class="sticker-label">' + profile.sticker + '</div></div>';
     } else if (kind === "analysis") {
@@ -383,6 +376,8 @@
       content = resultStageHeader(profile) + resultSection(profile.title + "의\n투자 성향을 분석했어요", "이런 투자자일 확률이 높아요!", profile.traits, "analysis");
     } else if (kind === "principles") {
       active = 2;
+      button = "유니포트 인스타그램 보러가기";
+      action = "launchNotice";
       content = resultStageHeader(profile) + resultSection("나만의 투자원칙", "이것만은 지키면서 투자해봐요!", profile.principles, "principles");
     } else if (kind === "strategy") {
       active = 3;
@@ -397,8 +392,18 @@
     app.innerHTML = '<section class="screen result" style="' + vars + '">' +
       topbar(active, 5, "rgba(255,255,255,0.92)") +
       '<div class="content top">' + content + "</div>" +
-      '<div class="bottom-bar"><button class="cta" type="button" data-action="' + action + '">' + button + "</button></div>" +
+      resultBottomBar(button, action, secondaryButton, secondaryAction) +
       "</section>";
+  }
+
+  function resultBottomBar(primaryLabel, primaryAction, secondaryLabel, secondaryAction) {
+    var secondary = secondaryLabel && secondaryAction
+      ? '<button class="text-cta" type="button" data-action="' + secondaryAction + '">' + secondaryLabel + "</button>"
+      : "";
+    return '<div class="bottom-bar' + (secondary ? " has-secondary" : "") + '">' +
+      '<button class="cta" type="button" data-action="' + primaryAction + '">' + primaryLabel + "</button>" +
+      secondary +
+      "</div>";
   }
 
   function resultStageHeader(profile) {
@@ -488,20 +493,6 @@
     return email.test(contact);
   }
 
-  function toggleInterest(keyword) {
-    var index = state.interests.indexOf(keyword);
-    var error = document.getElementById("interest-error");
-    if (index >= 0) {
-      state.interests.splice(index, 1);
-    } else if (state.interests.length < 2) {
-      state.interests.push(keyword);
-    } else if (error) {
-      error.textContent = "관심 키워드는 최대 2개까지 선택할 수 있어요.";
-      return;
-    }
-    render();
-  }
-
   function generateResult() {
     var axes = {
       risk: optionAxisValue("risk"),
@@ -576,7 +567,7 @@
       consent: state.consent,
       resultKey: state.resultKey,
       resultTitle: profile.title,
-      interestKeywords: state.interests,
+      interestKeywords: [],
       answers: buildAnswerPayload()
     };
 
@@ -613,6 +604,13 @@
       });
   }
 
+  function prepareIntro() {
+    if (!state.resultKey) {
+      generateResult();
+    }
+    submitReservationOnce();
+  }
+
   function buildAnswerPayload() {
     var payload = {};
     questions.forEach(function (question) {
@@ -627,7 +625,11 @@
   function nextStep() {
     var index = currentIndex();
     if (index < stepOrder.length - 1) {
-      state.step = stepOrder[index + 1];
+      var next = stepOrder[index + 1];
+      if (next === "intro") {
+        prepareIntro();
+      }
+      state.step = next;
     }
     render();
   }
@@ -639,7 +641,6 @@
       contact: "",
       consent: false,
       answers: {},
-      interests: [],
       resultKey: null,
       reservation: {
         status: "idle",
@@ -664,10 +665,6 @@
     }
     if (state.step.indexOf("q") === 0) {
       renderQuestion(Number(state.step.slice(1)));
-      return;
-    }
-    if (state.step === "interests") {
-      renderInterests();
       return;
     }
     if (state.step === "intro") {
@@ -700,21 +697,16 @@
     }
     if (action === "answer") {
       state.answers[target.getAttribute("data-question")] = Number(target.getAttribute("data-index"));
+      resetGeneratedResult();
       render();
-      return;
-    }
-    if (action === "interest") {
-      toggleInterest(target.getAttribute("data-keyword"));
-      return;
-    }
-    if (action === "showIntro") {
-      generateResult();
-      submitReservationOnce();
-      setStep("intro");
       return;
     }
     if (action === "result") {
       setStep("result");
+      return;
+    }
+    if (action === "principles") {
+      setStep("principles");
       return;
     }
     if (action === "restart") {
@@ -729,12 +721,15 @@
   app.addEventListener("input", function (event) {
     if (event.target.id === "name") {
       state.name = event.target.value.slice(0, 10);
+      resetGeneratedResult();
     }
     if (event.target.id === "contact") {
       state.contact = event.target.value;
+      resetGeneratedResult();
     }
     if (event.target.id === "consent") {
       state.consent = event.target.checked;
+      resetGeneratedResult();
     }
   });
 
