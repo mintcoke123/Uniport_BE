@@ -10,6 +10,7 @@ import com.uniport.repository.OrderRepository;
 import com.uniport.repository.PointShopOrderRepository;
 import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
+import com.uniport.repository.UserAuthIdentityRepository;
 import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.UserPushTokenRepository;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class UserDeletionReferenceCleanupService {
     private final PointShopOrderRepository pointShopOrderRepository;
     private final PointTransactionRepository pointTransactionRepository;
     private final PointWalletRepository pointWalletRepository;
+    private final UserAuthIdentityRepository userAuthIdentityRepository;
     private final UserMyPagePreferenceRepository userMyPagePreferenceRepository;
     private final UserPushTokenRepository userPushTokenRepository;
     private final LearningUserStateRepository learningUserStateRepository;
@@ -40,6 +42,7 @@ public class UserDeletionReferenceCleanupService {
             PointShopOrderRepository pointShopOrderRepository,
             PointTransactionRepository pointTransactionRepository,
             PointWalletRepository pointWalletRepository,
+            UserAuthIdentityRepository userAuthIdentityRepository,
             UserMyPagePreferenceRepository userMyPagePreferenceRepository,
             UserPushTokenRepository userPushTokenRepository,
             LearningUserStateRepository learningUserStateRepository,
@@ -52,6 +55,7 @@ public class UserDeletionReferenceCleanupService {
         this.pointShopOrderRepository = pointShopOrderRepository;
         this.pointTransactionRepository = pointTransactionRepository;
         this.pointWalletRepository = pointWalletRepository;
+        this.userAuthIdentityRepository = userAuthIdentityRepository;
         this.userMyPagePreferenceRepository = userMyPagePreferenceRepository;
         this.userPushTokenRepository = userPushTokenRepository;
         this.learningUserStateRepository = learningUserStateRepository;
@@ -68,6 +72,7 @@ public class UserDeletionReferenceCleanupService {
         matchingRoomMemberRepository.deleteAllByUserId(userId);
         friendInviteRepository.deleteAllByUserId(userId);
         friendRelationRepository.deleteByRequesterUser_IdOrAddresseeUser_Id(userId, userId);
+        userAuthIdentityRepository.deleteByUser_Id(userId);
         userPushTokenRepository.deleteByUser_Id(userId);
         userMyPagePreferenceRepository.deleteById(userId);
         learningUserStateRepository.deleteById(userId);

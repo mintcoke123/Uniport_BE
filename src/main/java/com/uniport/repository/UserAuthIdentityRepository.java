@@ -12,6 +12,8 @@ public interface UserAuthIdentityRepository extends JpaRepository<UserAuthIdenti
 
     Optional<UserAuthIdentity> findByFirebaseUid(String firebaseUid);
 
+    void deleteByUser_Id(Long userId);
+
     @Modifying
     @Query(value = """
             INSERT INTO user_auth_identities (

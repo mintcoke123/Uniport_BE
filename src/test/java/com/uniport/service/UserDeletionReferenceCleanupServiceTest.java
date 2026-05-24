@@ -10,6 +10,7 @@ import com.uniport.repository.OrderRepository;
 import com.uniport.repository.PointShopOrderRepository;
 import com.uniport.repository.PointTransactionRepository;
 import com.uniport.repository.PointWalletRepository;
+import com.uniport.repository.UserAuthIdentityRepository;
 import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.UserPushTokenRepository;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,9 @@ class UserDeletionReferenceCleanupServiceTest {
     private PointWalletRepository pointWalletRepository;
 
     @Mock
+    private UserAuthIdentityRepository userAuthIdentityRepository;
+
+    @Mock
     private UserMyPagePreferenceRepository userMyPagePreferenceRepository;
 
     @Mock
@@ -76,6 +80,7 @@ class UserDeletionReferenceCleanupServiceTest {
                 matchingRoomMemberRepository,
                 friendInviteRepository,
                 friendRelationRepository,
+                userAuthIdentityRepository,
                 userPushTokenRepository,
                 userMyPagePreferenceRepository,
                 learningUserStateRepository,
@@ -89,6 +94,7 @@ class UserDeletionReferenceCleanupServiceTest {
         order.verify(matchingRoomMemberRepository).deleteAllByUserId(465L);
         order.verify(friendInviteRepository).deleteAllByUserId(465L);
         order.verify(friendRelationRepository).deleteByRequesterUser_IdOrAddresseeUser_Id(465L, 465L);
+        order.verify(userAuthIdentityRepository).deleteByUser_Id(465L);
         order.verify(userPushTokenRepository).deleteByUser_Id(465L);
         order.verify(userMyPagePreferenceRepository).deleteById(465L);
         order.verify(learningUserStateRepository).deleteById(465L);
