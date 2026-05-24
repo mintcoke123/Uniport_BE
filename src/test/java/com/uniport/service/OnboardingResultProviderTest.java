@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class OnboardingResultProviderTest {
 
-    private final OnboardingResultProvider onboardingResultProvider = new OnboardingResultProvider();
+    private final OnboardingResultProvider onboardingResultProvider = OnboardingResultProviderTestFactory.create();
 
     @Test
     void classify_returnsOneOfEightCharactersForEveryAxisCombination() {
@@ -43,6 +43,6 @@ class OnboardingResultProviderTest {
                 "기본",
                 "방산");
 
-        assertEquals("균형 잡힌 판다", result.getCharacterName());
+        assertEquals("균형잡힌 판다형", result.getCharacterName());
     }
 }

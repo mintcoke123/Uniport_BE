@@ -1,13 +1,19 @@
 package com.uniport.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.dto.OnboardingSurveyResultDTO;
 import com.uniport.dto.SurveyResultDetailItemDTO;
 import com.uniport.dto.SurveyResultSectionDTO;
+import com.uniport.entity.OnboardingResultCatalog;
+import com.uniport.repository.OnboardingResultCatalogRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 @Component
 public class OnboardingResultProvider {
@@ -16,8 +22,19 @@ public class OnboardingResultProvider {
     private static final int TERM_WEIGHT = 3;
     private static final int STYLE_WEIGHT = 2;
     private static final int INVOLVEMENT_WEIGHT = 1;
+    private static final String STRATEGY_SECTION_TITLE = "추천 전략";
+    private static final String PRINCIPLES_SECTION_TITLE = "나만의 투자원칙";
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
     private final Map<Integer, CharacterProfile> characters = createCharacters();
+    private final OnboardingResultCatalogRepository catalogRepository;
+    private final ObjectMapper objectMapper;
+
+    public OnboardingResultProvider(OnboardingResultCatalogRepository catalogRepository,
+                                    ObjectMapper objectMapper) {
+        this.catalogRepository = catalogRepository;
+        this.objectMapper = objectMapper;
+    }
 
     public OnboardingSurveyResultDTO classify(int risk,
                                               int term,
@@ -44,18 +61,22 @@ public class OnboardingResultProvider {
             }
         }
 
-        return toResult(bestProfile, investmentLevel, interestSector);
+        return toResult(bestProfile, loadCatalog(bestProfile.id()), investmentLevel, interestSector);
     }
 
     public OnboardingSurveyResultDTO getByCharacterName(String characterName,
                                                         String investmentLevel,
                                                         String interestSector) {
-        CharacterProfile profile = characters.values().stream()
-                .filter(candidate -> candidate.name().equals(characterName))
+        OnboardingResultCatalog catalog = catalogRepository.findAllByActiveTrueOrderByCharacterIdAsc().stream()
+                .filter(candidate -> matchesCharacterName(candidate, characterName))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown onboarding result type: " + characterName));
+        CharacterProfile profile = characters.get(catalog.getCharacterId());
+        if (profile == null) {
+            throw new IllegalStateException("Missing onboarding classification profile for character " + catalog.getCharacterId());
+        }
 
-        return toResult(profile, investmentLevel, interestSector);
+        return toResult(profile, catalog, investmentLevel, interestSector);
     }
 
     private double distance(int risk, int term, int style, int involvement, CharacterProfile profile) {
@@ -119,39 +140,48 @@ public class OnboardingResultProvider {
     }
 
     private OnboardingSurveyResultDTO toResult(CharacterProfile profile,
+                                               OnboardingResultCatalog catalog,
                                                String investmentLevel,
                                                String interestSector) {
         String resolvedLevel = investmentLevel == null || investmentLevel.isBlank() ? "입문" : investmentLevel;
         String resolvedSector = interestSector == null || interestSector.isBlank() ? null : interestSector;
-        String levelAndSector = resolvedSector == null
-                ? "너의 투자레벨은 " + resolvedLevel + "이야."
-                : "너의 투자레벨은 " + resolvedLevel + ", 현재 가장 관심 있는 섹터는 " + resolvedSector + "야.";
+        List<String> traits = readRequiredStringList(catalog.getTraitsJson(), "traits_json", catalog.getCharacterId());
+        List<String> traitDescriptions = readRequiredStringList(
+                catalog.getTraitDescriptionsJson(),
+                "trait_descriptions_json",
+                catalog.getCharacterId());
+        List<String> principles = readRequiredStringList(catalog.getPrinciplesJson(), "principles_json", catalog.getCharacterId());
+        List<String> principleDescriptions = readRequiredStringList(
+                catalog.getPrincipleDescriptionsJson(),
+                "principle_descriptions_json",
+                catalog.getCharacterId());
+        List<String> strategies = readRequiredStringList(catalog.getStrategiesJson(), "strategies_json", catalog.getCharacterId());
 
         return OnboardingSurveyResultDTO.builder()
-                .id((long) profile.id())
-                .characterId((long) profile.id())
-                .characterName(profile.name())
+                .id((long) catalog.getCharacterId())
+                .characterId((long) catalog.getCharacterId())
+                .characterName(catalog.getCanonicalName())
                 .characterEmoji(profile.emoji())
                 .characterColor(profile.color())
-                .type(profile.name())
-                .title(profile.name())
-                .description("현재 응답 기준으로 가장 가까운 투자 캐릭터는 " + profile.name() + "형이야.")
-                .imageUrl("https://example.com/images/onboarding-character-" + profile.id() + ".png")
-                .levelLabel(resolvedLevel)
+                .type(catalog.getCanonicalName())
+                .title(catalog.getCanonicalName())
+                .description(catalog.getCardSummary())
+                .imageUrl(catalog.getCharacterImageResource())
+                .levelLabel(catalog.getLevelLabel())
                 .investmentLevel(resolvedLevel)
                 .interestSector(resolvedSector)
-                .investmentType(profile.investmentType())
-                .probabilityLabel(levelAndSector)
-                .strategyTitle("추천 전략")
-                .strategyLabel(profile.recommendedStrategies().isEmpty() ? null : profile.recommendedStrategies().get(0))
-                .traits(profile.traits())
-                .recommendedStrategies(profile.recommendedStrategies())
-                .personalPrinciples(profile.personalPrinciples())
+                .investmentType(catalog.getInvestmentType())
+                .probabilityLabel(catalog.getAnalysisSubtitle())
+                .strategyTitle(STRATEGY_SECTION_TITLE)
+                .strategyLabel(strategies.isEmpty() ? null : strategies.get(0))
+                .traits(traits)
+                .recommendedStrategies(strategies)
+                .personalPrinciples(principles)
                 .features(List.of(
-                        section("해당 투자 유형의 특징", profile.traits()),
-                        section("추천 전략", profile.recommendedStrategies())
+                        section(catalog.getAnalysisTitle(), traits, traitDescriptions),
+                        section(STRATEGY_SECTION_TITLE, strategies)
                 ))
-                .guides(List.of(section("나만의 투자원칙", profile.personalPrinciples())))
+                .guides(List.of(section(PRINCIPLES_SECTION_TITLE, principles, principleDescriptions)))
                 .build();
     }
 
@@ -160,11 +190,72 @@ public class OnboardingResultProvider {
                 .title(title)
                 .items(items.stream()
                         .map(item -> SurveyResultDetailItemDTO.builder()
-                                .name(title)
-                                .description(item)
+                                .name(item)
+                                .description("")
                                 .build())
                         .toList())
                 .build();
+    }
+
+    private SurveyResultSectionDTO section(String title, List<String> itemNames, List<String> itemDescriptions) {
+        if (itemNames.size() != itemDescriptions.size()) {
+            throw new IllegalStateException("Onboarding result catalog section has mismatched item and description counts: " + title);
+        }
+        return SurveyResultSectionDTO.builder()
+                .title(title)
+                .items(IntStream.range(0, itemNames.size())
+                        .mapToObj(index -> {
+                            String itemName = itemNames.get(index);
+                            return SurveyResultDetailItemDTO.builder()
+                                    .name(itemName)
+                                    .description(itemDescriptions.get(index))
+                                    .build();
+                        })
+                        .toList())
+                .build();
+    }
+
+    private OnboardingResultCatalog loadCatalog(int characterId) {
+        return catalogRepository.findByCharacterIdAndActiveTrue(characterId)
+                .orElseThrow(() -> new IllegalStateException("Missing onboarding result catalog for character " + characterId));
+    }
+
+    private boolean matchesCharacterName(OnboardingResultCatalog catalog, String characterName) {
+        String normalizedName = normalizeCharacterName(characterName);
+        if (normalizedName.isBlank()) {
+            return false;
+        }
+        if (normalizeCharacterName(catalog.getCanonicalName()).equals(normalizedName)) {
+            return true;
+        }
+        return readStringList(catalog.getLegacyAliasesJson(), "legacy_aliases_json", catalog.getCharacterId()).stream()
+                .map(OnboardingResultProvider::normalizeCharacterName)
+                .anyMatch(normalizedName::equals);
+    }
+
+    private List<String> readRequiredStringList(String json, String fieldName, int characterId) {
+        List<String> values = readStringList(json, fieldName, characterId);
+        if (values.isEmpty()) {
+            throw new IllegalStateException("Missing onboarding result catalog field " + fieldName + " for character " + characterId);
+        }
+        return values;
+    }
+
+    private List<String> readStringList(String json, String fieldName, int characterId) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, STRING_LIST_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException(
+                    "Failed to parse onboarding result catalog field " + fieldName + " for character " + characterId,
+                    exception);
+        }
+    }
+
+    private static String normalizeCharacterName(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", "").trim();
     }
 
     private Map<Integer, CharacterProfile> createCharacters() {

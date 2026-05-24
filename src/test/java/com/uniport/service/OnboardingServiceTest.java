@@ -39,7 +39,7 @@ class OnboardingServiceTest {
     void submitSurvey_persistsCharacterLevelAndTwoSectorsForEducationRoadmap() {
         OnboardingService onboardingService = new OnboardingService(
                 new OnboardingQuestionProvider(),
-                new OnboardingResultProvider(),
+                OnboardingResultProviderTestFactory.create(),
                 userRepository,
                 userMyPagePreferenceRepository,
                 learningUserStateRepository,
@@ -67,10 +67,10 @@ class OnboardingServiceTest {
 
         OnboardingSurveyResultDTO result = onboardingService.submitSurvey(user, request);
 
-        assertEquals("조심스러운 거북이", result.getCharacterName());
+        assertEquals("조심스러운 거북이형", result.getCharacterName());
         assertEquals("입문", result.getInvestmentLevel());
         assertEquals("AI 반도체, 양자컴퓨터", result.getInterestSector());
-        assertEquals("조심스러운 거북이", user.getInvestmentProfileResult());
+        assertEquals("조심스러운 거북이형", user.getInvestmentProfileResult());
         assertEquals("입문", user.getInvestmentLevel());
         assertEquals("AI 반도체, 양자컴퓨터", user.getInterestSector());
         assertEquals(
@@ -90,7 +90,7 @@ class OnboardingServiceTest {
     void submitSurvey_persistsAdvancedSectorsForIntroFallbackWhenUserStartsAdvancedCourse() {
         OnboardingService onboardingService = new OnboardingService(
                 new OnboardingQuestionProvider(),
-                new OnboardingResultProvider(),
+                OnboardingResultProviderTestFactory.create(),
                 userRepository,
                 userMyPagePreferenceRepository,
                 learningUserStateRepository,
@@ -131,7 +131,7 @@ class OnboardingServiceTest {
     void getSurveyFlow_treatsMultiSectorResultAsComplete() {
         OnboardingService onboardingService = new OnboardingService(
                 new OnboardingQuestionProvider(),
-                new OnboardingResultProvider(),
+                OnboardingResultProviderTestFactory.create(),
                 userRepository,
                 userMyPagePreferenceRepository,
                 learningUserStateRepository,
