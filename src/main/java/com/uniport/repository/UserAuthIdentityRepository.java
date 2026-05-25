@@ -6,11 +6,19 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserAuthIdentityRepository extends JpaRepository<UserAuthIdentity, Long> {
 
     Optional<UserAuthIdentity> findByFirebaseUid(String firebaseUid);
+
+    @Query("""
+            SELECT i.firebaseUid
+            FROM UserAuthIdentity i
+            WHERE i.user.id = :userId
+            """)
+    List<String> findFirebaseUidsByUserId(@Param("userId") Long userId);
 
     void deleteByUser_Id(Long userId);
 
