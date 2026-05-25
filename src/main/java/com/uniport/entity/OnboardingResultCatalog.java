@@ -61,7 +61,7 @@ public class OnboardingResultCatalog {
     @Column(name = "strategies_json", nullable = false, columnDefinition = "TEXT")
     private String strategiesJson;
 
-    @Column(name = "strategy_highlights_json", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "strategy_highlights_json", nullable = false, columnDefinition = "TEXT DEFAULT '[]'")
     private String strategyHighlightsJson;
 
     @Column(name = "character_image_resource", nullable = false, length = 120)
