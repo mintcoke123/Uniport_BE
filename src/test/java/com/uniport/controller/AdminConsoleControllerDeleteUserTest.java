@@ -16,18 +16,17 @@ import com.uniport.repository.UserRepository;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.EducationContentService;
 import com.uniport.service.MatchingRoomService;
-import com.uniport.service.UserDeletionReferenceCleanupService;
+import com.uniport.service.UserAccountDeletionService;
 import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
 
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class AdminConsoleControllerDeleteUserTest {
 
     @Test
-    void deleteUserByAdminConsole_cleansReferencesBeforeDeletingUser() {
-        UserDeletionReferenceCleanupService cleanupService = mock(UserDeletionReferenceCleanupService.class);
+    void deleteUserByAdminConsole_deletesUserAccountById() {
+        UserAccountDeletionService userAccountDeletionService = mock(UserAccountDeletionService.class);
         UserRepository userRepository = mock(UserRepository.class);
         AdminConsoleController controller = new AdminConsoleController(
                 mock(ManagedEtfRepository.class),
@@ -42,7 +41,7 @@ class AdminConsoleControllerDeleteUserTest {
                 mock(PointShopOrderRepository.class),
                 mock(MatchingRoomMemberRepository.class),
                 mock(FriendRelationRepository.class),
-                cleanupService,
+                userAccountDeletionService,
                 userRepository,
                 mock(CompetitionService.class),
                 mock(EducationContentService.class),
@@ -51,8 +50,6 @@ class AdminConsoleControllerDeleteUserTest {
 
         controller.deleteUserByAdminConsole(467L);
 
-        InOrder order = inOrder(cleanupService, userRepository);
-        order.verify(cleanupService).cleanupUserReferences(467L);
-        order.verify(userRepository).deleteById(467L);
+        verify(userAccountDeletionService).deleteUserById(467L);
     }
 }

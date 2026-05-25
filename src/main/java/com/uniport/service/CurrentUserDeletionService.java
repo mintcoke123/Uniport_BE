@@ -2,7 +2,6 @@ package com.uniport.service;
 
 import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
-import com.uniport.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,17 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CurrentUserDeletionService {
 
-    private final UserRepository userRepository;
-    private final UserDeletionReferenceCleanupService cleanupService;
-    private final FirebaseAuthenticationService firebaseAuthenticationService;
+    private final UserAccountDeletionService userAccountDeletionService;
 
-    public CurrentUserDeletionService(
-            UserRepository userRepository,
-            UserDeletionReferenceCleanupService cleanupService,
-            FirebaseAuthenticationService firebaseAuthenticationService) {
-        this.userRepository = userRepository;
-        this.cleanupService = cleanupService;
-        this.firebaseAuthenticationService = firebaseAuthenticationService;
+    public CurrentUserDeletionService(UserAccountDeletionService userAccountDeletionService) {
+        this.userAccountDeletionService = userAccountDeletionService;
     }
 
     @Transactional
@@ -29,12 +21,6 @@ public class CurrentUserDeletionService {
             throw new ApiException("Authentication is required", HttpStatus.UNAUTHORIZED);
         }
 
-        Long userId = user.getId();
-        String firebaseUid = user.getFirebaseUid();
-        cleanupService.cleanupUserReferences(userId);
-        userRepository.delete(user);
-        if (firebaseUid != null && !firebaseUid.isBlank()) {
-            firebaseAuthenticationService.deleteFirebaseUser(firebaseUid);
-        }
+        userAccountDeletionService.deleteUser(user);
     }
 }

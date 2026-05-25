@@ -32,7 +32,7 @@ import com.uniport.repository.UserRepository;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.EducationContentService;
 import com.uniport.service.MatchingRoomService;
-import com.uniport.service.UserDeletionReferenceCleanupService;
+import com.uniport.service.UserAccountDeletionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -74,7 +74,7 @@ public class AdminConsoleController {
     private final PointShopOrderRepository pointShopOrderRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final FriendRelationRepository friendRelationRepository;
-    private final UserDeletionReferenceCleanupService cleanupService;
+    private final UserAccountDeletionService userAccountDeletionService;
     private final UserRepository userRepository;
     private final CompetitionService competitionService;
     private final EducationContentService educationContentService;
@@ -93,7 +93,7 @@ public class AdminConsoleController {
             PointShopOrderRepository pointShopOrderRepository,
             MatchingRoomMemberRepository matchingRoomMemberRepository,
             FriendRelationRepository friendRelationRepository,
-            UserDeletionReferenceCleanupService cleanupService,
+            UserAccountDeletionService userAccountDeletionService,
             UserRepository userRepository,
             CompetitionService competitionService,
             EducationContentService educationContentService,
@@ -111,7 +111,7 @@ public class AdminConsoleController {
         this.pointShopOrderRepository = pointShopOrderRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.friendRelationRepository = friendRelationRepository;
-        this.cleanupService = cleanupService;
+        this.userAccountDeletionService = userAccountDeletionService;
         this.userRepository = userRepository;
         this.competitionService = competitionService;
         this.educationContentService = educationContentService;
@@ -323,8 +323,7 @@ public class AdminConsoleController {
     @Transactional
     @DeleteMapping("/users/{id}")
     public ResponseEntity<Map<String, Object>> deleteUserByAdminConsole(@PathVariable Long id) {
-        cleanupService.cleanupUserReferences(id);
-        userRepository.deleteById(id);
+        userAccountDeletionService.deleteUserById(id);
         return ResponseEntity.ok(Map.of("success", true));
     }
 

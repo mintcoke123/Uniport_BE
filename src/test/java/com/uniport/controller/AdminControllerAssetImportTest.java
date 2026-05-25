@@ -9,21 +9,19 @@ import com.uniport.service.ChatService;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
-import com.uniport.service.UserDeletionReferenceCleanupService;
+import com.uniport.service.UserAccountDeletionService;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
 import com.uniport.service.importer.AssetMasterImportService;
 import com.uniport.service.importer.ImportResult;
 import com.uniport.websocket.PriceBroadcaster;
 import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -55,16 +53,17 @@ class AdminControllerAssetImportTest {
     }
 
     @Test
-    void deleteUser_cleansReferencesBeforeDeletingUser() {
+    void deleteUser_deletesTargetUserAccount() {
         AuthService authService = mock(AuthService.class);
         UserRepository userRepository = mock(UserRepository.class);
-        UserDeletionReferenceCleanupService cleanupService = mock(UserDeletionReferenceCleanupService.class);
+        UserAccountDeletionService userAccountDeletionService = mock(UserAccountDeletionService.class);
+        User target = User.builder().id(467L).role("user").firebaseUid("firebase-467").build();
         AdminController controller = new AdminController(
                 authService,
                 userRepository,
                 mock(MatchingRoomRepository.class),
                 mock(MatchingRoomMemberRepository.class),
-                cleanupService,
+                userAccountDeletionService,
                 mock(MatchingRoomService.class),
                 mock(CompetitionService.class),
                 mock(RankingService.class),
@@ -77,13 +76,11 @@ class AdminControllerAssetImportTest {
         when(authService.getUserFromToken("Bearer admin"))
                 .thenReturn(User.builder().id(1L).role("admin").build());
         when(userRepository.findById(467L))
-                .thenReturn(java.util.Optional.of(User.builder().id(467L).role("user").build()));
+                .thenReturn(java.util.Optional.of(target));
 
         controller.deleteUser("Bearer admin", 467L);
 
-        InOrder order = inOrder(cleanupService, userRepository);
-        order.verify(cleanupService).cleanupUserReferences(467L);
-        order.verify(userRepository).deleteById(467L);
+        verify(userAccountDeletionService).deleteUser(target);
     }
 
     private AdminController newController(AuthService authService,
@@ -93,7 +90,7 @@ class AdminControllerAssetImportTest {
                 mock(UserRepository.class),
                 mock(MatchingRoomRepository.class),
                 mock(MatchingRoomMemberRepository.class),
-                mock(UserDeletionReferenceCleanupService.class),
+                mock(UserAccountDeletionService.class),
                 mock(MatchingRoomService.class),
                 mock(CompetitionService.class),
                 mock(RankingService.class),

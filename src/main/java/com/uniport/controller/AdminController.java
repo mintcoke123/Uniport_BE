@@ -13,7 +13,7 @@ import com.uniport.service.ChatService;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
-import com.uniport.service.UserDeletionReferenceCleanupService;
+import com.uniport.service.UserAccountDeletionService;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
 import com.uniport.service.importer.AssetMasterImportService;
@@ -50,7 +50,7 @@ public class AdminController {
     private final UserRepository userRepository;
     private final MatchingRoomRepository matchingRoomRepository;
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
-    private final UserDeletionReferenceCleanupService cleanupService;
+    private final UserAccountDeletionService userAccountDeletionService;
     private final MatchingRoomService matchingRoomService;
     private final CompetitionService competitionService;
     private final RankingService rankingService;
@@ -63,7 +63,7 @@ public class AdminController {
     public AdminController(AuthService authService, UserRepository userRepository,
                            MatchingRoomRepository matchingRoomRepository,
                            MatchingRoomMemberRepository matchingRoomMemberRepository,
-                           UserDeletionReferenceCleanupService cleanupService,
+                           UserAccountDeletionService userAccountDeletionService,
                            MatchingRoomService matchingRoomService, CompetitionService competitionService, RankingService rankingService, ChatService chatService, VoteService voteService,
                            PriceBroadcaster priceBroadcaster,
                            GenerateGroupInvestmentFeedbackReportUseCase feedbackReportUseCase,
@@ -72,7 +72,7 @@ public class AdminController {
         this.userRepository = userRepository;
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
-        this.cleanupService = cleanupService;
+        this.userAccountDeletionService = userAccountDeletionService;
         this.matchingRoomService = matchingRoomService;
         this.competitionService = competitionService;
         this.rankingService = rankingService;
@@ -410,7 +410,7 @@ public class AdminController {
         return ResponseEntity.ok(list);
     }
 
-    /** 유저 삭제 (admin/SISU-admin). 본인·전체관리자(admin) 계정은 삭제 불가. FK 제약으로 주문·보유·매칭방멤버를 먼저 삭제. */
+    /** 유저 삭제 (admin/SISU-admin). 본인·전체관리자(admin) 계정은 삭제 불가. */
     @Transactional
     @DeleteMapping("/users/{userId}")
     public ResponseEntity<Map<String, Object>> deleteUser(
@@ -425,8 +425,7 @@ public class AdminController {
         if ("admin".equalsIgnoreCase(target.getRole())) {
             throw new ApiException("관리자 계정은 삭제할 수 없습니다.", HttpStatus.BAD_REQUEST);
         }
-        cleanupService.cleanupUserReferences(userId);
-        userRepository.deleteById(userId);
+        userAccountDeletionService.deleteUser(target);
         return ResponseEntity.ok(Map.of("success", true, "message", "Deleted"));
     }
 

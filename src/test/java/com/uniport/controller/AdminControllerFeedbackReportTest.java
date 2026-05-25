@@ -10,7 +10,7 @@ import com.uniport.service.ChatService;
 import com.uniport.service.CompetitionService;
 import com.uniport.service.MatchingRoomService;
 import com.uniport.service.RankingService;
-import com.uniport.service.UserDeletionReferenceCleanupService;
+import com.uniport.service.UserAccountDeletionService;
 import com.uniport.service.VoteService;
 import com.uniport.service.feedback.GenerateGroupInvestmentFeedbackReportUseCase;
 import com.uniport.service.importer.AssetMasterImportService;
@@ -207,7 +207,7 @@ class AdminControllerFeedbackReportTest {
                 userRepository,
                 matchingRoomRepository,
                 matchingRoomMemberRepository,
-                mock(UserDeletionReferenceCleanupService.class),
+                mock(UserAccountDeletionService.class),
                 mock(MatchingRoomService.class),
                 mock(CompetitionService.class),
                 mock(RankingService.class),
