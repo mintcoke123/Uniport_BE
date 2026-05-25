@@ -178,14 +178,15 @@ public class OnboardingService {
         if (user == null) {
             throw new ApiException("Authenticated user is required", HttpStatus.UNAUTHORIZED);
         }
-        if (hasResult(user)) {
-            OnboardingSurveyResultDTO result = onboardingResultProvider.getByCharacterName(
-                    user.getInvestmentProfileResult(),
-                    user.getInvestmentLevel(),
-                    user.getInterestSector());
-            applyCharacterProfile(user, result);
-            userRepository.save(user);
+        if (!hasResult(user)) {
+            throw new ApiException("온보딩 결과가 없습니다.", HttpStatus.BAD_REQUEST);
         }
+        OnboardingSurveyResultDTO result = onboardingResultProvider.getByCharacterName(
+                user.getInvestmentProfileResult(),
+                user.getInvestmentLevel(),
+                user.getInterestSector());
+        applyCharacterProfile(user, result);
+        userRepository.save(user);
         return OnboardingCompleteResponseDTO.builder()
                 .completed(true)
                 .noteCreated(true)

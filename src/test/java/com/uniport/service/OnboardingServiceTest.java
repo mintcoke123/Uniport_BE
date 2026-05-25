@@ -5,6 +5,7 @@ import com.uniport.dto.OnboardingSurveyResultDTO;
 import com.uniport.dto.OnboardingSurveySubmitRequestDTO;
 import com.uniport.entity.LearningUserStateEntity;
 import com.uniport.entity.User;
+import com.uniport.exception.ApiException;
 import com.uniport.repository.LearningUserStateRepository;
 import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.UserRepository;
@@ -13,11 +14,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -147,5 +150,29 @@ class OnboardingServiceTest {
                 .build();
 
         assertTrue(onboardingService.getSurveyFlow(user).isHasResult());
+    }
+
+    @Test
+    void complete_rejectsUserWithoutSurveyResult() {
+        OnboardingService onboardingService = new OnboardingService(
+                new OnboardingQuestionProvider(),
+                OnboardingResultProviderTestFactory.create(),
+                userRepository,
+                userMyPagePreferenceRepository,
+                learningUserStateRepository,
+                new ProfileImageUrlService());
+
+        User user = User.builder()
+                .id(4L)
+                .studentId("20240004")
+                .nickname("fresh-user")
+                .build();
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> onboardingService.complete(user));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("온보딩 결과가 없습니다.", exception.getMessage());
     }
 }
