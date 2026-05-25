@@ -77,6 +77,38 @@ class PrivacyPolicyPageControllerTest {
                 .andExpect(content().string(containsString("Uniport 개인정보처리방침")));
     }
 
+    @Test
+    void accountDeletionPage_allowsAnonymousAccessAndShowsDeletionRequestContent() throws Exception {
+        mockMvc.perform(get("/account-deletion"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("Uniport 계정 및 데이터 삭제 요청")))
+                .andExpect(content().string(containsString("앱에서 계정 삭제하기")))
+                .andExpect(content().string(containsString("이메일로 삭제 요청하기")))
+                .andExpect(content().string(containsString("kwakkun2002@gmail.com")))
+                .andExpect(content().string(containsString("삭제되는 데이터")))
+                .andExpect(content().string(containsString("보관될 수 있는 데이터")))
+                .andExpect(content().string(containsString("https://uniportbe-production.up.railway.app/privacy")));
+    }
+
+    @Test
+    void accountDeletionAliases_allowAnonymousAccess() throws Exception {
+        mockMvc.perform(get("/account-deletion.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("Uniport 계정 및 데이터 삭제 요청")));
+
+        mockMvc.perform(get("/delete-account"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("Uniport 계정 및 데이터 삭제 요청")));
+
+        mockMvc.perform(get("/delete-account.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("Uniport 계정 및 데이터 삭제 요청")));
+    }
+
     @Configuration
     @EnableWebMvc
     static class TestConfig {

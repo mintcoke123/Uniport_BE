@@ -124,6 +124,7 @@ public class PrivacyPolicyPageController {
 
                 <h2 id="account-deletion">계정 삭제 안내</h2>
                 <p>사용자는 Uniport 앱에서 직접 계정을 삭제할 수 있습니다.</p>
+                <p>계정 및 관련 데이터 삭제 요청 전용 안내 페이지: <a href="/account-deletion">https://uniportbe-production.up.railway.app/account-deletion</a></p>
                 <p>계정 삭제 방법:</p>
                 <ol>
                   <li>Uniport 앱을 실행합니다.</li>
@@ -157,10 +158,114 @@ public class PrivacyPolicyPageController {
             </html>
             """;
 
+    private static final String ACCOUNT_DELETION_HTML = """
+            <!doctype html>
+            <html lang="ko">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Uniport 계정 및 데이터 삭제 요청</title>
+              <style>
+                :root {
+                  color-scheme: light;
+                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                  color: #17202a;
+                  background: #f6f8fb;
+                }
+                body {
+                  margin: 0;
+                  padding: 40px 20px;
+                }
+                main {
+                  max-width: 820px;
+                  margin: 0 auto;
+                  background: #ffffff;
+                  border: 1px solid #d8dee8;
+                  border-radius: 8px;
+                  padding: 32px;
+                }
+                h1 {
+                  margin: 0 0 12px;
+                  font-size: 28px;
+                }
+                h2 {
+                  margin: 32px 0 12px;
+                  font-size: 20px;
+                }
+                p, li {
+                  line-height: 1.65;
+                }
+                ul, ol {
+                  padding-left: 22px;
+                }
+                a {
+                  color: #0057b8;
+                }
+                .effective-date {
+                  margin: 0 0 24px;
+                  color: #5b6675;
+                }
+                @media (max-width: 520px) {
+                  main {
+                    padding: 24px;
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <main>
+                <h1>Uniport 계정 및 데이터 삭제 요청</h1>
+                <p class="effective-date">시행일: 2026년 5월 20일</p>
+                <p>Uniport 사용자는 앱 안에서 직접 계정 및 계정과 연결된 주요 데이터를 삭제할 수 있습니다. 앱에 접근할 수 없는 경우 아래 이메일로 삭제를 요청할 수 있습니다.</p>
+
+                <h2>앱에서 계정 삭제하기</h2>
+                <ol>
+                  <li>Uniport 앱을 실행합니다.</li>
+                  <li>삭제하려는 계정으로 로그인합니다.</li>
+                  <li>마이페이지로 이동합니다.</li>
+                  <li>설정을 엽니다.</li>
+                  <li>회원 탈퇴 또는 계정 삭제를 선택합니다.</li>
+                  <li>안내를 확인한 뒤 계정 삭제를 완료합니다.</li>
+                </ol>
+
+                <h2>이메일로 삭제 요청하기</h2>
+                <p>앱에 접근할 수 없거나 앱에서 삭제가 완료되지 않는 경우, 아래 이메일로 계정 및 관련 데이터 삭제를 요청할 수 있습니다.</p>
+                <p>요청 이메일: <a href="mailto:kwakkun2002@gmail.com?subject=Uniport%20account%20and%20data%20deletion%20request">kwakkun2002@gmail.com</a></p>
+                <p>요청 시 계정 확인을 위해 Uniport에 가입한 이메일 주소 또는 로그인 제공자 정보를 함께 적어 주세요. 비밀번호, 인증 토큰, 신분증 사본 등 민감정보는 보내지 마세요.</p>
+
+                <h2>삭제되는 데이터</h2>
+                <ul>
+                  <li>계정 정보, Firebase UID, 이메일, 닉네임, 프로필 정보</li>
+                  <li>온보딩 설문 답변, 투자 성향 결과, 학습 진도, 퀴즈 답변</li>
+                  <li>모의투자 보유 종목, 주문 내역, 총자산, 손익 정보</li>
+                  <li>친구 관계, 초대 코드, 그룹 참여 정보, 채팅 및 커뮤니티 관련 데이터</li>
+                  <li>포인트, 경험치, 포인트샵 교환 내역, 푸시 알림 토큰</li>
+                </ul>
+
+                <h2>보관될 수 있는 데이터</h2>
+                <p>서비스 무결성, 보안, 부정 이용 방지, 분쟁 대응 또는 법적 의무 이행을 위해 필요한 일부 기록은 제한된 기간 동안 보관되거나 사용자 식별이 어렵도록 처리될 수 있습니다.</p>
+
+                <h2>처리 기간</h2>
+                <p>앱에서 계정 삭제를 완료하면 계정과 연결된 주요 데이터 삭제 또는 익명화가 진행됩니다. 이메일 요청은 계정 확인 후 합리적인 기간 안에 처리합니다.</p>
+
+                <h2>개인정보처리방침</h2>
+                <p>전체 개인정보처리방침은 <a href="/privacy">https://uniportbe-production.up.railway.app/privacy</a>에서 확인할 수 있습니다.</p>
+              </main>
+            </body>
+            </html>
+            """;
+
     @GetMapping(value = {"/privacy", "/privacy.html"}, produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> getPrivacyPolicyPage() {
         return ResponseEntity.ok()
                 .contentType(TEXT_HTML_UTF8)
                 .body(PRIVACY_POLICY_HTML);
+    }
+
+    @GetMapping(value = {"/account-deletion", "/account-deletion.html", "/delete-account", "/delete-account.html"}, produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> getAccountDeletionPage() {
+        return ResponseEntity.ok()
+                .contentType(TEXT_HTML_UTF8)
+                .body(ACCOUNT_DELETION_HTML);
     }
 }
