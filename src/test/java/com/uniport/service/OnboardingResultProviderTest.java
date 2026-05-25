@@ -1,7 +1,10 @@
 package com.uniport.service;
 
 import com.uniport.dto.OnboardingSurveyResultDTO;
+import com.uniport.dto.SurveyResultSectionDTO;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -44,5 +47,21 @@ class OnboardingResultProviderTest {
                 "방산");
 
         assertEquals("균형잡힌 판다형", result.getCharacterName());
+    }
+
+    @Test
+    void getByCharacterName_returnsFigmaBlueTextHighlightsForStrategyItems() {
+        OnboardingSurveyResultDTO result = onboardingResultProvider.getByCharacterName(
+                "균형잡힌 판다",
+                "기본",
+                "방산");
+
+        SurveyResultSectionDTO strategySection = result.getFeatures().stream()
+                .filter(section -> "추천 전략".equals(section.getTitle()))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(List.of("코어 70/위성 30"), strategySection.getItems().get(0).getNameHighlights());
+        assertEquals(List.of("포트폴리오 점검 기준"), strategySection.getItems().get(3).getNameHighlights());
     }
 }

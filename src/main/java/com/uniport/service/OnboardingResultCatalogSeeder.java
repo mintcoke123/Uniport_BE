@@ -68,6 +68,7 @@ public class OnboardingResultCatalogSeeder implements ApplicationRunner {
         catalog.setPrinciplesJson(writeRequiredList(item.principles(), "principles", item.characterId()));
         catalog.setPrincipleDescriptionsJson(writeRequiredList(item.principleDescriptions(), "principleDescriptions", item.characterId()));
         catalog.setStrategiesJson(writeRequiredList(item.strategies(), "strategies", item.characterId()));
+        catalog.setStrategyHighlightsJson(writeRequiredHighlights(item.strategies(), item.strategyHighlights(), item.characterId()));
         catalog.setCharacterImageResource(required(item.characterImageResource(), "characterImageResource", item.characterId()));
         catalog.setCharacterAssetUrl(required(item.characterAssetUrl(), "characterAssetUrl", item.characterId()));
         catalog.setActive(Boolean.TRUE);
@@ -81,7 +82,28 @@ public class OnboardingResultCatalogSeeder implements ApplicationRunner {
         return writeList(values, fieldName, characterId);
     }
 
-    private String writeList(List<String> values, String fieldName, int characterId) {
+    private String writeRequiredHighlights(List<String> strategies, List<List<String>> highlights, int characterId) {
+        if (strategies == null || strategies.isEmpty()) {
+            throw new IllegalStateException("Missing onboarding result catalog field strategies for character " + characterId);
+        }
+        if (highlights == null || highlights.size() != strategies.size()) {
+            throw new IllegalStateException(
+                    "Missing onboarding result catalog field strategyHighlights for character " + characterId);
+        }
+        for (int index = 0; index < highlights.size(); index++) {
+            List<String> itemHighlights = highlights.get(index);
+            if (itemHighlights == null || itemHighlights.isEmpty()) {
+                throw new IllegalStateException(
+                        "Missing onboarding result catalog field strategyHighlights[" + index + "] for character " + characterId);
+            }
+            for (String highlight : itemHighlights) {
+                validateHighlight(strategies.get(index), highlight, characterId);
+            }
+        }
+        return writeList(highlights, "strategyHighlights", characterId);
+    }
+
+    private String writeList(Object values, String fieldName, int characterId) {
         try {
             return objectMapper.writeValueAsString(values == null ? List.of() : values);
         } catch (JsonProcessingException exception) {
@@ -94,6 +116,16 @@ public class OnboardingResultCatalogSeeder implements ApplicationRunner {
             throw new IllegalStateException("Missing onboarding result catalog field " + fieldName + " for character " + characterId);
         }
         return value.trim();
+    }
+
+    private void validateHighlight(String strategy, String highlight, int characterId) {
+        if (highlight == null || highlight.isBlank()) {
+            throw new IllegalStateException("Blank onboarding result catalog strategyHighlight for character " + characterId);
+        }
+        if (strategy == null || !strategy.contains(highlight.trim())) {
+            throw new IllegalStateException(
+                    "Onboarding result catalog strategyHighlight is not contained in strategy for character " + characterId);
+        }
     }
 
     private record CatalogSeedItem(
@@ -111,6 +143,7 @@ public class OnboardingResultCatalogSeeder implements ApplicationRunner {
             List<String> principles,
             List<String> principleDescriptions,
             List<String> strategies,
+            List<List<String>> strategyHighlights,
             String characterImageResource,
             String characterAssetUrl
     ) {

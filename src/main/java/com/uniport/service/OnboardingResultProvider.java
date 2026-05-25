@@ -25,6 +25,7 @@ public class OnboardingResultProvider {
     private static final String STRATEGY_SECTION_TITLE = "추천 전략";
     private static final String PRINCIPLES_SECTION_TITLE = "나만의 투자원칙";
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
+    private static final TypeReference<List<List<String>>> NESTED_STRING_LIST_TYPE = new TypeReference<>() {};
 
     private final Map<Integer, CharacterProfile> characters = createCharacters();
     private final OnboardingResultCatalogRepository catalogRepository;
@@ -156,6 +157,10 @@ public class OnboardingResultProvider {
                 "principle_descriptions_json",
                 catalog.getCharacterId());
         List<String> strategies = readRequiredStringList(catalog.getStrategiesJson(), "strategies_json", catalog.getCharacterId());
+        List<List<String>> strategyHighlights = readNestedStringList(
+                catalog.getStrategyHighlightsJson(),
+                "strategy_highlights_json",
+                catalog.getCharacterId());
 
         return OnboardingSurveyResultDTO.builder()
                 .id((long) catalog.getCharacterId())
@@ -179,7 +184,7 @@ public class OnboardingResultProvider {
                 .personalPrinciples(principles)
                 .features(List.of(
                         section(catalog.getAnalysisTitle(), traits, traitDescriptions),
-                        section(STRATEGY_SECTION_TITLE, strategies)
+                        strategySection(STRATEGY_SECTION_TITLE, strategies, strategyHighlights)
                 ))
                 .guides(List.of(section(PRINCIPLES_SECTION_TITLE, principles, principleDescriptions)))
                 .build();
@@ -193,6 +198,26 @@ public class OnboardingResultProvider {
                                 .name(item)
                                 .description("")
                                 .build())
+                        .toList())
+                .build();
+    }
+
+    private SurveyResultSectionDTO strategySection(String title, List<String> items, List<List<String>> itemNameHighlights) {
+        if (!itemNameHighlights.isEmpty() && items.size() != itemNameHighlights.size()) {
+            throw new IllegalStateException("Onboarding result catalog section has mismatched item and highlight counts: " + title);
+        }
+        return SurveyResultSectionDTO.builder()
+                .title(title)
+                .items(IntStream.range(0, items.size())
+                        .mapToObj(index -> {
+                            String item = items.get(index);
+                            return SurveyResultDetailItemDTO.builder()
+                                    .name(item)
+                                    .description("")
+                                    .nameHighlights(validatedHighlights(item, itemNameHighlights, index, title))
+                                    .descriptionHighlights(List.of())
+                                    .build();
+                        })
                         .toList())
                 .build();
     }
@@ -213,6 +238,31 @@ public class OnboardingResultProvider {
                         })
                         .toList())
                 .build();
+    }
+
+    private List<String> validatedHighlights(String item, List<List<String>> itemHighlights, int index, String title) {
+        if (itemHighlights.isEmpty()) {
+            return List.of();
+        }
+        List<String> highlights = itemHighlights.get(index);
+        if (highlights == null || highlights.isEmpty()) {
+            return List.of();
+        }
+        return highlights.stream()
+                .map(highlight -> requiredHighlight(item, highlight, title))
+                .toList();
+    }
+
+    private String requiredHighlight(String item, String highlight, String title) {
+        if (highlight == null || highlight.isBlank()) {
+            throw new IllegalStateException("Onboarding result catalog section has blank highlight: " + title);
+        }
+        String trimmedHighlight = highlight.trim();
+        if (!item.contains(trimmedHighlight)) {
+            throw new IllegalStateException(
+                    "Onboarding result catalog highlight is not contained in item: " + title + " / " + trimmedHighlight);
+        }
+        return trimmedHighlight;
     }
 
     private OnboardingResultCatalog loadCatalog(int characterId) {
@@ -247,6 +297,19 @@ public class OnboardingResultProvider {
         }
         try {
             return objectMapper.readValue(json, STRING_LIST_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException(
+                    "Failed to parse onboarding result catalog field " + fieldName + " for character " + characterId,
+                    exception);
+        }
+    }
+
+    private List<List<String>> readNestedStringList(String json, String fieldName, int characterId) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, NESTED_STRING_LIST_TYPE);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException(
                     "Failed to parse onboarding result catalog field " + fieldName + " for character " + characterId,

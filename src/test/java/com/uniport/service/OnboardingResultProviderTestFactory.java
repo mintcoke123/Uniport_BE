@@ -62,13 +62,14 @@ final class OnboardingResultProviderTestFactory {
                 .principlesJson(writeList(objectMapper, item.principles()))
                 .principleDescriptionsJson(writeList(objectMapper, item.principleDescriptions()))
                 .strategiesJson(writeList(objectMapper, item.strategies()))
+                .strategyHighlightsJson(writeList(objectMapper, item.strategyHighlights()))
                 .characterImageResource(item.characterImageResource())
                 .characterAssetUrl(item.characterAssetUrl())
                 .active(Boolean.TRUE)
                 .build();
     }
 
-    private static String writeList(ObjectMapper objectMapper, List<String> values) {
+    private static String writeList(ObjectMapper objectMapper, Object values) {
         try {
             return objectMapper.writeValueAsString(values == null ? List.of() : values);
         } catch (IOException exception) {
@@ -91,6 +92,7 @@ final class OnboardingResultProviderTestFactory {
             List<String> principles,
             List<String> principleDescriptions,
             List<String> strategies,
+            List<List<String>> strategyHighlights,
             String characterImageResource,
             String characterAssetUrl
     ) {

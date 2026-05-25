@@ -39,6 +39,12 @@
       "분기 또는 반기 단위로만 리밸런싱하며 일간 변동 대응은 최소화한다",
       "섹터 투자에 관심이 있어도 전체 자산의 일부만 위성 포지션으로 가져간다"
     ],
+    "strategyHighlights": [
+      ["인덱스 ETF, 대형 우량주, 배당주 중심"],
+      ["적립식 투자 비중을 높여"],
+      ["일간 변동 대응은 최소화"],
+      ["전체 자산의 일부만 위성 포지션"]
+    ],
     "characterImageResource": "onboarding_result_turtle_character",
     "characterAssetUrl": "https://www.figma.com/api/mcp/asset/c699de18-134d-48e6-85b1-b6e203547e63"
   },
@@ -81,6 +87,12 @@
       "코어는 인덱스 ETF, 대형 우량주, 배당주로 구성한다",
       "위성은 관심 섹터나 성장주로 채운다",
       "월 1회 또는 분기 1회 포트폴리오 점검 기준을 정한다"
+    ],
+    "strategyHighlights": [
+      ["코어 70/위성 30"],
+      ["인덱스 ETF, 대형 우량주, 배당주"],
+      ["위성은 관심 섹터나 성장주"],
+      ["포트폴리오 점검 기준"]
     ],
     "characterImageResource": "onboarding_result_panda_character",
     "characterAssetUrl": "https://www.figma.com/api/mcp/asset/160322eb-0eb5-4b76-bdea-2a137d4c698a"
@@ -125,6 +137,12 @@
       "포지션 크기를 작게 나눠 여러 번 진입한다",
       "매매일지를 통해 규칙 준수 여부를 복기한다"
     ],
+    "strategyHighlights": [
+      ["테마 스윙 투자", "이벤트 드리븐 전략"],
+      ["진입과 청산 기준"],
+      ["작게 나눠 여러 번 진입"],
+      ["규칙 준수 여부"]
+    ],
     "characterImageResource": "onboarding_result_cheetah_character",
     "characterAssetUrl": "https://www.figma.com/api/mcp/asset/14407409-7409-47e5-8211-3b88a6a8e0d6"
   },
@@ -165,6 +183,12 @@
       "벨류에이션이 매력적인 구간에서 분할 매수한다",
       "실적 발표, 가이던스, 산업 규제 변화를 핵심 체크 포인트로 관리한다",
       "반증 조건을 미리 정하고, 틀렸을 때 나오는 기준을 만든다"
+    ],
+    "strategyHighlights": [
+      ["리서치 노트"],
+      ["분할 매수"],
+      ["실적 발표, 가이던스, 산업 규제 변화를 핵심 체크 포인트"],
+      ["틀렸을 때 나오는 기준"]
     ],
     "characterImageResource": "onboarding_result_owl_character",
     "characterAssetUrl": "https://www.figma.com/api/mcp/asset/d0d43daf-116a-4386-ab03-ed792fa5fd0e"
@@ -209,6 +233,12 @@
       "대표 종목과 보조 종목으로 나눠 비중을 배분한다",
       "실적 발표, 가이던스, 시장 점유율 변화를 체크 포인트로 둔다"
     ],
+    "strategyHighlights": [
+      ["매출 성장률과 밸류에이션"],
+      ["실제 실적과 지표로 연결"],
+      ["비중을 배분"],
+      ["실적 발표, 가이던스, 시장 점유율 변화"]
+    ],
     "characterImageResource": "onboarding_result_dolphin_character",
     "characterAssetUrl": "https://www.figma.com/api/mcp/asset/384b673d-6cc6-49e9-88a3-1f7ce359da0a"
   },
@@ -251,6 +281,12 @@
       "‘하루 손실 한도’와 ‘연속 손실 시 매매 중단 규칙’을 만든다",
       "매매 전 시나리오를 짧게라도 적는다",
       "장중 소음에 휘둘리지 않도록 사용하는 지표와 시간 프레임을 고정한다"
+    ],
+    "strategyHighlights": [
+      ["진입 기준, 손절 기준, 익절 기준"],
+      ["‘하루 손실 한도’", "‘연속 손실 시 매매 중단 규칙’"],
+      ["시나리오"],
+      ["사용하는 지표와 시간 프레임을 고정"]
     ],
     "characterImageResource": "onboarding_result_surfer_character",
     "characterAssetUrl": "https://www.figma.com/api/mcp/asset/6fb3cb83-8dd6-47f8-9bbf-a5d6cda65b2f"
@@ -295,6 +331,12 @@
       "장기 목표를 3년, 5년, 10년 단위로 수치화한다",
       "배당금이나 추가 현금을 재투자하는 구조를 우선 고려한다"
     ],
+    "strategyHighlights": [
+      ["월간 자동매수와 정기 리밸런싱"],
+      ["ETF, 우량주, 배당주 중심"],
+      ["수치화"],
+      ["재투자"]
+    ],
     "characterImageResource": "onboarding_result_farmer_character",
     "characterAssetUrl": "https://www.figma.com/api/mcp/asset/35b19882-0a8c-4fc4-88a5-3877823153e7"
   },
@@ -337,6 +379,12 @@
       "기업 리서치 노트에 투자 가설과 반증 조건을 구조화한다",
       "포트폴리오를 늘릴 것, 유지할 것, 줄일 것, 버릴 것으로 재분류한다",
       "산업 변화와 기업 경쟁력 변화를 핵심 판단 기준으로 둔다"
+    ],
+    "strategyHighlights": [
+      ["핵심 키워드, 대표 기업, 체크 지표"],
+      ["투자 가설과 반증 조건을 구조화"],
+      ["재분류"],
+      ["산업 변화와 기업 경쟁력 변화"]
     ],
     "characterImageResource": "onboarding_result_researcher_character",
     "characterAssetUrl": "https://www.figma.com/api/mcp/asset/b47fa882-f9fa-4cbf-8974-bbf16ad6d4d0"
