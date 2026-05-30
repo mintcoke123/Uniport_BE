@@ -13,6 +13,7 @@ import com.uniport.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +57,7 @@ public class MatchingRoomService {
     private final ProfileImageUrlService profileImageUrlService;
     private final CompetitionService competitionService;
     private final CompetitionParticipationService competitionParticipationService;
+    private final JdbcTemplate jdbcTemplate;
     private final Map<Long, List<Long>> pendingInviteUserIdsByRoomId = new ConcurrentHashMap<>();
 
     public MatchingRoomService(MatchingRoomRepository matchingRoomRepository,
@@ -67,7 +69,8 @@ public class MatchingRoomService {
                                UserMyPagePreferenceRepository userMyPagePreferenceRepository,
                                ProfileImageUrlService profileImageUrlService,
                                CompetitionService competitionService,
-                               CompetitionParticipationService competitionParticipationService) {
+                               CompetitionParticipationService competitionParticipationService,
+                               JdbcTemplate jdbcTemplate) {
         this.matchingRoomRepository = matchingRoomRepository;
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.userRepository = userRepository;
@@ -78,6 +81,7 @@ public class MatchingRoomService {
         this.profileImageUrlService = profileImageUrlService;
         this.competitionService = competitionService;
         this.competitionParticipationService = competitionParticipationService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public void assertTeamRoom(Long groupId) {
@@ -824,7 +828,14 @@ public class MatchingRoomService {
                 room.getMarketType(),
                 room.getCompetitionId());
         int memberCount = (int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
-        List<Map<String, Object>> membersList = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId()).stream()
+        List<MatchingRoomMember> members;
+        try {
+            members = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());
+        } catch (RuntimeException ex) {
+            logMatchingRoomMemberDiagnostics(room.getId(), ex);
+            throw ex;
+        }
+        List<Map<String, Object>> membersList = members.stream()
                 .map(m -> {
                     User user = m.getUser();
                     String uid = user.getId() != null ? user.getId().toString() : "";
@@ -858,6 +869,47 @@ public class MatchingRoomService {
         map.put("inviteCode", room.getInviteCode());
         map.put("createdAt", room.getCreatedAt().toString());
         return map;
+    }
+
+    private void logMatchingRoomMemberDiagnostics(Long roomId, RuntimeException ex) {
+        try {
+            List<Map<String, Object>> memberRows = jdbcTemplate.queryForList(
+                    """
+                            select id, matching_room_id, user_id, joined_at, last_read_at
+                            from matching_room_members
+                            where matching_room_id = ?
+                            order by id asc
+                            """,
+                    roomId
+            );
+            List<Long> userIds = memberRows.stream()
+                    .map(row -> row.get("user_id"))
+                    .filter(Objects::nonNull)
+                    .map(value -> ((Number) value).longValue())
+                    .distinct()
+                    .toList();
+            List<Map<String, Object>> userRows = userIds.isEmpty()
+                    ? List.of()
+                    : jdbcTemplate.queryForList(
+                    """
+                            select id, email, firebase_uid, student_id, nickname, username, role
+                            from users
+                            where id in (%s)
+                            order by id asc
+                            """.formatted(userIds.stream().map(id -> "?").collect(Collectors.joining(", "))),
+                    userIds.toArray()
+            );
+            log.error("[matching-room] member fetch failed roomId={} memberRows={} userRows={}",
+                    roomId,
+                    memberRows,
+                    userRows,
+                    ex);
+        } catch (RuntimeException diagnosticsEx) {
+            log.error("[matching-room] member fetch failed and diagnostics collection failed roomId={} diagnosticsException={}",
+                    roomId,
+                    diagnosticsEx.getMessage(),
+                    ex);
+        }
     }
 
     private Map<String, Object> toMapWithJoined(MatchingRoom room, boolean isJoined) {
