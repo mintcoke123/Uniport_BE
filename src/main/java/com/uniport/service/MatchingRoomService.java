@@ -156,6 +156,15 @@ public class MatchingRoomService {
         String resolvedMatchType = normalizeMatchType(matchType);
         String resolvedMarketType = normalizeMarketType(marketType);
         Long resolvedCompetitionId = validateTournamentMatchingContext(competitionId, creator, resolvedMatchType, cap);
+        log.info("[matching-room] create requested name={} visibility={} capacity={} matchType={} marketType={} competitionId={} creatorUserId={} inviteeCount={}",
+                name,
+                vis,
+                cap,
+                resolvedMatchType,
+                resolvedMarketType,
+                resolvedCompetitionId,
+                creator != null ? creator.getId() : null,
+                inviteeUserIds != null ? inviteeUserIds.size() : 0);
         if (findActiveTournamentRoom(creator, resolvedCompetitionId) != null) {
             throw new ApiException("이미 해당 대회에 참여 중인 방이 있습니다.", HttpStatus.BAD_REQUEST);
         }
@@ -183,6 +192,11 @@ public class MatchingRoomService {
         } else {
             pendingInviteUserIdsByRoomId.put(room.getId(), new ArrayList<>(sanitizedInvitees));
         }
+        log.info("[matching-room] create persisted roomId={} memberCount={} inviteCodePresent={} pendingInviteeCount={}",
+                room.getId(),
+                room.getMemberCount(),
+                room.getInviteCode() != null,
+                pendingInviteUserIdsByRoomId.getOrDefault(room.getId(), List.of()).size());
 
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
@@ -488,36 +502,53 @@ public class MatchingRoomService {
 
     public Map<String, Object> getRoomDetail(String roomId, User currentUser) {
         MatchingRoom room = findRoomByApiIdFlexible(roomId);
-        List<MatchingRoomMember> joinedMembers = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());
-        List<Long> invitedUserIds = pendingInviteUserIdsByRoomId.getOrDefault(room.getId(), List.of());
+        try {
+            List<MatchingRoomMember> joinedMembers = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());
+            List<Long> invitedUserIds = pendingInviteUserIdsByRoomId.getOrDefault(room.getId(), List.of());
+            log.info("[matching-room] getRoomDetail roomId={} currentUserId={} joinedCount={} invitedCount={} status={} matchType={} marketType={} competitionId={}",
+                    room.getId(),
+                    currentUser != null ? currentUser.getId() : null,
+                    joinedMembers.size(),
+                    invitedUserIds.size(),
+                    room.getStatus(),
+                    room.getMatchType(),
+                    room.getMarketType(),
+                    room.getCompetitionId());
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("roomId", toApiId(room.getId()));
-        body.put("name", room.getName());
-        body.put("createdAt", room.getCreatedAt().toString());
-        body.put("competitionId", room.getCompetitionId());
-        body.put("status", resolveMatchingStatus(room, joinedMembers, invitedUserIds));
-        body.put("marketType", room.getMarketType() != null ? room.getMarketType() : "KR");
-        body.put("marketLabel", marketLabel(room.getMarketType()));
-        body.put("marketDescription", marketDescription(room.getMarketType()));
-        body.put("matchType", room.getMatchType() != null ? room.getMatchType() : "RANDOM");
-        body.put("matchLabel", matchLabel(room.getMatchType()));
-        body.put("matchDescription", matchDescription(room.getMatchType()));
-        body.put("statusTitle", resolveStatusTitle(room, joinedMembers, invitedUserIds));
-        body.put("statusDescription", resolveStatusDescription(room, joinedMembers, invitedUserIds));
-        body.put("progress", buildProgress(room, joinedMembers, invitedUserIds));
-        body.put("inviteCode", room.getInviteCode());
-        body.put("memberCount", joinedMembers.size());
-        body.put("capacity", room.getCapacity());
-        body.put("members", buildMemberCards(room, currentUser, joinedMembers, invitedUserIds));
-        body.put("actions", Map.of(
-                "shareEnabled", "FRIEND".equalsIgnoreCase(room.getMatchType()),
-                "directInviteEnabled", "FRIEND".equalsIgnoreCase(room.getMatchType()),
-                "randomMatchingEnabled", "RANDOM".equalsIgnoreCase(room.getMatchType()),
-                "chatEnabled", "started".equalsIgnoreCase(room.getStatus()) || joinedMembers.size() >= room.getCapacity(),
-                "startEnabled", joinedMembers.size() >= Math.min(room.getCapacity(), 2)
-        ));
-        return body;
+            Map<String, Object> body = new HashMap<>();
+            body.put("roomId", toApiId(room.getId()));
+            body.put("name", room.getName());
+            body.put("createdAt", room.getCreatedAt().toString());
+            body.put("competitionId", room.getCompetitionId());
+            body.put("status", resolveMatchingStatus(room, joinedMembers, invitedUserIds));
+            body.put("marketType", room.getMarketType() != null ? room.getMarketType() : "KR");
+            body.put("marketLabel", marketLabel(room.getMarketType()));
+            body.put("marketDescription", marketDescription(room.getMarketType()));
+            body.put("matchType", room.getMatchType() != null ? room.getMatchType() : "RANDOM");
+            body.put("matchLabel", matchLabel(room.getMatchType()));
+            body.put("matchDescription", matchDescription(room.getMatchType()));
+            body.put("statusTitle", resolveStatusTitle(room, joinedMembers, invitedUserIds));
+            body.put("statusDescription", resolveStatusDescription(room, joinedMembers, invitedUserIds));
+            body.put("progress", buildProgress(room, joinedMembers, invitedUserIds));
+            body.put("inviteCode", room.getInviteCode());
+            body.put("memberCount", joinedMembers.size());
+            body.put("capacity", room.getCapacity());
+            body.put("members", buildMemberCards(room, currentUser, joinedMembers, invitedUserIds));
+            body.put("actions", Map.of(
+                    "shareEnabled", "FRIEND".equalsIgnoreCase(room.getMatchType()),
+                    "directInviteEnabled", "FRIEND".equalsIgnoreCase(room.getMatchType()),
+                    "randomMatchingEnabled", "RANDOM".equalsIgnoreCase(room.getMatchType()),
+                    "chatEnabled", "started".equalsIgnoreCase(room.getStatus()) || joinedMembers.size() >= room.getCapacity(),
+                    "startEnabled", joinedMembers.size() >= Math.min(room.getCapacity(), 2)
+            ));
+            return body;
+        } catch (RuntimeException ex) {
+            log.error("[matching-room] getRoomDetail failed roomId={} currentUserId={}",
+                    room.getId(),
+                    currentUser != null ? currentUser.getId() : null,
+                    ex);
+            throw ex;
+        }
     }
 
     @Transactional
@@ -786,6 +817,12 @@ public class MatchingRoomService {
     }
 
     private Map<String, Object> toMap(MatchingRoom room) {
+        log.info("[matching-room] toMap start roomId={} status={} matchType={} marketType={} competitionId={}",
+                room.getId(),
+                room.getStatus(),
+                room.getMatchType(),
+                room.getMarketType(),
+                room.getCompetitionId());
         int memberCount = (int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
         List<Map<String, Object>> membersList = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId()).stream()
                 .map(m -> {
@@ -802,6 +839,10 @@ public class MatchingRoomService {
                     );
                 })
                 .collect(Collectors.toList());
+        log.info("[matching-room] toMap members loaded roomId={} memberCount={} membersListSize={}",
+                room.getId(),
+                memberCount,
+                membersList.size());
 
         Map<String, Object> map = new HashMap<>();
         map.put("id", toApiId(room.getId()));
