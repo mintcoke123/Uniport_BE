@@ -895,10 +895,11 @@ public class MatchingRoomService {
         if (user == null || user.getId() == null) {
             return "";
         }
-        return profileImageUrlService.resolveCharacterProfileImageUrl(
+        String resolved = profileImageUrlService.resolveCharacterProfileImageUrl(
                 user,
                 userMyPagePreferenceRepository.findById(user.getId()).orElse(null)
         );
+        return resolved != null ? resolved : "";
     }
 
     private int resolveUserLevel(User user) {
