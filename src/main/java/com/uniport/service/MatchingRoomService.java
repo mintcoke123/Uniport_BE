@@ -10,6 +10,8 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
 import com.uniport.repository.UserMyPagePreferenceRepository;
 import com.uniport.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class MatchingRoomService {
+
+    private static final Logger log = LoggerFactory.getLogger(MatchingRoomService.class);
 
     private static final String ROOM_ID_PREFIX = "room-";
     private static final String VISIBILITY_PUBLIC = "PUBLIC";
@@ -347,6 +351,11 @@ public class MatchingRoomService {
     public Map<String, Object> quickMatch(String mode, String marketType, List<Long> inviteeUserIds,
                                           Long competitionId, User creator) {
         String normalizedMode = mode != null ? mode.trim().toUpperCase() : "RANDOM";
+        log.info("[matching-room] quickMatch requested mode={} marketType={} competitionId={} creatorUserId={}",
+                normalizedMode,
+                marketType,
+                competitionId,
+                creator != null ? creator.getId() : null);
         if (competitionId != null && !"RANDOM".equals(normalizedMode)) {
             throw new ApiException("대회 매칭은 랜덤 매칭만 사용할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
