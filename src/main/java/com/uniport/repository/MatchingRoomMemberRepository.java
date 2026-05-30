@@ -33,6 +33,8 @@ public interface MatchingRoomMemberRepository extends JpaRepository<MatchingRoom
     @Query("SELECT m FROM MatchingRoomMember m JOIN FETCH m.user WHERE m.matchingRoom.id = :roomId ORDER BY m.joinedAt ASC")
     List<MatchingRoomMember> findByMatchingRoomIdWithUser(@Param("roomId") Long roomId);
 
+    List<MatchingRoomMember> findByMatchingRoomIdOrderByJoinedAtAsc(Long matchingRoomId);
+
     void deleteByMatchingRoomIdAndUserId(Long matchingRoomId, Long userId);
 
     void deleteByMatchingRoom_Id(Long matchingRoomId);

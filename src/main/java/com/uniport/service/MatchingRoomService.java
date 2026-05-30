@@ -282,7 +282,7 @@ public class MatchingRoomService {
 
         if (startedNow) {
             String teamIdStr = "team-" + room.getId();
-            List<MatchingRoomMember> members = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());
+            List<MatchingRoomMember> members = loadRoomMembers(room.getId());
             for (MatchingRoomMember m : members) {
                 User joinedUser = m.getUser();
                 if (joinedUser != null) {
@@ -507,7 +507,7 @@ public class MatchingRoomService {
     public Map<String, Object> getRoomDetail(String roomId, User currentUser) {
         MatchingRoom room = findRoomByApiIdFlexible(roomId);
         try {
-            List<MatchingRoomMember> joinedMembers = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());
+            List<MatchingRoomMember> joinedMembers = loadRoomMembers(room.getId());
             List<Long> invitedUserIds = pendingInviteUserIdsByRoomId.getOrDefault(room.getId(), List.of());
             log.info("[matching-room] getRoomDetail roomId={} currentUserId={} joinedCount={} invitedCount={} status={} matchType={} marketType={} competitionId={}",
                     room.getId(),
@@ -626,7 +626,7 @@ public class MatchingRoomService {
 
         User host = userRepository.findById(hostUser.getId())
                 .orElseThrow(() -> new ApiException("방장을 찾을 수 없습니다.", HttpStatus.BAD_REQUEST));
-        List<MatchingRoomMember> currentMembers = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());
+        List<MatchingRoomMember> currentMembers = loadRoomMembers(room.getId());
         Set<Long> currentMemberIds = currentMembers.stream()
                 .map(MatchingRoomMember::getUser)
                 .map(User::getId)
@@ -669,7 +669,7 @@ public class MatchingRoomService {
     }
 
     private User findRoomHost(MatchingRoom room) {
-        return matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId()).stream()
+        return loadRoomMembers(room.getId()).stream()
                 .findFirst()
                 .map(MatchingRoomMember::getUser)
                 .orElseThrow(() -> new ApiException("방장을 찾을 수 없습니다.", HttpStatus.BAD_REQUEST));
@@ -820,6 +820,39 @@ public class MatchingRoomService {
         }
     }
 
+    private List<MatchingRoomMember> loadRoomMembers(Long roomId) {
+        try {
+            List<MatchingRoomMember> members = matchingRoomMemberRepository.findByMatchingRoomIdOrderByJoinedAtAsc(roomId);
+            List<Long> userIds = members.stream()
+                    .map(MatchingRoomMember::getUser)
+                    .filter(Objects::nonNull)
+                    .map(User::getId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+            if (userIds.isEmpty()) {
+                return members;
+            }
+
+            Map<Long, User> usersById = userRepository.findAllById(userIds).stream()
+                    .collect(Collectors.toMap(User::getId, user -> user));
+            for (MatchingRoomMember member : members) {
+                User memberUser = member.getUser();
+                if (memberUser == null || memberUser.getId() == null) {
+                    continue;
+                }
+                User resolvedUser = usersById.get(memberUser.getId());
+                if (resolvedUser != null) {
+                    member.setUser(resolvedUser);
+                }
+            }
+            return members;
+        } catch (RuntimeException ex) {
+            logMatchingRoomMemberDiagnostics(roomId, ex);
+            throw ex;
+        }
+    }
+
     private Map<String, Object> toMap(MatchingRoom room) {
         log.info("[matching-room] toMap start roomId={} status={} matchType={} marketType={} competitionId={}",
                 room.getId(),
@@ -828,13 +861,7 @@ public class MatchingRoomService {
                 room.getMarketType(),
                 room.getCompetitionId());
         int memberCount = (int) matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
-        List<MatchingRoomMember> members;
-        try {
-            members = matchingRoomMemberRepository.findByMatchingRoomIdWithUser(room.getId());
-        } catch (RuntimeException ex) {
-            logMatchingRoomMemberDiagnostics(room.getId(), ex);
-            throw ex;
-        }
+        List<MatchingRoomMember> members = loadRoomMembers(room.getId());
         List<Map<String, Object>> membersList = members.stream()
                 .map(m -> {
                     User user = m.getUser();
