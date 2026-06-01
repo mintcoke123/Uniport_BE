@@ -52,6 +52,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/favicon.ico",
+                                "/app-ads.txt",
                                 "/beta",
                                 "/beta.html",
                                 "/beta/android",
