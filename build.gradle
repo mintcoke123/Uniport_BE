@@ -28,6 +28,8 @@ dependencies {
 	implementation 'com.google.firebase:firebase-admin:9.8.0'
 
 	implementation 'com.fasterxml.jackson.core:jackson-databind'
+	implementation 'org.jsoup:jsoup:1.18.3'
+	implementation 'com.microsoft.playwright:playwright:1.48.0'
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
@@ -52,4 +54,12 @@ tasks.named('test') {
 
 tasks.named('bootRun') {
 	jvmArgs = ['-Dfile.encoding=UTF-8']
+}
+
+tasks.register('installPlaywrightChromium', JavaExec) {
+	group = 'playwright'
+	description = 'Install the Chromium browser binary used by Playwright public web issue collection.'
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'com.microsoft.playwright.CLI'
+	args 'install', 'chromium'
 }

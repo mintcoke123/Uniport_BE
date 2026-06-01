@@ -14,3 +14,8 @@ backtest:
   price-fallback:
     # 외부/캐시 가격이 비는 종목도 분석 흐름은 유지한다. 실제 가격만 검증할 때는 BACKTEST_PRICE_FALLBACK_ENABLED=false.
     enabled: ${BACKTEST_PRICE_FALLBACK_ENABLED:true}
+
+uniport:
+  investment-issue:
+    public-web:
+      enabled: ${UNIPORT_PUBLIC_WEB_ISSUES_ENABLED:true}

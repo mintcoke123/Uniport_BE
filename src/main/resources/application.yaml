@@ -159,6 +159,20 @@ uniport:
   investment-issue:
     enabled: true
     cache-ttl-seconds: 300
+    refresh:
+      enabled: ${UNIPORT_INVESTMENT_ISSUE_REFRESH_ENABLED:true}
+      fixed-delay-ms: ${UNIPORT_INVESTMENT_ISSUE_REFRESH_DELAY_MS:300000}
+      initial-delay-ms: ${UNIPORT_INVESTMENT_ISSUE_REFRESH_INITIAL_DELAY_MS:30000}
+    public-web:
+      enabled: ${UNIPORT_PUBLIC_WEB_ISSUES_ENABLED:true}
+      timeout-ms: ${UNIPORT_PUBLIC_WEB_ISSUES_TIMEOUT_MS:6000}
+      # Only configure public pages that are allowed for automated access.
+      sources:
+        - name: SaveTicker News
+          url: https://www.saveticker.com/news
+          category: MARKET
+          source-name: 세이브티커
+          max-items: 40
     # Reserved for future IssueClusterService tuning; display limits below are actively bound.
     cluster:
       time-window-hours: 24

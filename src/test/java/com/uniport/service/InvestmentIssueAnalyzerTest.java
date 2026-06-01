@@ -229,6 +229,37 @@ class InvestmentIssueAnalyzerTest {
         assertFalse(issue.relatedEtfs().stream().anyMatch(etf -> etf.theme().equals("AI/빅테크")));
     }
 
+    @Test
+    void analyze_usEarningsBeatIssueIsPositiveAndKeepsInvestmentEvidence() {
+        IssueCluster cluster = cluster(
+                "20260529|OVERSEAS|Dell|실적",
+                InvestmentIssueCategory.OVERSEAS,
+                "Dell",
+                "실적",
+                article(
+                        "dell-earnings",
+                        "Dell 실적 예상 상회, AI 서버 수요 강세",
+                        "매출과 주당순이익이 시장 예상치를 웃돌고 AI 서버 주문이 확대됐어요"
+                ),
+                article(
+                        "dell-guidance",
+                        "델, 가이던스 상향에 장외 상승",
+                        "데이터센터 인프라 수요와 마진 개선 기대가 함께 반영됐어요"
+                )
+        );
+
+        InvestmentIssue issue = analyzer.analyze(cluster);
+
+        assertEquals(InvestmentIssueLabel.POSITIVE, issue.label());
+        assertTrue(issue.title().contains("실적 예상 상회") || issue.title().contains("가이던스 상향"));
+        assertTrue(issue.summary().contains("AI 서버 주문") || issue.summary().contains("데이터센터 인프라 수요"));
+        assertTrue(issue.reasonBullets().stream().anyMatch(reason -> reason.contains("예상 상회")
+                || reason.contains("가이던스 상향")
+                || reason.contains("AI 서버")));
+        assertTrue(issue.relatedStocks().stream().anyMatch(stock -> stock.symbol().equals("DELL")));
+        assertGeneratedTextHasNoForbiddenWords(issue);
+    }
+
     private void assertGeneratedTextHasNoForbiddenWords(InvestmentIssue issue) {
         List<String> generatedTexts = Stream.concat(
                         Stream.of(issue.title(), issue.summary()),

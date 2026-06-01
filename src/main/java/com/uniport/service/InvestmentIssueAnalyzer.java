@@ -23,7 +23,15 @@ public class InvestmentIssueAnalyzer {
             new Cue("수주", 2),
             new Cue("실적 개선", 3),
             new Cue("흑자", 3),
-            new Cue("서프라이즈", 3)
+            new Cue("서프라이즈", 3),
+            new Cue("예상 상회", 3),
+            new Cue("예상치 상회", 3),
+            new Cue("예상치를 웃돌", 3),
+            new Cue("가이던스 상향", 3),
+            new Cue("마진 개선", 2),
+            new Cue("AI 서버", 2),
+            new Cue("데이터센터", 2),
+            new Cue("호조", 2)
     );
 
     private static final List<Cue> NEGATIVE_CUES = List.of(
@@ -35,6 +43,9 @@ public class InvestmentIssueAnalyzer {
             new Cue("적자", 3),
             new Cue("감소", 3),
             new Cue("둔화", 2),
+            new Cue("예상 하회", 3),
+            new Cue("예상치 하회", 3),
+            new Cue("가이던스 하향", 3),
             new Cue("규제 강화", 3),
             new Cue("파업", 3),
             new Cue("비용 부담", 2)
@@ -359,6 +370,12 @@ public class InvestmentIssueAnalyzer {
         addThemeWhenTextContains(themes, searchableText, "HBM", "HBM");
         addThemeWhenTextContains(themes, searchableText, "AI 반도체", "AI반도체");
         addThemeWhenTextContains(themes, searchableText, "AI반도체", "AI반도체");
+        addThemeWhenTextContains(themes, searchableText, "AI 서버", "AI서버");
+        addThemeWhenTextContains(themes, searchableText, "AI 인프라", "AI서버");
+        addThemeWhenTextContains(themes, searchableText, "데이터센터", "데이터센터");
+        addThemeWhenTextContains(themes, searchableText, "DATA CENTER", "데이터센터");
+        addThemeWhenTextContains(themes, searchableText, "클라우드", "클라우드");
+        addThemeWhenTextContains(themes, searchableText, "CLOUD", "클라우드");
         addThemeWhenTextContains(themes, searchableText, "반도체", "반도체");
         addThemeWhenTextContains(themes, searchableText, "AI", "AI");
         addThemeWhenTextContains(themes, searchableText, "빅테크", "빅테크");

@@ -28,6 +28,9 @@ public class IssueClusterService {
             "현대차",
             "기아",
             "LG에너지솔루션",
+            "삼성SDI",
+            "한화에어로스페이스",
+            "두산에너빌리티",
             "POSCO홀딩스",
             "NAVER",
             "카카오"
@@ -42,12 +45,96 @@ public class IssueClusterService {
             "APPLE",
             "마이크로소프트",
             "MICROSOFT",
-            "TSMC"
+            "Meta",
+            "META",
+            "Amazon",
+            "AMAZON",
+            "Google",
+            "GOOGLE",
+            "Alphabet",
+            "ALPHABET",
+            "AMD",
+            "Broadcom",
+            "BROADCOM",
+            "Oracle",
+            "ORACLE",
+            "Dell",
+            "DELL",
+            "Dell Technologies",
+            "델",
+            "TSMC",
+            "Intel",
+            "INTEL",
+            "인텔",
+            "Fluence",
+            "FLUENCE",
+            "플루언스",
+            "Strategy",
+            "STRATEGY",
+            "스트레티지",
+            "MicroStrategy",
+            "MICROSTRATEGY",
+            "JetBlue",
+            "JETBLUE",
+            "제트블루",
+            "Robinhood",
+            "ROBINHOOD",
+            "로빈후드",
+            "BP",
+            "Voya",
+            "VOYA",
+            "보야",
+            "Edgewise",
+            "EDGEWISE",
+            "엣지와이스",
+            "에지와이즈",
+            "Weatherford",
+            "WEATHERFORD",
+            "웨더포드",
+            "Volkswagen",
+            "VOLKSWAGEN",
+            "폭스바겐",
+            "Prosus",
+            "PROSUS",
+            "Delivery Hero",
+            "DELIVERY HERO",
+            "Honeywell",
+            "HONEYWELL",
+            "하니웰",
+            "Moderna",
+            "MODERNA",
+            "모더나",
+            "MGM",
+            "Wise",
+            "WISE",
+            "BYD"
     );
 
-    private static final List<String> MARKET_ENTITIES = List.of("환율", "원달러", "코스피", "코스닥", "금리", "국채");
+    private static final List<String> MARKET_ENTITIES = List.of(
+            "환율",
+            "원달러",
+            "코스피",
+            "코스닥",
+            "금리",
+            "국채",
+            "국채금리",
+            "FOMC",
+            "CPI",
+            "고용지표",
+            "유가"
+    );
     private static final List<String> OVERSEAS_ENTITIES = List.of("미국", "중국", "일본");
-    private static final List<String> THEME_ENTITIES = List.of("HBM", "AI반도체", "반도체", "ETF", "AI");
+    private static final List<String> THEME_ENTITIES = List.of(
+            "HBM",
+            "AI반도체",
+            "반도체",
+            "ETF",
+            "AI",
+            "AI서버",
+            "데이터센터",
+            "클라우드",
+            "빅테크"
+    );
     private static final List<String> COMPANY_SPECIFIC_EVENTS = List.of("실적", "파업");
 
     private final RawNewsNormalizer normalizer;
@@ -161,6 +248,18 @@ public class IssueClusterService {
         if ((tokens.contains("AI") && title.contains("반도체")) || title.contains("AI 반도체")) {
             entities.add("AI반도체");
         }
+        if ((tokens.contains("AI") && title.contains("서버")) || title.contains("AI 서버")) {
+            entities.add("AI서버");
+        }
+        if (title.contains("데이터센터") || title.toUpperCase(Locale.ROOT).contains("DATA CENTER")) {
+            entities.add("데이터센터");
+        }
+        if (title.contains("클라우드") || title.toUpperCase(Locale.ROOT).contains("CLOUD")) {
+            entities.add("클라우드");
+        }
+        if (title.contains("빅테크") || title.toUpperCase(Locale.ROOT).contains("BIG TECH")) {
+            entities.add("빅테크");
+        }
         if (tokens.contains("AI")) {
             entities.add("AI");
         }
@@ -181,7 +280,8 @@ public class IssueClusterService {
         String title = cleanTitle(article);
         Set<String> events = new LinkedHashSet<>();
 
-        if (containsAny(title, "실적", "어닝", "매출", "영업이익")) {
+        if (containsAny(title, "실적", "어닝", "매출", "영업이익", "순이익", "EPS",
+                "예상 상회", "예상치 상회", "예상치를 웃돌", "서프라이즈", "가이던스 상향", "마진 개선")) {
             events.add("실적");
         }
         if (containsAny(title, "파업", "노조", "쟁의")) {
@@ -191,11 +291,13 @@ public class IssueClusterService {
             events.add("규제");
         }
         if (tokens.contains("상승") || tokens.contains("매수")
-                || containsAny(title, "강세", "반등", "랠리", "신고가", "기대", "모멘텀", "수혜", "수요", "확대")) {
+                || containsAny(title, "강세", "반등", "랠리", "신고가", "기대", "모멘텀", "수혜", "수요", "확대",
+                "상향", "호조", "예상 상회", "예상치 상회", "예상치를 웃돌", "서프라이즈")) {
             events.add("상승");
         }
         if (tokens.contains("하락") || tokens.contains("매도")
-                || containsAny(title, "급락", "약세", "우려", "둔화", "부진")) {
+                || containsAny(title, "급락", "약세", "우려", "둔화", "부진", "예상 하회", "예상치 하회",
+                "가이던스 하향")) {
             events.add("하락");
         }
 
@@ -230,17 +332,22 @@ public class IssueClusterService {
 
     private String mainEntity(InvestmentIssueCategory category, List<String> entities) {
         if (category == InvestmentIssueCategory.THEME) {
-            return firstMatching(entities, List.of("HBM", "AI반도체", "반도체", "ETF", "AI"));
+            return firstMatching(entities, List.of("HBM", "AI반도체", "AI서버", "데이터센터", "반도체", "ETF",
+                    "클라우드", "빅테크", "AI"));
         }
         if (category == InvestmentIssueCategory.COMPANY) {
             return firstMatching(entities, DOMESTIC_COMPANIES);
         }
         if (category == InvestmentIssueCategory.OVERSEAS) {
-            return firstMatching(entities, List.of("엔비디아", "테슬라", "애플", "마이크로소프트", "TSMC",
+            return firstMatching(entities, List.of("엔비디아", "테슬라", "애플", "마이크로소프트", "Meta",
+                    "Amazon", "Alphabet", "AMD", "Broadcom", "Oracle", "Dell", "TSMC", "Intel", "Fluence",
+                    "Strategy", "JetBlue", "Robinhood", "BP", "Voya", "Edgewise", "Weatherford",
+                    "Volkswagen", "Prosus", "Delivery Hero", "Honeywell", "Moderna", "MGM", "Wise", "BYD",
                     "미국", "중국", "일본"));
         }
         if (category == InvestmentIssueCategory.MARKET) {
-            return firstMatching(entities, List.of("환율", "원달러", "코스피", "코스닥", "금리", "국채"));
+            return firstMatching(entities, List.of("CPI", "FOMC", "환율", "원달러", "코스피", "코스닥", "금리",
+                    "국채금리", "국채", "고용지표", "유가"));
         }
         return entities.isEmpty() ? "시장" : entities.get(0);
     }
@@ -367,9 +474,9 @@ public class IssueClusterService {
         if (!withinWindow(left.publishedAt(), right.publishedAt())) {
             return 0;
         }
-        return (jaccard(left.tokens(), right.tokens()) * 0.40)
-                + (overlapScore(left.entities(), right.entities()) * 0.30)
-                + (overlapScore(left.events(), right.events()) * 0.20)
+        return (jaccard(left.tokens(), right.tokens()) * 0.30)
+                + (overlapScore(left.entities(), right.entities()) * 0.35)
+                + (overlapScore(left.events(), right.events()) * 0.25)
                 + (timeProximity(left.publishedAt(), right.publishedAt()) * 0.10);
     }
 
@@ -551,6 +658,51 @@ public class IssueClusterService {
         }
         if (upperCompany.equals("MICROSOFT")) {
             return "마이크로소프트";
+        }
+        if (upperCompany.equals("META")) {
+            return "Meta";
+        }
+        if (upperCompany.equals("AMAZON")) {
+            return "Amazon";
+        }
+        if (upperCompany.equals("GOOGLE") || upperCompany.equals("ALPHABET")) {
+            return "Alphabet";
+        }
+        if (upperCompany.equals("BROADCOM")) {
+            return "Broadcom";
+        }
+        if (upperCompany.equals("ORACLE")) {
+            return "Oracle";
+        }
+        if (upperCompany.equals("DELL") || upperCompany.equals("DELL TECHNOLOGIES") || company.equals("델")) {
+            return "Dell";
+        }
+        if (upperCompany.equals("STRATEGY") || upperCompany.equals("MICROSTRATEGY") || company.equals("스트레티지")) {
+            return "Strategy";
+        }
+        if (upperCompany.equals("JETBLUE") || company.equals("제트블루")) {
+            return "JetBlue";
+        }
+        if (upperCompany.equals("ROBINHOOD") || company.equals("로빈후드")) {
+            return "Robinhood";
+        }
+        if (upperCompany.equals("VOYA") || company.equals("보야")) {
+            return "Voya";
+        }
+        if (upperCompany.equals("EDGEWISE") || company.equals("엣지와이스") || company.equals("에지와이즈")) {
+            return "Edgewise";
+        }
+        if (upperCompany.equals("WEATHERFORD") || company.equals("웨더포드")) {
+            return "Weatherford";
+        }
+        if (upperCompany.equals("VOLKSWAGEN") || company.equals("폭스바겐")) {
+            return "Volkswagen";
+        }
+        if (upperCompany.equals("HONEYWELL") || company.equals("하니웰")) {
+            return "Honeywell";
+        }
+        if (upperCompany.equals("MODERNA") || company.equals("모더나")) {
+            return "Moderna";
         }
         return company;
     }

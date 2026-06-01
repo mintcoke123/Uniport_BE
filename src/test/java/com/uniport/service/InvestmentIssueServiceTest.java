@@ -257,6 +257,28 @@ class InvestmentIssueServiceTest {
     }
 
     @Test
+    void refreshIssueCache_forcesRefreshBeforeTtlExpiry() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-05-19T00:00:00Z"), ZoneOffset.UTC);
+        FakeNewsFeedClient feedClient = new FakeNewsFeedClient(List.of(
+                hbmArticles(),
+                List.of(article("jetblue-fuel", NewsCategory.MARKET,
+                        "이란 분쟁 장기화에 제트블루 유류비 상승 경고",
+                        "유류비 상승 압박이 항공주 비용 부담으로 이어질 수 있어요",
+                        "본문",
+                        BASE_TIME.plusHours(5)))
+        ));
+        InvestmentIssueService investmentIssueService = service(feedClient, Duration.ofMinutes(5), clock);
+
+        InvestmentIssueListResponseDTO initial = investmentIssueService.getIssueList("ALL", null, 20);
+        investmentIssueService.refreshIssueCache();
+        InvestmentIssueListResponseDTO refreshed = investmentIssueService.getIssueList("ALL", null, 20);
+
+        assertEquals(2, feedClient.fetchCount());
+        assertNotEquals(initial.getHeroIssue().getIssueId(), refreshed.getHeroIssue().getIssueId());
+        assertEquals("JetBlue Airways", refreshed.getHeroIssue().getRelatedStocks().get(0).getName());
+    }
+
+    @Test
     void getIssueDetail_usesStaleCacheWhenRefreshMissesPriorIssueAfterTtl() {
         MutableClock clock = new MutableClock(Instant.parse("2026-05-19T00:00:00Z"), ZoneOffset.UTC);
         FakeNewsFeedClient feedClient = new FakeNewsFeedClient(List.of(
@@ -321,6 +343,40 @@ class InvestmentIssueServiceTest {
 
         assertTrue(initialIssueId.startsWith("issue_20260519_"));
         assertEquals(initialIssueId, refreshedIssueId);
+    }
+
+    @Test
+    void getIssueList_mergesPublicWebIssueSourcesWithPrimaryNewsFeed() {
+        FakeNewsFeedClient feedClient = new FakeNewsFeedClient(List.of(List.of(
+                article("hbm-1", NewsCategory.DOMESTIC_STOCK,
+                        "HBM 수요 폭발에 AI 반도체주 상승",
+                        "AI 서버 투자 확대와 HBM 수요 증가 기대 요약",
+                        "본문",
+                        BASE_TIME)
+        )));
+        FakePublicIssueSourceProvider publicProvider = new FakePublicIssueSourceProvider(List.of(
+                article("dell-earnings", NewsCategory.OVERSEAS_STOCK,
+                        "Dell 실적 예상 상회, AI 서버 수요 강세",
+                        "매출과 주당순이익이 시장 예상치를 웃돌고 AI 서버 주문이 확대됐어요",
+                        "공개 페이지 본문은 복사하지 않아요",
+                        BASE_TIME.plusHours(2))
+        ));
+        InvestmentIssueService investmentIssueService = service(
+                feedClient,
+                Duration.ofSeconds(300),
+                Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), KST),
+                List.of(publicProvider)
+        );
+
+        InvestmentIssueListResponseDTO overseasResponse = investmentIssueService.getIssueList("OVERSEAS", null, 20);
+
+        assertEquals(1, feedClient.fetchCount());
+        assertEquals(1, publicProvider.fetchCount());
+        assertNotNull(overseasResponse.getHeroIssue());
+        assertEquals("OVERSEAS", overseasResponse.getHeroIssue().getCategory());
+        assertTrue(overseasResponse.getHeroIssue().getTitle().contains("Dell")
+                || overseasResponse.getHeroIssue().getTitle().contains("델"));
+        assertEquals("positive", overseasResponse.getHeroIssue().getLabel());
     }
 
     @Test
@@ -530,6 +586,25 @@ class InvestmentIssueServiceTest {
         );
     }
 
+    private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient,
+                                           Duration ttl,
+                                           Clock clock,
+                                           List<PublicIssueSourceProvider> publicIssueSourceProviders) {
+        return new InvestmentIssueService(
+                newsFeedClient,
+                publicIssueSourceProviders,
+                new RawNewsDeduplicator(),
+                new IssueClusterService(new RawNewsNormalizer()),
+                new InvestmentIssueAnalyzer(new StockMappingService(), new EtfMappingService()),
+                ttl,
+                clock,
+                3,
+                2,
+                5,
+                3
+        );
+    }
+
     private static List<FetchedNewsArticle> hbmArticles() {
         return List.of(
                 article("hbm-1", NewsCategory.DOMESTIC_STOCK,
@@ -577,6 +652,26 @@ class InvestmentIssueServiceTest {
             int index = Math.min(fetchCount, responses.size() - 1);
             fetchCount++;
             return responses.get(index);
+        }
+
+        private int fetchCount() {
+            return fetchCount;
+        }
+    }
+
+    private static final class FakePublicIssueSourceProvider implements PublicIssueSourceProvider {
+
+        private final List<FetchedNewsArticle> articles;
+        private int fetchCount;
+
+        private FakePublicIssueSourceProvider(List<FetchedNewsArticle> articles) {
+            this.articles = articles;
+        }
+
+        @Override
+        public List<FetchedNewsArticle> fetchLatest() {
+            fetchCount++;
+            return articles;
         }
 
         private int fetchCount() {

@@ -215,6 +215,29 @@ class IssueClusterServiceTest {
         assertEquals("상승", cluster.mainEvent());
     }
 
+    @Test
+    void cluster_groupsUsEarningsBeatArticlesIntoOneOverseasIssue() {
+        LocalDateTime publishedAt = LocalDateTime.of(2026, 5, 29, 7, 0);
+
+        List<IssueCluster> clusters = issueClusterService.cluster(List.of(
+                article("dell-earnings", NewsCategory.OVERSEAS_STOCK,
+                        "Dell 실적 예상 상회, AI 서버 수요 강세", publishedAt),
+                article("dell-guidance", NewsCategory.OVERSEAS_STOCK,
+                        "델, 가이던스 상향에 장외 상승", publishedAt.plusMinutes(8)),
+                article("dell-ai-server", NewsCategory.OVERSEAS_STOCK,
+                        "Dell Technologies, AI 서버 매출 호조로 어닝 서프라이즈", publishedAt.plusMinutes(13))
+        ));
+
+        assertEquals(1, clusters.size());
+        IssueCluster cluster = clusters.get(0);
+        assertEquals("20260529|OVERSEAS|Dell|실적", cluster.clusterKey());
+        assertEquals(InvestmentIssueCategory.OVERSEAS, cluster.category());
+        assertEquals("Dell", cluster.mainEntity());
+        assertEquals("실적", cluster.mainEvent());
+        assertEquals(List.of("dell-earnings", "dell-guidance", "dell-ai-server"),
+                cluster.articles().stream().map(FetchedNewsArticle::getId).toList());
+    }
+
     private FetchedNewsArticle article(String id, NewsCategory category, String title, LocalDateTime publishedAt) {
         return FetchedNewsArticle.builder()
                 .id(id)

@@ -15,6 +15,8 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.MatchingRoomRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -45,6 +47,7 @@ import java.util.regex.Pattern;
 @Service
 public class InvestmentIssueService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(InvestmentIssueService.class);
     private static final ZoneId DEFAULT_ZONE = ZoneId.of("Asia/Seoul");
     private static final DateTimeFormatter ISSUE_DATE_FORMATTER = DateTimeFormatter.BASIC_ISO_DATE;
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -59,6 +62,7 @@ public class InvestmentIssueService {
             Comparator.nullsLast(Comparator.reverseOrder());
 
     private final NewsFeedClient newsFeedClient;
+    private final List<PublicIssueSourceProvider> publicIssueSourceProviders;
     private final RawNewsDeduplicator rawNewsDeduplicator;
     private final IssueClusterService issueClusterService;
     private final InvestmentIssueAnalyzer investmentIssueAnalyzer;
@@ -77,6 +81,7 @@ public class InvestmentIssueService {
 
     @Autowired
     public InvestmentIssueService(NewsFeedClient newsFeedClient,
+                                  List<PublicIssueSourceProvider> publicIssueSourceProviders,
                                   RawNewsDeduplicator rawNewsDeduplicator,
                                   IssueClusterService issueClusterService,
                                   InvestmentIssueAnalyzer investmentIssueAnalyzer,
@@ -94,6 +99,7 @@ public class InvestmentIssueService {
                                   int maxRelatedEtfs) {
         this(
                 newsFeedClient,
+                publicIssueSourceProviders,
                 rawNewsDeduplicator,
                 issueClusterService,
                 investmentIssueAnalyzer,
@@ -117,6 +123,7 @@ public class InvestmentIssueService {
                            Clock clock) {
         this(
                 newsFeedClient,
+                List.of(),
                 rawNewsDeduplicator,
                 issueClusterService,
                 investmentIssueAnalyzer,
@@ -144,6 +151,36 @@ public class InvestmentIssueService {
                            int maxRelatedEtfs) {
         this(
                 newsFeedClient,
+                List.of(),
+                rawNewsDeduplicator,
+                issueClusterService,
+                investmentIssueAnalyzer,
+                null,
+                null,
+                null,
+                cacheTtl,
+                clock,
+                maxReasonBullets,
+                maxWatchPoints,
+                maxRelatedStocks,
+                maxRelatedEtfs
+        );
+    }
+
+    InvestmentIssueService(NewsFeedClient newsFeedClient,
+                           List<PublicIssueSourceProvider> publicIssueSourceProviders,
+                           RawNewsDeduplicator rawNewsDeduplicator,
+                           IssueClusterService issueClusterService,
+                           InvestmentIssueAnalyzer investmentIssueAnalyzer,
+                           Duration cacheTtl,
+                           Clock clock,
+                           int maxReasonBullets,
+                           int maxWatchPoints,
+                           int maxRelatedStocks,
+                           int maxRelatedEtfs) {
+        this(
+                newsFeedClient,
+                publicIssueSourceProviders,
                 rawNewsDeduplicator,
                 issueClusterService,
                 investmentIssueAnalyzer,
@@ -172,7 +209,42 @@ public class InvestmentIssueService {
                            int maxWatchPoints,
                            int maxRelatedStocks,
                            int maxRelatedEtfs) {
+        this(
+                newsFeedClient,
+                List.of(),
+                rawNewsDeduplicator,
+                issueClusterService,
+                investmentIssueAnalyzer,
+                matchingRoomMemberRepository,
+                matchingRoomRepository,
+                chatService,
+                cacheTtl,
+                clock,
+                maxReasonBullets,
+                maxWatchPoints,
+                maxRelatedStocks,
+                maxRelatedEtfs
+        );
+    }
+
+    InvestmentIssueService(NewsFeedClient newsFeedClient,
+                           List<PublicIssueSourceProvider> publicIssueSourceProviders,
+                           RawNewsDeduplicator rawNewsDeduplicator,
+                           IssueClusterService issueClusterService,
+                           InvestmentIssueAnalyzer investmentIssueAnalyzer,
+                           MatchingRoomMemberRepository matchingRoomMemberRepository,
+                           MatchingRoomRepository matchingRoomRepository,
+                           ChatService chatService,
+                           Duration cacheTtl,
+                           Clock clock,
+                           int maxReasonBullets,
+                           int maxWatchPoints,
+                           int maxRelatedStocks,
+                           int maxRelatedEtfs) {
         this.newsFeedClient = Objects.requireNonNull(newsFeedClient, "newsFeedClient must not be null");
+        this.publicIssueSourceProviders = publicIssueSourceProviders == null
+                ? List.of()
+                : List.copyOf(publicIssueSourceProviders);
         this.rawNewsDeduplicator = Objects.requireNonNull(rawNewsDeduplicator, "rawNewsDeduplicator must not be null");
         this.issueClusterService = Objects.requireNonNull(issueClusterService, "issueClusterService must not be null");
         this.investmentIssueAnalyzer = Objects.requireNonNull(investmentIssueAnalyzer,
@@ -309,6 +381,15 @@ public class InvestmentIssueService {
             return issueCache.issues();
         }
 
+        List<CachedIssue> issues = refreshIssueCache(now);
+        return issues;
+    }
+
+    public synchronized void refreshIssueCache() {
+        refreshIssueCache(clock.instant());
+    }
+
+    private List<CachedIssue> refreshIssueCache(Instant now) {
         List<CachedIssue> issues = computeCurrentIssues();
         if (issueCache != null && !issueCache.issues().isEmpty()) {
             previousIssueCache = issueCache;
@@ -318,7 +399,14 @@ public class InvestmentIssueService {
     }
 
     private List<CachedIssue> computeCurrentIssues() {
-        List<FetchedNewsArticle> fetchedArticles = safeList(newsFeedClient.fetchLatest());
+        List<FetchedNewsArticle> fetchedArticles = new ArrayList<>(safeList(newsFeedClient.fetchLatest()));
+        for (PublicIssueSourceProvider provider : publicIssueSourceProviders) {
+            try {
+                fetchedArticles.addAll(safeList(provider.fetchLatest()));
+            } catch (Exception exception) {
+                LOGGER.warn("Public issue source provider failed: {}", exception.getMessage(), exception);
+            }
+        }
         List<FetchedNewsArticle> deduplicatedArticles = rawNewsDeduplicator.deduplicate(fetchedArticles);
         return issueClusterService.cluster(deduplicatedArticles).stream()
                 .map(investmentIssueAnalyzer::analyze)

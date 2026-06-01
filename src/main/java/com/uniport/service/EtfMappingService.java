@@ -33,7 +33,7 @@ public class EtfMappingService {
             ),
             new EtfThemeDefinition(
                     "AI/빅테크",
-                    List.of("AI/빅테크", "AI", "빅테크"),
+                    List.of("AI/빅테크", "AI", "빅테크", "AI서버", "AI 서버", "데이터센터", "클라우드"),
                     List.of(
                             new EtfDefinition("TIGER 미국테크TOP10", "ETF_TIGER_US_TECH_TOP10"),
                             new EtfDefinition("KODEX 미국나스닥100", "ETF_KODEX_US_NASDAQ100")
