@@ -87,7 +87,7 @@ uniport:
     test-user-enabled: ${UNIPORT_SEED_TEST_USER_ENABLED:false}
   investment-issue:
     public-web:
-      enabled: ${UNIPORT_PUBLIC_WEB_ISSUES_ENABLED:true}
+      enabled: true
       timeout-ms: ${UNIPORT_PUBLIC_WEB_ISSUES_TIMEOUT_MS:6000}
   education:
     seed:
