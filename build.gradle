@@ -63,7 +63,3 @@ tasks.register('installPlaywrightChromium', JavaExec) {
 	mainClass = 'com.microsoft.playwright.CLI'
 	args 'install', 'chromium'
 }
-
-tasks.named('bootJar') {
-	dependsOn tasks.named('installPlaywrightChromium')
-}

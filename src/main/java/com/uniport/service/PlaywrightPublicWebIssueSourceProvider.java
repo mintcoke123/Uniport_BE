@@ -12,6 +12,10 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,6 +35,7 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
 
     private final PublicWebIssueHtmlExtractor extractor;
     private final SaveTickerNewsJsonMapper saveTickerNewsJsonMapper;
+    private final HttpClient httpClient;
     private final List<PublicWebIssueSource> sources;
     private final int timeoutMs;
 
@@ -39,6 +44,10 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
                                                  SaveTickerNewsJsonMapper saveTickerNewsJsonMapper) {
         this.extractor = extractor;
         this.saveTickerNewsJsonMapper = saveTickerNewsJsonMapper;
+        this.httpClient = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofMillis(DEFAULT_TIMEOUT_MS))
+                .build();
         this.sources = readSources(environment);
         this.timeoutMs = Math.max(1000, environment.getProperty(
                 "uniport.investment-issue.public-web.timeout-ms",
@@ -61,7 +70,14 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
                 articles.addAll(fetchSource(browser, source));
             }
         } catch (Exception exception) {
-            LOGGER.warn("Public web issue source fetch failed: {}", exception.getMessage(), exception);
+            LOGGER.warn(
+                    "Public web issue source browser fetch failed, falling back to HTTP fetch: {}",
+                    exception.getMessage(),
+                    exception
+            );
+            for (PublicWebIssueSource source : sources) {
+                articles.addAll(fetchSourceWithoutBrowser(source));
+            }
         }
         return List.copyOf(articles);
     }
@@ -104,6 +120,39 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
         }
     }
 
+    private List<FetchedNewsArticle> fetchSourceWithoutBrowser(PublicWebIssueSource source) {
+        try {
+            String html = fetchText(source.url().toString());
+            if (isSaveTickerNewsSource(source)) {
+                List<FetchedNewsArticle> articles = fetchSaveTickerArticlesWithoutBrowser(source);
+                LOGGER.info(
+                        "Public web issue source '{}' fetched {} articles from {} using HTTP fallback",
+                        source.name(),
+                        articles.size(),
+                        source.url()
+                );
+                return articles;
+            }
+            List<FetchedNewsArticle> articles = extractor.extract(source, html);
+            LOGGER.info(
+                    "Public web issue source '{}' fetched {} articles from {} using HTTP fallback",
+                    source.name(),
+                    articles.size(),
+                    source.url()
+            );
+            return articles;
+        } catch (Exception exception) {
+            LOGGER.warn(
+                    "Public web issue source '{}' HTTP fallback failed at {}: {}",
+                    source.name(),
+                    source.url(),
+                    exception.getMessage(),
+                    exception
+            );
+            return List.of();
+        }
+    }
+
     private List<FetchedNewsArticle> fetchSaveTickerArticles(Page page, PublicWebIssueSource source) {
         Map<String, FetchedNewsArticle> articlesById = new LinkedHashMap<>();
         for (String apiUrl : saveTickerApiUrls(source)) {
@@ -117,6 +166,24 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
                 }
             } catch (Exception exception) {
                 LOGGER.warn("SaveTicker public news request failed at {}: {}", apiUrl, exception.getMessage());
+            }
+        }
+        return List.copyOf(articlesById.values());
+    }
+
+    private List<FetchedNewsArticle> fetchSaveTickerArticlesWithoutBrowser(PublicWebIssueSource source) {
+        Map<String, FetchedNewsArticle> articlesById = new LinkedHashMap<>();
+        for (String apiUrl : saveTickerApiUrls(source)) {
+            try {
+                String json = fetchText(apiUrl);
+                for (FetchedNewsArticle article : saveTickerNewsJsonMapper.extract(source, json)) {
+                    articlesById.putIfAbsent(article.getId(), article);
+                    if (articlesById.size() >= source.maxItems()) {
+                        return List.copyOf(articlesById.values());
+                    }
+                }
+            } catch (Exception exception) {
+                LOGGER.warn("SaveTicker public news HTTP fallback failed at {}: {}", apiUrl, exception.getMessage());
             }
         }
         return List.copyOf(articlesById.values());
@@ -147,6 +214,28 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
                 apiUrl
         );
         return result instanceof String text ? text : "";
+    }
+
+    private String fetchText(String url) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofMillis(timeoutMs))
+                    .header("accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
+                    .header("accept-language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
+                    .header("user-agent", "Mozilla/5.0 UniportInvestmentIssueCollector/1.0")
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("HTTP " + response.statusCode());
+            }
+            return response.body() == null ? "" : response.body();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("HTTP fetch interrupted", exception);
+        } catch (Exception exception) {
+            throw new IllegalStateException("HTTP fetch failed: " + exception.getMessage(), exception);
+        }
     }
 
     private boolean isSaveTickerNewsSource(PublicWebIssueSource source) {
