@@ -22,6 +22,20 @@ public interface UserAuthIdentityRepository extends JpaRepository<UserAuthIdenti
 
     void deleteByUser_Id(Long userId);
 
+    @Query("""
+            SELECT COUNT(identity) > 0
+            FROM UserAuthIdentity identity
+            WHERE identity.user.id = :userId
+              AND identity.firebaseUid <> :firebaseUid
+              AND (
+                    (:providerId IS NULL AND identity.providerId IS NULL)
+                    OR identity.providerId = :providerId
+              )
+            """)
+    boolean existsOtherIdentityForUserAndProvider(@Param("userId") Long userId,
+                                                  @Param("providerId") String providerId,
+                                                  @Param("firebaseUid") String firebaseUid);
+
     @Modifying
     @Query(value = """
             INSERT INTO user_auth_identities (

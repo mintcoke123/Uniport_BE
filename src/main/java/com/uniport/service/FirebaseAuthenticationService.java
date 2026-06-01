@@ -12,6 +12,7 @@ import com.google.firebase.auth.FirebaseToken;
 import com.uniport.config.FirebaseAuthenticatedUser;
 import com.uniport.config.FirebaseProperties;
 import com.uniport.entity.User;
+import com.uniport.entity.UserAuthIdentity;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.UserAuthIdentityRepository;
 import com.uniport.repository.UserRepository;
@@ -46,6 +47,7 @@ public class FirebaseAuthenticationService {
     private final FirebaseProperties firebaseProperties;
     private final UserRepository userRepository;
     private final UserAuthIdentityRepository userAuthIdentityRepository;
+    private final UserDeletionReferenceCleanupService userDeletionReferenceCleanupService;
     private final PasswordEncoder passwordEncoder;
 
     private volatile FirebaseApp firebaseApp;
@@ -53,10 +55,12 @@ public class FirebaseAuthenticationService {
     public FirebaseAuthenticationService(FirebaseProperties firebaseProperties,
                                          UserRepository userRepository,
                                          UserAuthIdentityRepository userAuthIdentityRepository,
+                                         UserDeletionReferenceCleanupService userDeletionReferenceCleanupService,
                                          PasswordEncoder passwordEncoder) {
         this.firebaseProperties = firebaseProperties;
         this.userRepository = userRepository;
         this.userAuthIdentityRepository = userAuthIdentityRepository;
+        this.userDeletionReferenceCleanupService = userDeletionReferenceCleanupService;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -92,7 +96,7 @@ public class FirebaseAuthenticationService {
     private User resolveUser(FirebaseToken firebaseToken) {
         String uid = trim(firebaseToken.getUid());
         return userAuthIdentityRepository.findByFirebaseUid(uid)
-                .map(identity -> updateExistingUser(identity.getUser(), firebaseToken))
+                .map(identity -> resolveLinkedIdentity(identity, firebaseToken))
                 .or(() -> userRepository.findByFirebaseUid(uid)
                         .map(existing -> rememberAuthIdentity(
                                 updateExistingUser(existing, firebaseToken),
@@ -101,6 +105,14 @@ public class FirebaseAuthenticationService {
                 .orElseGet(() -> findOrLinkExistingUserByEmail(firebaseToken)
                         .map(existing -> linkExistingUser(existing, firebaseToken))
                         .orElseGet(() -> rememberAuthIdentity(createInitialUser(firebaseToken), firebaseToken)));
+    }
+
+    private User resolveLinkedIdentity(UserAuthIdentity identity, FirebaseToken firebaseToken) {
+        User user = identity.getUser();
+        if (shouldResetSameProviderRecreatedUser(user, firebaseToken)) {
+            return resetSameProviderRecreatedUser(user, firebaseToken);
+        }
+        return updateExistingUser(user, firebaseToken);
     }
 
     private java.util.Optional<User> findOrLinkExistingUserByEmail(FirebaseToken firebaseToken) {
@@ -116,6 +128,9 @@ public class FirebaseAuthenticationService {
         String existingUid = trim(existingUser.getFirebaseUid());
 
         if (!existingUid.isBlank() && !existingUid.equals(uid)) {
+            if (shouldResetSameProviderRecreatedUser(existingUser, firebaseToken)) {
+                return resetSameProviderRecreatedUser(existingUser, firebaseToken);
+            }
             if (firebaseToken.isEmailVerified()) {
                 log.info("[firebase-auth] Reusing existing user for verified Firebase email: userId={}, email={}, existingUid={}, incomingUid={}",
                         existingUser.getId(), existingUser.getEmail(), existingUid, uid);
@@ -134,6 +149,57 @@ public class FirebaseAuthenticationService {
         }
 
         return rememberAuthIdentity(updateExistingUser(existingUser, firebaseToken), firebaseToken);
+    }
+
+    private boolean shouldResetSameProviderRecreatedUser(User user, FirebaseToken firebaseToken) {
+        if (user == null || user.getId() == null) {
+            return false;
+        }
+        String uid = trim(firebaseToken.getUid());
+        if (uid.isBlank()) {
+            return false;
+        }
+        String existingUid = trim(user.getFirebaseUid());
+        if (existingUid.isBlank() || existingUid.equals(uid)) {
+            return false;
+        }
+        String providerId = resolveProviderId(firebaseToken);
+        return userAuthIdentityRepository.existsOtherIdentityForUserAndProvider(
+                user.getId(),
+                blankToNull(providerId),
+                uid
+        );
+    }
+
+    private User resetSameProviderRecreatedUser(User user, FirebaseToken firebaseToken) {
+        String uid = trim(firebaseToken.getUid());
+        String providerId = resolveProviderId(firebaseToken);
+        log.warn("[firebase-auth] Resetting app user for recreated same-provider Firebase identity: userId={}, email={}, providerId={}, oldUid={}, incomingUid={}",
+                user.getId(), user.getEmail(), providerId, user.getFirebaseUid(), uid);
+
+        userDeletionReferenceCleanupService.cleanupUserReferences(user.getId());
+        resetUserAccountState(user, firebaseToken);
+        User savedUser = userRepository.save(user);
+        return rememberAuthIdentity(savedUser, firebaseToken);
+    }
+
+    private void resetUserAccountState(User user, FirebaseToken firebaseToken) {
+        String uid = trim(firebaseToken.getUid());
+        user.setFirebaseUid(uid);
+        user.setEmail(blankToNull(trim(firebaseToken.getEmail())));
+        user.setUsername(ensureUniqueUsername("firebase:" + uid, user.getId()));
+        user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+        user.setNickname(ensureUniqueNickname(buildNicknameCandidate(firebaseToken), user.getId()));
+        user.setProfileImageUrl(null);
+        user.setTotalAssets(INITIAL_ASSETS);
+        user.setInvestmentAmount(INITIAL_ASSETS);
+        user.setProfitLoss(BigDecimal.ZERO);
+        user.setProfitLossRate(BigDecimal.ZERO);
+        user.setTeamId(null);
+        user.setRole("user");
+        user.setInvestmentProfileResult(null);
+        user.setInvestmentLevel(null);
+        user.setInterestSector(null);
     }
 
     private User rememberAuthIdentity(User user, FirebaseToken firebaseToken) {
