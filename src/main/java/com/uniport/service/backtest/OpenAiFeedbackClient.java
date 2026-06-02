@@ -54,14 +54,14 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
             headers.setBearerAuth(apiKey);
             Map<String, Object> body = Map.of(
                     "model", model,
-                    "input", List.of(
+                    "messages", List.of(
                             Map.of("role", "system", "content", systemPrompt()),
                             Map.of("role", "user", "content", OBJECT_MAPPER.writeValueAsString(analysisPacketPayload(facts)))
                     ),
-                    "text", Map.of("format", responseFormat())
+                    "response_format", responseFormat()
             );
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                    baseUrl + "/v1/responses",
+                    apiUrl("chat/completions"),
                     HttpMethod.POST,
                     new HttpEntity<>(body, headers),
                     new ParameterizedTypeReference<>() {
@@ -180,26 +180,28 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
     private Map<String, Object> responseFormat() {
         return Map.of(
                 "type", "json_schema",
-                "name", "etf_feedback",
-                "strict", true,
-                "schema", Map.of(
-                        "type", "object",
-                        "additionalProperties", false,
-                        "required", List.of("title", "summary", "tone", "bullets"),
-                        "properties", Map.of(
-                                "title", Map.of("type", "string"),
-                                "summary", Map.of("type", "string"),
-                                "tone", Map.of("type", "string", "enum", List.of("BALANCED", "CAUTION")),
-                                "bullets", Map.of(
-                                        "type", "array",
-                                        "maxItems", 3,
-                                        "items", Map.of(
-                                                "type", "object",
-                                                "additionalProperties", false,
-                                                "required", List.of("type", "message"),
-                                                "properties", Map.of(
-                                                        "type", Map.of("type", "string", "enum", List.of("STRENGTH", "RISK", "INFO")),
-                                                        "message", Map.of("type", "string")
+                "json_schema", Map.of(
+                        "name", "etf_feedback",
+                        "strict", true,
+                        "schema", Map.of(
+                                "type", "object",
+                                "additionalProperties", false,
+                                "required", List.of("title", "summary", "tone", "bullets"),
+                                "properties", Map.of(
+                                        "title", Map.of("type", "string"),
+                                        "summary", Map.of("type", "string"),
+                                        "tone", Map.of("type", "string", "enum", List.of("BALANCED", "CAUTION")),
+                                        "bullets", Map.of(
+                                                "type", "array",
+                                                "maxItems", 3,
+                                                "items", Map.of(
+                                                        "type", "object",
+                                                        "additionalProperties", false,
+                                                        "required", List.of("type", "message"),
+                                                        "properties", Map.of(
+                                                                "type", Map.of("type", "string", "enum", List.of("STRENGTH", "RISK", "INFO")),
+                                                                "message", Map.of("type", "string")
+                                                        )
                                                 )
                                         )
                                 )
@@ -211,6 +213,20 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
     private String extractOutputText(Map<String, Object> body) {
         if (body == null) {
             return null;
+        }
+        Object choices = body.get("choices");
+        if (choices instanceof List<?> choiceItems) {
+            for (Object choiceItem : choiceItems) {
+                if (choiceItem instanceof Map<?, ?> choiceMap) {
+                    Object message = choiceMap.get("message");
+                    if (message instanceof Map<?, ?> messageMap) {
+                        Object content = messageMap.get("content");
+                        if (content instanceof String value) {
+                            return value;
+                        }
+                    }
+                }
+            }
         }
         Object direct = body.get("output_text");
         if (direct instanceof String value) {
@@ -235,6 +251,22 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
             }
         }
         return null;
+    }
+
+    private String apiUrl(String path) {
+        String normalizedBaseUrl = trimTrailingSlash(baseUrl);
+        if (normalizedBaseUrl.endsWith("/v1")) {
+            return normalizedBaseUrl + "/" + path;
+        }
+        return normalizedBaseUrl + "/v1/" + path;
+    }
+
+    private String trimTrailingSlash(String value) {
+        String trimmed = value != null ? value.trim() : "";
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed.isBlank() ? "https://api.openai.com" : trimmed;
     }
 
     private List<FeedbackBullet> parseBullets(Object value) {

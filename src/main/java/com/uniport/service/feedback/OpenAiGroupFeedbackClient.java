@@ -50,14 +50,14 @@ public class OpenAiGroupFeedbackClient implements GroupFeedbackLlmClient {
             headers.setBearerAuth(apiKey);
             Map<String, Object> body = Map.of(
                     "model", model,
-                    "input", List.of(
+                    "messages", List.of(
                             Map.of("role", "system", "content", systemPrompt()),
                             Map.of("role", "user", "content", OBJECT_MAPPER.writeValueAsString(facts))
                     ),
-                    "text", Map.of("format", responseFormat())
+                    "response_format", responseFormat()
             );
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                    baseUrl + "/v1/responses",
+                    apiUrl("chat/completions"),
                     HttpMethod.POST,
                     new HttpEntity<>(body, headers),
                     new ParameterizedTypeReference<>() {
@@ -100,13 +100,15 @@ public class OpenAiGroupFeedbackClient implements GroupFeedbackLlmClient {
     private Map<String, Object> responseFormat() {
         return Map.of(
                 "type", "json_schema",
-                "name", "group_investment_feedback",
-                "strict", true,
-                "schema", Map.of(
-                        "type", "object",
-                        "additionalProperties", false,
-                        "required", List.of("comment"),
-                        "properties", Map.of("comment", Map.of("type", "string"))
+                "json_schema", Map.of(
+                        "name", "group_investment_feedback",
+                        "strict", true,
+                        "schema", Map.of(
+                                "type", "object",
+                                "additionalProperties", false,
+                                "required", List.of("comment"),
+                                "properties", Map.of("comment", Map.of("type", "string"))
+                        )
                 )
         );
     }
@@ -114,6 +116,20 @@ public class OpenAiGroupFeedbackClient implements GroupFeedbackLlmClient {
     private String extractOutputText(Map<String, Object> body) {
         if (body == null) {
             return null;
+        }
+        Object choices = body.get("choices");
+        if (choices instanceof List<?> choiceItems) {
+            for (Object choiceItem : choiceItems) {
+                if (choiceItem instanceof Map<?, ?> choiceMap) {
+                    Object message = choiceMap.get("message");
+                    if (message instanceof Map<?, ?> messageMap) {
+                        Object content = messageMap.get("content");
+                        if (content instanceof String value) {
+                            return value;
+                        }
+                    }
+                }
+            }
         }
         Object direct = body.get("output_text");
         if (direct instanceof String value) {
@@ -138,5 +154,21 @@ public class OpenAiGroupFeedbackClient implements GroupFeedbackLlmClient {
             }
         }
         return null;
+    }
+
+    private String apiUrl(String path) {
+        String normalizedBaseUrl = trimTrailingSlash(baseUrl);
+        if (normalizedBaseUrl.endsWith("/v1")) {
+            return normalizedBaseUrl + "/" + path;
+        }
+        return normalizedBaseUrl + "/v1/" + path;
+    }
+
+    private String trimTrailingSlash(String value) {
+        String trimmed = value != null ? value.trim() : "";
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed.isBlank() ? "https://api.openai.com" : trimmed;
     }
 }

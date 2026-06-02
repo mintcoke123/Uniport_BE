@@ -33,6 +33,10 @@ class OpenAiFeedbackClientTest {
         YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
         yaml.setResources(new ClassPathResource("application.yaml"));
 
+        assertEquals("${OPENAI_API_KEY:${AI_PROVIDER_API_KEY:}}",
+                yaml.getObject().getProperty("openai.api-key"));
+        assertEquals("${OPENAI_BASE_URL:${AI_LLM_ENDPOINT:https://api.openai.com}}",
+                yaml.getObject().getProperty("openai.base-url"));
         assertEquals("${OPENAI_FEEDBACK_ENABLED:true}",
                 yaml.getObject().getProperty("openai.feedback.enabled"));
     }
@@ -55,15 +59,11 @@ class OpenAiFeedbackClientTest {
     void generate_requestsActionablePortfolioFeedbackFormat() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         when(restTemplate.exchange(
-                eq("https://api.openai.com/v1/responses"),
+                eq("https://api.openai.com/v1/chat/completions"),
                 eq(HttpMethod.POST),
                 any(HttpEntity.class),
                 any(ParameterizedTypeReference.class)
-        )).thenReturn(ResponseEntity.ok(Map.of(
-                "output_text", """
-                        {"title":"AI 리스크 진단","summary":"한 줄 결론: 테스트 ETF입니다.","tone":"BALANCED","bullets":[]}
-                        """
-        )));
+        )).thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
                 restTemplate,
                 "test-key",
@@ -76,14 +76,14 @@ class OpenAiFeedbackClientTest {
         client.generate(baseFacts());
 
         verify(restTemplate).exchange(
-                eq("https://api.openai.com/v1/responses"),
+                eq("https://api.openai.com/v1/chat/completions"),
                 eq(HttpMethod.POST),
                 captor.capture(),
                 any(ParameterizedTypeReference.class)
         );
         Map<?, ?> body = (Map<?, ?>) captor.getValue().getBody();
-        List<?> input = (List<?>) body.get("input");
-        Map<?, ?> systemMessage = (Map<?, ?>) input.get(0);
+        List<?> messages = (List<?>) body.get("messages");
+        Map<?, ?> systemMessage = (Map<?, ?>) messages.get(0);
         String prompt = String.valueOf(systemMessage.get("content"));
         Assertions.assertTrue(prompt.contains("한 줄 결론:"));
         Assertions.assertTrue(prompt.contains("핵심 원인:"));
@@ -104,15 +104,11 @@ class OpenAiFeedbackClientTest {
     void generate_sendsAnalysisPacketShapeInsteadOfRawInsightFacts() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         when(restTemplate.exchange(
-                eq("https://api.openai.com/v1/responses"),
+                eq("https://api.openai.com/v1/chat/completions"),
                 eq(HttpMethod.POST),
                 any(HttpEntity.class),
                 any(ParameterizedTypeReference.class)
-        )).thenReturn(ResponseEntity.ok(Map.of(
-                "output_text", """
-                        {"title":"AI 리스크 진단","summary":"한 줄 결론: 테스트 ETF입니다.","tone":"BALANCED","bullets":[]}
-                        """
-        )));
+        )).thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
                 restTemplate,
                 "test-key",
@@ -125,14 +121,14 @@ class OpenAiFeedbackClientTest {
         client.generate(baseFacts());
 
         verify(restTemplate).exchange(
-                eq("https://api.openai.com/v1/responses"),
+                eq("https://api.openai.com/v1/chat/completions"),
                 eq(HttpMethod.POST),
                 captor.capture(),
                 any(ParameterizedTypeReference.class)
         );
         Map<?, ?> body = (Map<?, ?>) captor.getValue().getBody();
-        List<?> input = (List<?>) body.get("input");
-        Map<?, ?> userMessage = (Map<?, ?>) input.get(1);
+        List<?> messages = (List<?>) body.get("messages");
+        Map<?, ?> userMessage = (Map<?, ?>) messages.get(1);
         String payload = String.valueOf(userMessage.get("content"));
         Assertions.assertTrue(payload.contains("\"analysis_packet\""));
         Assertions.assertTrue(payload.contains("\"portfolio_summary\""));
@@ -140,6 +136,47 @@ class OpenAiFeedbackClientTest {
         Assertions.assertTrue(payload.contains("\"latest_holdings\""));
         Assertions.assertFalse(payload.contains("\"totalReturnPercent\""));
         Assertions.assertFalse(payload.contains("\"positiveFacts\""));
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void generate_usesVersionedOpenAiCompatibleEndpointWithoutDuplicatingV1() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        when(restTemplate.exchange(
+                eq("https://openai-oauth-production.up.railway.app/v1/chat/completions"),
+                eq(HttpMethod.POST),
+                any(HttpEntity.class),
+                any(ParameterizedTypeReference.class)
+        )).thenReturn(chatCompletionResponse());
+        OpenAiFeedbackClient client = new OpenAiFeedbackClient(
+                restTemplate,
+                "proxy-key",
+                "https://openai-oauth-production.up.railway.app/v1",
+                "gpt-4.1-mini",
+                true
+        );
+
+        Optional<?> feedback = client.generate(baseFacts());
+
+        Assertions.assertTrue(feedback.isPresent());
+        verify(restTemplate).exchange(
+                eq("https://openai-oauth-production.up.railway.app/v1/chat/completions"),
+                eq(HttpMethod.POST),
+                any(HttpEntity.class),
+                any(ParameterizedTypeReference.class)
+        );
+    }
+
+    private ResponseEntity<Map<String, Object>> chatCompletionResponse() {
+        return ResponseEntity.ok(Map.of(
+                "choices", List.of(Map.of(
+                        "message", Map.of(
+                                "content", """
+                                        {"title":"AI 리스크 진단","summary":"한 줄 결론: 테스트 ETF입니다.","tone":"BALANCED","bullets":[]}
+                                        """
+                        )
+                ))
+        ));
     }
 
     private InsightFacts baseFacts() {
