@@ -139,7 +139,9 @@ public class OpenAiChatCompletionClient {
     private String complete(String systemPrompt, String userContent, Map<String, Object> responseFormat) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
         headers.setBearerAuth(apiKey);
+        headers.set(HttpHeaders.USER_AGENT, "undici");
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
         body.put("messages", List.of(
