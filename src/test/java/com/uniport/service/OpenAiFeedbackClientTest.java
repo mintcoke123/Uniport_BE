@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import com.uniport.service.backtest.InsightFacts;
 import com.uniport.service.backtest.OpenAiFeedbackClient;
+import com.uniport.service.openai.OpenAiChatCompletionClient;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
@@ -40,6 +41,8 @@ class OpenAiFeedbackClientTest {
                 yaml.getObject().getProperty("openai.api-key"));
         assertEquals("${OPENAI_BASE_URL:${AI_LLM_ENDPOINT:https://api.openai.com}}",
                 yaml.getObject().getProperty("openai.base-url"));
+        assertEquals("${OPENAI_MODEL:gpt-4.1}",
+                yaml.getObject().getProperty("openai.model"));
         assertEquals("${OPENAI_FEEDBACK_ENABLED:true}",
                 yaml.getObject().getProperty("openai.feedback.enabled"));
     }
@@ -53,6 +56,8 @@ class OpenAiFeedbackClientTest {
                 yaml.getObject().getProperty("openai.api-key"));
         assertEquals("${OPENAI_BASE_URL:${AI_LLM_ENDPOINT:https://api.openai.com}}",
                 yaml.getObject().getProperty("openai.base-url"));
+        assertEquals("${OPENAI_MODEL:gpt-4.1}",
+                yaml.getObject().getProperty("openai.model"));
         assertEquals("${OPENAI_FEEDBACK_ENABLED:true}",
                 yaml.getObject().getProperty("openai.feedback.enabled"));
     }
@@ -60,11 +65,7 @@ class OpenAiFeedbackClientTest {
     @Test
     void generate_returnsEmptyWhenApiKeyIsMissing() {
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
-                new RestTemplate(),
-                "",
-                "https://api.openai.com",
-                "gpt-4.1-mini",
-                false
+                chatClient(new RestTemplate(), "", "https://api.openai.com", "gpt-4.1", false)
         );
 
         assertEquals(Optional.empty(), client.generate(baseFacts()));
@@ -81,11 +82,7 @@ class OpenAiFeedbackClientTest {
                 any(ParameterizedTypeReference.class)
         )).thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
-                restTemplate,
-                "test-key",
-                "https://api.openai.com",
-                "gpt-4.1-mini",
-                true
+                chatClient(restTemplate, "test-key", "https://api.openai.com", "gpt-4.1", true)
         );
         ArgumentCaptor<HttpEntity> captor = forClass(HttpEntity.class);
 
@@ -126,11 +123,7 @@ class OpenAiFeedbackClientTest {
                 any(ParameterizedTypeReference.class)
         )).thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
-                restTemplate,
-                "test-key",
-                "https://api.openai.com",
-                "gpt-4.1-mini",
-                true
+                chatClient(restTemplate, "test-key", "https://api.openai.com", "gpt-4.1", true)
         );
         ArgumentCaptor<HttpEntity> captor = forClass(HttpEntity.class);
 
@@ -165,11 +158,13 @@ class OpenAiFeedbackClientTest {
                 any(ParameterizedTypeReference.class)
         )).thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
-                restTemplate,
-                "proxy-key",
-                "https://openai-oauth-production.up.railway.app/v1",
-                "gpt-4.1-mini",
-                true
+                chatClient(
+                        restTemplate,
+                        "proxy-key",
+                        "https://openai-oauth-production.up.railway.app/v1",
+                        "gpt-4.1",
+                        true
+                )
         );
 
         Optional<?> feedback = client.generate(baseFacts());
@@ -195,11 +190,13 @@ class OpenAiFeedbackClientTest {
         )).thenThrow(new HttpClientErrorException(HttpStatus.BAD_REQUEST))
                 .thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
-                restTemplate,
-                "proxy-key",
-                "https://openai-oauth-production.up.railway.app/v1",
-                "gpt-4.1-mini",
-                true
+                chatClient(
+                        restTemplate,
+                        "proxy-key",
+                        "https://openai-oauth-production.up.railway.app/v1",
+                        "gpt-4.1",
+                        true
+                )
         );
         ArgumentCaptor<HttpEntity> captor = forClass(HttpEntity.class);
 
@@ -227,6 +224,16 @@ class OpenAiFeedbackClientTest {
                         )
                 ))
         ));
+    }
+
+    private OpenAiChatCompletionClient chatClient(
+            RestTemplate restTemplate,
+            String apiKey,
+            String baseUrl,
+            String model,
+            boolean enabled
+    ) {
+        return new OpenAiChatCompletionClient(restTemplate, apiKey, baseUrl, model, enabled);
     }
 
     private InsightFacts baseFacts() {

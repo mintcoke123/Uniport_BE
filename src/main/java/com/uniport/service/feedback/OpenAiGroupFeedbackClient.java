@@ -2,15 +2,8 @@ package com.uniport.service.feedback;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import com.uniport.service.openai.OpenAiChatCompletionClient;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Map;
@@ -20,72 +13,27 @@ import java.util.Optional;
 public class OpenAiGroupFeedbackClient implements GroupFeedbackLlmClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String DEFAULT_BASE_URL = "https://api.openai.com";
-    private static final String DEFAULT_MODEL = "gpt-4.1-mini";
 
-    private final RestTemplate restTemplate;
-    private final String apiKey;
-    private final String baseUrl;
-    private final String model;
-    private final boolean enabled;
+    private final OpenAiChatCompletionClient chatCompletionClient;
 
-    public OpenAiGroupFeedbackClient(RestTemplate restTemplate,
-                                     @Value("${openai.api-key:}") String apiKey,
-                                     @Value("${openai.base-url:}") String baseUrl,
-                                     @Value("${openai.model:}") String model,
-                                     @Value("${openai.feedback.enabled:true}") boolean enabled) {
-        this.restTemplate = restTemplate;
-        this.apiKey = firstNonBlank(apiKey, System.getenv("OPENAI_API_KEY"), System.getenv("AI_PROVIDER_API_KEY"));
-        this.baseUrl = firstNonBlank(baseUrl, System.getenv("OPENAI_BASE_URL"), System.getenv("AI_LLM_ENDPOINT"), DEFAULT_BASE_URL);
-        this.model = firstNonBlank(model, System.getenv("OPENAI_MODEL"), DEFAULT_MODEL);
-        this.enabled = enabled;
+    public OpenAiGroupFeedbackClient(OpenAiChatCompletionClient chatCompletionClient) {
+        this.chatCompletionClient = chatCompletionClient;
     }
 
     @Override
     public Optional<String> generate(GroupFeedbackFacts facts) {
-        if (!enabled || apiKey.isBlank()) {
-            return Optional.empty();
-        }
-        Optional<String> strictResult = generateWithResponseFormat(facts, responseFormat());
-        if (strictResult.isPresent()) {
-            return strictResult;
-        }
-        Optional<String> jsonObjectResult = generateWithResponseFormat(facts, jsonObjectResponseFormat());
-        if (jsonObjectResult.isPresent()) {
-            return jsonObjectResult;
-        }
-        return generateWithResponseFormat(facts, null);
-    }
-
-    private Optional<String> generateWithResponseFormat(GroupFeedbackFacts facts, Map<String, Object> responseFormat) {
         try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(apiKey);
-            Map<String, Object> body = new java.util.LinkedHashMap<>();
-            body.put("model", model);
-            body.put("messages", List.of(
-                    Map.of("role", "system", "content", systemPrompt()),
-                    Map.of("role", "user", "content", OBJECT_MAPPER.writeValueAsString(facts))
-            ));
-            if (responseFormat != null) {
-                body.put("response_format", responseFormat);
-            }
-            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                    apiUrl("chat/completions"),
-                    HttpMethod.POST,
-                    new HttpEntity<>(body, headers),
-                    new ParameterizedTypeReference<>() {
+            return chatCompletionClient.generateJson(
+                    systemPrompt(),
+                    OBJECT_MAPPER.writeValueAsString(facts),
+                    responseFormat(),
+                    outputText -> {
+                        Map<String, Object> parsed = OBJECT_MAPPER.readValue(outputText, new TypeReference<>() {
+                        });
+                        Object comment = parsed.get("comment");
+                        return comment != null ? String.valueOf(comment) : null;
                     }
             );
-            String outputText = extractOutputText(response.getBody());
-            if (outputText == null || outputText.isBlank()) {
-                return Optional.empty();
-            }
-            Map<String, Object> parsed = OBJECT_MAPPER.readValue(outputText, new TypeReference<>() {
-            });
-            Object comment = parsed.get("comment");
-            return comment != null ? Optional.of(String.valueOf(comment)) : Optional.empty();
         } catch (Exception ignored) {
             return Optional.empty();
         }
@@ -128,75 +76,4 @@ public class OpenAiGroupFeedbackClient implements GroupFeedbackLlmClient {
         );
     }
 
-    private Map<String, Object> jsonObjectResponseFormat() {
-        return Map.of("type", "json_object");
-    }
-
-    private String extractOutputText(Map<String, Object> body) {
-        if (body == null) {
-            return null;
-        }
-        Object choices = body.get("choices");
-        if (choices instanceof List<?> choiceItems) {
-            for (Object choiceItem : choiceItems) {
-                if (choiceItem instanceof Map<?, ?> choiceMap) {
-                    Object message = choiceMap.get("message");
-                    if (message instanceof Map<?, ?> messageMap) {
-                        Object content = messageMap.get("content");
-                        if (content instanceof String value) {
-                            return value;
-                        }
-                    }
-                }
-            }
-        }
-        Object direct = body.get("output_text");
-        if (direct instanceof String value) {
-            return value;
-        }
-        Object output = body.get("output");
-        if (output instanceof List<?> outputItems) {
-            for (Object outputItem : outputItems) {
-                if (outputItem instanceof Map<?, ?> outputMap) {
-                    Object content = outputMap.get("content");
-                    if (content instanceof List<?> contentItems) {
-                        for (Object contentItem : contentItems) {
-                            if (contentItem instanceof Map<?, ?> contentMap) {
-                                Object text = contentMap.get("text");
-                                if (text instanceof String value) {
-                                    return value;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    private String apiUrl(String path) {
-        String normalizedBaseUrl = trimTrailingSlash(baseUrl);
-        if (normalizedBaseUrl.endsWith("/v1")) {
-            return normalizedBaseUrl + "/" + path;
-        }
-        return normalizedBaseUrl + "/v1/" + path;
-    }
-
-    private String trimTrailingSlash(String value) {
-        String trimmed = value != null ? value.trim() : "";
-        while (trimmed.endsWith("/")) {
-            trimmed = trimmed.substring(0, trimmed.length() - 1);
-        }
-        return trimmed.isBlank() ? DEFAULT_BASE_URL : trimmed;
-    }
-
-    private String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value.trim();
-            }
-        }
-        return "";
-    }
 }
