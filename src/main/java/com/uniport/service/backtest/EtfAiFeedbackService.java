@@ -171,7 +171,7 @@ public class EtfAiFeedbackService {
         if (generated == null || containsProhibitedExpression(generated) || containsUnknownNumbers(generated, facts)) {
             return buildFallbackFeedback(facts);
         }
-        if (generated.summary() != null && generated.summary().length() > 120) {
+        if (generated.summary() != null && generated.summary().length() > 220) {
             return buildFallbackFeedback(facts);
         }
         if (generated.bullets() != null && generated.bullets().size() > 3) {
@@ -299,6 +299,8 @@ public class EtfAiFeedbackService {
             allowed.add(formatPercent(value.abs()));
             allowed.add(formatPercentPoint(value));
             allowed.add(formatPercentPoint(value.abs()));
+            addCompactPercentFormats(allowed, value);
+            addCompactPercentFormats(allowed, value.abs());
         }
         addKnownNumberTokens(allowed, facts.portfolioLabel());
         addKnownNumberTokens(allowed, facts.periodLabel());
@@ -357,6 +359,18 @@ public class EtfAiFeedbackService {
             if (eok.stripTrailingZeros().scale() <= 0) {
                 allowed.add(eok.setScale(0, RoundingMode.HALF_UP).toPlainString() + "억원");
             }
+        }
+    }
+
+    private void addCompactPercentFormats(List<String> allowed, BigDecimal value) {
+        if (value == null) {
+            return;
+        }
+        BigDecimal compact = value.stripTrailingZeros();
+        if (compact.scale() <= 0) {
+            String integer = compact.setScale(0, RoundingMode.HALF_UP).toPlainString();
+            allowed.add(integer + "%");
+            allowed.add(integer + "%p");
         }
     }
 

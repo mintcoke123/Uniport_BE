@@ -50,18 +50,31 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
         if (!enabled || apiKey.isBlank()) {
             return Optional.empty();
         }
+        Optional<RuleBasedFeedback> strictResult = generateWithResponseFormat(facts, responseFormat());
+        if (strictResult.isPresent()) {
+            return strictResult;
+        }
+        Optional<RuleBasedFeedback> jsonObjectResult = generateWithResponseFormat(facts, jsonObjectResponseFormat());
+        if (jsonObjectResult.isPresent()) {
+            return jsonObjectResult;
+        }
+        return generateWithResponseFormat(facts, null);
+    }
+
+    private Optional<RuleBasedFeedback> generateWithResponseFormat(InsightFacts facts, Map<String, Object> responseFormat) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(apiKey);
-            Map<String, Object> body = Map.of(
-                    "model", model,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", systemPrompt()),
-                            Map.of("role", "user", "content", OBJECT_MAPPER.writeValueAsString(analysisPacketPayload(facts)))
-                    ),
-                    "response_format", responseFormat()
-            );
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("model", model);
+            body.put("messages", List.of(
+                    Map.of("role", "system", "content", systemPrompt()),
+                    Map.of("role", "user", "content", OBJECT_MAPPER.writeValueAsString(analysisPacketPayload(facts)))
+            ));
+            if (responseFormat != null) {
+                body.put("response_format", responseFormat);
+            }
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     apiUrl("chat/completions"),
                     HttpMethod.POST,
@@ -210,6 +223,10 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
                         )
                 )
         );
+    }
+
+    private Map<String, Object> jsonObjectResponseFormat() {
+        return Map.of("type", "json_object");
     }
 
     private String extractOutputText(Map<String, Object> body) {

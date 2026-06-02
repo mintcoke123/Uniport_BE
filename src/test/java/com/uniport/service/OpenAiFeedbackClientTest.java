@@ -10,7 +10,9 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -23,6 +25,7 @@ import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -178,6 +181,40 @@ class OpenAiFeedbackClientTest {
                 any(HttpEntity.class),
                 any(ParameterizedTypeReference.class)
         );
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void generate_retriesWithJsonObjectWhenStrictSchemaIsRejected() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        when(restTemplate.exchange(
+                eq("https://openai-oauth-production.up.railway.app/v1/chat/completions"),
+                eq(HttpMethod.POST),
+                any(HttpEntity.class),
+                any(ParameterizedTypeReference.class)
+        )).thenThrow(new HttpClientErrorException(HttpStatus.BAD_REQUEST))
+                .thenReturn(chatCompletionResponse());
+        OpenAiFeedbackClient client = new OpenAiFeedbackClient(
+                restTemplate,
+                "proxy-key",
+                "https://openai-oauth-production.up.railway.app/v1",
+                "gpt-4.1-mini",
+                true
+        );
+        ArgumentCaptor<HttpEntity> captor = forClass(HttpEntity.class);
+
+        Optional<?> feedback = client.generate(baseFacts());
+
+        Assertions.assertTrue(feedback.isPresent());
+        verify(restTemplate, times(2)).exchange(
+                eq("https://openai-oauth-production.up.railway.app/v1/chat/completions"),
+                eq(HttpMethod.POST),
+                captor.capture(),
+                any(ParameterizedTypeReference.class)
+        );
+        Map<?, ?> retryBody = (Map<?, ?>) captor.getAllValues().get(1).getBody();
+        Map<?, ?> retryFormat = (Map<?, ?>) retryBody.get("response_format");
+        assertEquals("json_object", retryFormat.get("type"));
     }
 
     private ResponseEntity<Map<String, Object>> chatCompletionResponse() {
