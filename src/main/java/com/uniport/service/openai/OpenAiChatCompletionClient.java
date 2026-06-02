@@ -2,6 +2,7 @@ package com.uniport.service.openai;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
@@ -31,6 +32,7 @@ public class OpenAiChatCompletionClient {
     private final boolean enabled;
     private final ThreadLocal<String> lastStatus = ThreadLocal.withInitial(() -> "not_started");
 
+    @Autowired
     public OpenAiChatCompletionClient(RestTemplate restTemplate,
                                       @Value("${openai.api-key:}") String apiKey,
                                       @Value("${openai.base-url:}") String baseUrl,
