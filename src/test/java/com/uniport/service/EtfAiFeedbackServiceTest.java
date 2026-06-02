@@ -426,7 +426,7 @@ class EtfAiFeedbackServiceTest {
         EtfAiFeedbackService.FeedbackBuildResult result = llmService.buildFeedbackResult(baseFacts().build());
 
         assertEquals(false, result.feedback().usedFallback());
-        assertEquals("test-model:success:json_schema", result.llmStatus());
+        assertEquals("LlmFeedbackClient=test-model:success:json_schema", result.llmStatus());
         assertEquals("accepted", result.fallbackReason());
     }
 
@@ -488,8 +488,61 @@ class EtfAiFeedbackServiceTest {
         EtfAiFeedbackService.FeedbackBuildResult result = llmService.buildFeedbackResult(baseFacts().build());
 
         assertEquals(true, result.feedback().usedFallback());
-        assertEquals("test-model:success:json_object", result.llmStatus());
+        assertEquals("LlmFeedbackClient=test-model:success:json_object", result.llmStatus());
         assertEquals("rejected:unknown_number:999만원", result.fallbackReason());
+    }
+
+    @Test
+    void buildFeedbackResult_accumulatesAllClientStatusesWhenNoLlmOutput() {
+        class EmptyClient implements LlmFeedbackClient {
+            @Override
+            public Optional<RuleBasedFeedback> generate(InsightFacts facts) {
+                return Optional.empty();
+            }
+
+            @Override
+            public String modelName() {
+                return "none";
+            }
+
+            @Override
+            public String promptVersion() {
+                return "none";
+            }
+
+            @Override
+            public String lastAttemptStatus() {
+                return "not_configured";
+            }
+        }
+        class FailedClient implements LlmFeedbackClient {
+            @Override
+            public Optional<RuleBasedFeedback> generate(InsightFacts facts) {
+                return Optional.empty();
+            }
+
+            @Override
+            public String modelName() {
+                return "gpt-4.1";
+            }
+
+            @Override
+            public String promptVersion() {
+                return "test-prompt";
+            }
+
+            @Override
+            public String lastAttemptStatus() {
+                return "failed:401";
+            }
+        }
+        EtfAiFeedbackService llmService = new EtfAiFeedbackService(List.of(new EmptyClient(), new FailedClient()));
+
+        EtfAiFeedbackService.FeedbackBuildResult result = llmService.buildFeedbackResult(baseFacts().build());
+
+        assertEquals(true, result.feedback().usedFallback());
+        assertEquals("EmptyClient=none:not_configured | FailedClient=gpt-4.1:failed:401", result.llmStatus());
+        assertEquals("no_llm_output", result.fallbackReason());
     }
 
     private InsightFacts.InsightFactsBuilder baseFacts() {

@@ -146,23 +146,41 @@ public class EtfAiFeedbackService {
     }
 
     public FeedbackBuildResult buildFeedbackResult(InsightFacts facts) {
-        String lastAttemptStatus = "no_llm_client";
+        List<String> attemptStatuses = new ArrayList<>();
         for (LlmFeedbackClient client : llmFeedbackClients) {
             Optional<RuleBasedFeedback> generated = client.generate(facts);
-            lastAttemptStatus = client.modelName() + ":" + client.lastAttemptStatus();
+            attemptStatuses.add(clientStatus(client));
+            String llmStatus = joinedAttemptStatuses(attemptStatuses);
             if (generated.isPresent()) {
                 FeedbackValidationResult validation = validateGenerated(generated.get(), facts);
                 if (validation.accepted()) {
-                    return new FeedbackBuildResult(validation.feedback(), lastAttemptStatus, "accepted");
+                    return new FeedbackBuildResult(validation.feedback(), llmStatus, "accepted");
                 }
                 return new FeedbackBuildResult(
                         buildFallbackFeedback(facts),
-                        lastAttemptStatus,
+                        llmStatus,
                         "rejected:" + validation.reason()
                 );
             }
         }
-        return new FeedbackBuildResult(buildFallbackFeedback(facts), lastAttemptStatus, "no_llm_output");
+        return new FeedbackBuildResult(buildFallbackFeedback(facts), joinedAttemptStatuses(attemptStatuses), "no_llm_output");
+    }
+
+    private String joinedAttemptStatuses(List<String> attemptStatuses) {
+        return attemptStatuses.isEmpty() ? "no_llm_client" : String.join(" | ", attemptStatuses);
+    }
+
+    private String clientStatus(LlmFeedbackClient client) {
+        String clientName = client.getClass().getSimpleName();
+        if (clientName == null || clientName.isBlank()) {
+            clientName = "LlmFeedbackClient";
+        }
+        return clientName + "=" + safeStatusPart(client.modelName(), "none")
+                + ":" + safeStatusPart(client.lastAttemptStatus(), "unavailable");
+    }
+
+    private String safeStatusPart(String value, String fallback) {
+        return value != null && !value.isBlank() ? value : fallback;
     }
 
     public String modelName() {
