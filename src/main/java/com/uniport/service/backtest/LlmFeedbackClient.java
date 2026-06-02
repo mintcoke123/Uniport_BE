@@ -9,4 +9,8 @@ public interface LlmFeedbackClient {
     String modelName();
 
     String promptVersion();
+
+    default String lastAttemptStatus() {
+        return "unavailable";
+    }
 }

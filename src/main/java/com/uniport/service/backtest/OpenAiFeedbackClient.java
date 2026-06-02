@@ -59,6 +59,11 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
         return chatCompletionClient.isConfigured() ? PROMPT_VERSION : "none";
     }
 
+    @Override
+    public String lastAttemptStatus() {
+        return chatCompletionClient.lastStatus();
+    }
+
     private String systemPrompt() {
         return "You write short Korean ETF backtest feedback. "
                 + "The user message is an analysis_packet JSON, not raw prices. "

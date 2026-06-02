@@ -1476,7 +1476,19 @@ public class EtfDataService {
                 backtestHoldings,
                 newsExposure(backtestHoldings)
         );
-        RuleBasedFeedback feedback = etfAiFeedbackService.buildFeedback(facts);
+        EtfAiFeedbackService.FeedbackBuildResult feedbackResult = etfAiFeedbackService.buildFeedbackResult(facts);
+        if (feedbackResult == null) {
+            RuleBasedFeedback legacyFeedback = etfAiFeedbackService.buildFeedback(facts);
+            if (legacyFeedback == null) {
+                legacyFeedback = etfAiFeedbackService.buildFallbackFeedback(facts);
+            }
+            feedbackResult = new EtfAiFeedbackService.FeedbackBuildResult(
+                    legacyFeedback,
+                    etfAiFeedbackService.modelName(),
+                    legacyFeedback != null && legacyFeedback.usedFallback() ? "legacy_fallback" : "legacy_accepted"
+            );
+        }
+        RuleBasedFeedback feedback = feedbackResult.feedback();
 
         return EtfAnalysisReportResponseDTO.builder()
                 .reportId(reportId)
@@ -1561,6 +1573,8 @@ public class EtfDataService {
                         .limitations(backtestLimitations())
                         .llmModel(etfAiFeedbackService.modelName())
                         .promptVersion(etfAiFeedbackService.promptVersion())
+                        .llmStatus(feedbackResult.llmStatus())
+                        .llmFallbackReason(feedbackResult.fallbackReason())
                         .build())
                 .insightFacts(OBJECT_MAPPER.convertValue(facts, MAP_TYPE))
                 .analysisPacket(buildAnalysisPacket(

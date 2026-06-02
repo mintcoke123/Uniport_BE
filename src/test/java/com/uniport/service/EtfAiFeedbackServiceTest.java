@@ -392,6 +392,106 @@ class EtfAiFeedbackServiceTest {
         assertEquals("test-prompt", llmService.promptVersion());
     }
 
+    @Test
+    void buildFeedbackResult_reportsAcceptedLlmStatus() {
+        EtfAiFeedbackService llmService = new EtfAiFeedbackService(new LlmFeedbackClient() {
+            @Override
+            public Optional<RuleBasedFeedback> generate(InsightFacts facts) {
+                return Optional.of(new RuleBasedFeedback(
+                        "AI 리스크 진단",
+                        "한 줄 결론: 입력된 지표 안에서 균형이 좋습니다.",
+                        List.of(new FeedbackBullet("INFO", "핵심 원인: 엔비디아 35.0%가 성장축입니다.")),
+                        "BALANCED",
+                        facts.disclaimer(),
+                        false
+                ));
+            }
+
+            @Override
+            public String modelName() {
+                return "test-model";
+            }
+
+            @Override
+            public String promptVersion() {
+                return "test-prompt";
+            }
+
+            @Override
+            public String lastAttemptStatus() {
+                return "success:json_schema";
+            }
+        });
+
+        EtfAiFeedbackService.FeedbackBuildResult result = llmService.buildFeedbackResult(baseFacts().build());
+
+        assertEquals(false, result.feedback().usedFallback());
+        assertEquals("test-model:success:json_schema", result.llmStatus());
+        assertEquals("accepted", result.fallbackReason());
+    }
+
+    @Test
+    void validateLlmFeedback_trimsLongSummaryAndLimitsBulletsInsteadOfFallback() {
+        InsightFacts facts = baseFacts().build();
+        RuleBasedFeedback generated = new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "한 줄 결론: " + "균형을 확인해야 합니다. ".repeat(20),
+                List.of(
+                        new FeedbackBullet("INFO", "핵심 원인: 엔비디아 35.0%가 성장축입니다."),
+                        new FeedbackBullet("RISK", "가장 큰 리스크: 기술주 변동성입니다."),
+                        new FeedbackBullet("INFO", "조정 방향: 실적 발표를 보세요."),
+                        new FeedbackBullet("INFO", "추가 문장은 잘립니다.")
+                ),
+                "BALANCED",
+                facts.disclaimer(),
+                false
+        );
+
+        RuleBasedFeedback validated = service.validateOrFallback(generated, facts);
+
+        assertEquals(false, validated.usedFallback());
+        assertEquals(3, validated.bullets().size());
+        assertTrue(validated.summary().length() <= 220);
+    }
+
+    @Test
+    void buildFeedbackResult_reportsRejectedLlmReason() {
+        EtfAiFeedbackService llmService = new EtfAiFeedbackService(new LlmFeedbackClient() {
+            @Override
+            public Optional<RuleBasedFeedback> generate(InsightFacts facts) {
+                return Optional.of(new RuleBasedFeedback(
+                        "AI 리스크 진단",
+                        "예상 수익금은 999만원으로 볼 수 있어요.",
+                        List.of(),
+                        "BALANCED",
+                        facts.disclaimer(),
+                        false
+                ));
+            }
+
+            @Override
+            public String modelName() {
+                return "test-model";
+            }
+
+            @Override
+            public String promptVersion() {
+                return "test-prompt";
+            }
+
+            @Override
+            public String lastAttemptStatus() {
+                return "success:json_object";
+            }
+        });
+
+        EtfAiFeedbackService.FeedbackBuildResult result = llmService.buildFeedbackResult(baseFacts().build());
+
+        assertEquals(true, result.feedback().usedFallback());
+        assertEquals("test-model:success:json_object", result.llmStatus());
+        assertEquals("rejected:unknown_number:999만원", result.fallbackReason());
+    }
+
     private InsightFacts.InsightFactsBuilder baseFacts() {
         return InsightFacts.builder()
                 .portfolioLabel("AI 테크 포트폴리오")

@@ -142,13 +142,27 @@ public class EtfAiFeedbackService {
     }
 
     public RuleBasedFeedback buildFeedback(InsightFacts facts) {
+        return buildFeedbackResult(facts).feedback();
+    }
+
+    public FeedbackBuildResult buildFeedbackResult(InsightFacts facts) {
+        String lastAttemptStatus = "no_llm_client";
         for (LlmFeedbackClient client : llmFeedbackClients) {
             Optional<RuleBasedFeedback> generated = client.generate(facts);
+            lastAttemptStatus = client.modelName() + ":" + client.lastAttemptStatus();
             if (generated.isPresent()) {
-                return validateOrFallback(generated.get(), facts);
+                FeedbackValidationResult validation = validateGenerated(generated.get(), facts);
+                if (validation.accepted()) {
+                    return new FeedbackBuildResult(validation.feedback(), lastAttemptStatus, "accepted");
+                }
+                return new FeedbackBuildResult(
+                        buildFallbackFeedback(facts),
+                        lastAttemptStatus,
+                        "rejected:" + validation.reason()
+                );
             }
         }
-        return buildFallbackFeedback(facts);
+        return new FeedbackBuildResult(buildFallbackFeedback(facts), lastAttemptStatus, "no_llm_output");
     }
 
     public String modelName() {
@@ -168,16 +182,43 @@ public class EtfAiFeedbackService {
     }
 
     public RuleBasedFeedback validateOrFallback(RuleBasedFeedback generated, InsightFacts facts) {
-        if (generated == null || containsProhibitedExpression(generated) || containsUnknownNumbers(generated, facts)) {
+        FeedbackValidationResult validation = validateGenerated(generated, facts);
+        if (!validation.accepted()) {
             return buildFallbackFeedback(facts);
         }
-        if (generated.summary() != null && generated.summary().length() > 220) {
-            return buildFallbackFeedback(facts);
+        return validation.feedback();
+    }
+
+    private FeedbackValidationResult validateGenerated(RuleBasedFeedback generated, InsightFacts facts) {
+        if (generated == null) {
+            return FeedbackValidationResult.rejected("generated_null");
         }
-        if (generated.bullets() != null && generated.bullets().size() > 3) {
-            return buildFallbackFeedback(facts);
+        if (containsProhibitedExpression(generated)) {
+            return FeedbackValidationResult.rejected("prohibited_expression");
         }
-        return generated;
+        Optional<String> unknownNumber = unknownNumber(generated, facts);
+        if (unknownNumber.isPresent()) {
+            return FeedbackValidationResult.rejected("unknown_number:" + unknownNumber.get());
+        }
+        return FeedbackValidationResult.accepted(normalizeGenerated(generated));
+    }
+
+    private RuleBasedFeedback normalizeGenerated(RuleBasedFeedback generated) {
+        String summary = generated.summary() != null ? generated.summary().trim() : "";
+        if (summary.length() > 220) {
+            summary = summary.substring(0, 217).trim() + "...";
+        }
+        List<FeedbackBullet> bullets = generated.bullets() != null
+                ? generated.bullets().stream().limit(3).toList()
+                : List.of();
+        return new RuleBasedFeedback(
+                generated.title(),
+                summary,
+                bullets,
+                generated.tone(),
+                generated.disclaimer(),
+                false
+        );
     }
 
     private List<FeedbackBullet> bullets(InsightFacts facts) {
@@ -279,17 +320,17 @@ public class EtfAiFeedbackService {
         return PROHIBITED_WORDS.stream().anyMatch(word -> text.contains(word.toLowerCase(Locale.ROOT)));
     }
 
-    private boolean containsUnknownNumbers(RuleBasedFeedback feedback, InsightFacts facts) {
+    private Optional<String> unknownNumber(RuleBasedFeedback feedback, InsightFacts facts) {
         List<String> allowed = allowedNumberStrings(facts);
         String text = (feedback.summary() != null ? feedback.summary() : "") + " "
                 + (feedback.bullets() != null ? feedback.bullets().stream().map(FeedbackBullet::message).reduce("", (a, b) -> a + " " + b) : "");
         Matcher matcher = NUMBER_PATTERN.matcher(text);
         while (matcher.find()) {
             if (!allowed.contains(matcher.group())) {
-                return true;
+                return Optional.of(matcher.group());
             }
         }
-        return false;
+        return Optional.empty();
     }
 
     private List<String> allowedNumberStrings(InsightFacts facts) {
@@ -390,6 +431,24 @@ public class EtfAiFeedbackService {
     private boolean isConcentrationRisk(InsightFacts facts) {
         return (facts.topHoldingWeightPercent() != null && facts.topHoldingWeightPercent().compareTo(BigDecimal.valueOf(40)) >= 0)
                 || (facts.dominantSectorWeightPercent() != null && facts.dominantSectorWeightPercent().compareTo(BigDecimal.valueOf(60)) >= 0);
+    }
+
+    public record FeedbackBuildResult(RuleBasedFeedback feedback, String llmStatus, String fallbackReason) {
+    }
+
+    private record FeedbackValidationResult(RuleBasedFeedback feedback, String reason) {
+
+        static FeedbackValidationResult accepted(RuleBasedFeedback feedback) {
+            return new FeedbackValidationResult(feedback, null);
+        }
+
+        static FeedbackValidationResult rejected(String reason) {
+            return new FeedbackValidationResult(null, reason);
+        }
+
+        boolean accepted() {
+            return reason == null;
+        }
     }
 
     private String fallbackSector(InsightFacts facts) {

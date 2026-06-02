@@ -92,4 +92,10 @@ public class EtfAnalysisBacktestMetadataDTO {
 
     @Schema(example = "none", description = "MVP에서는 LLM 프롬프트를 사용하지 않습니다.")
     private String promptVersion;
+
+    @Schema(example = "success:json_schema", description = "LLM 호출 시도 결과")
+    private String llmStatus;
+
+    @Schema(example = "accepted", description = "LLM 결과 채택 또는 fallback 사유")
+    private String llmFallbackReason;
 }

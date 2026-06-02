@@ -8,8 +8,10 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +28,7 @@ public class OpenAiChatCompletionClient {
     private final String baseUrl;
     private final String model;
     private final boolean enabled;
+    private final ThreadLocal<String> lastStatus = ThreadLocal.withInitial(() -> "not_started");
 
     public OpenAiChatCompletionClient(RestTemplate restTemplate,
                                       @Value("${openai.api-key:}") String apiKey,
@@ -51,17 +54,48 @@ public class OpenAiChatCompletionClient {
             OutputParser<T> parser
     ) {
         if (!isConfigured()) {
+            lastStatus.set("not_configured");
             return Optional.empty();
         }
-        Optional<T> strictResult = generateWithResponseFormat(systemPrompt, userContent, strictResponseFormat, parser);
+        List<String> failures = new ArrayList<>();
+        Optional<T> strictResult = generateWithResponseFormat(
+                "json_schema",
+                systemPrompt,
+                userContent,
+                strictResponseFormat,
+                parser,
+                failures
+        );
         if (strictResult.isPresent()) {
+            lastStatus.set("success:json_schema");
             return strictResult;
         }
-        Optional<T> jsonObjectResult = generateWithResponseFormat(systemPrompt, userContent, jsonObjectResponseFormat(), parser);
+        Optional<T> jsonObjectResult = generateWithResponseFormat(
+                "json_object",
+                systemPrompt,
+                userContent,
+                jsonObjectResponseFormat(),
+                parser,
+                failures
+        );
         if (jsonObjectResult.isPresent()) {
+            lastStatus.set("success:json_object");
             return jsonObjectResult;
         }
-        return generateWithResponseFormat(systemPrompt, userContent, null, parser);
+        Optional<T> plainResult = generateWithResponseFormat(
+                "plain_json",
+                systemPrompt,
+                userContent,
+                null,
+                parser,
+                failures
+        );
+        if (plainResult.isPresent()) {
+            lastStatus.set("success:plain_json");
+            return plainResult;
+        }
+        lastStatus.set("failed:" + String.join(" | ", failures));
+        return Optional.empty();
     }
 
     public boolean isConfigured() {
@@ -72,19 +106,32 @@ public class OpenAiChatCompletionClient {
         return isConfigured() ? model : "none";
     }
 
+    public String lastStatus() {
+        return lastStatus.get();
+    }
+
     private <T> Optional<T> generateWithResponseFormat(
+            String attemptName,
             String systemPrompt,
             String userContent,
             Map<String, Object> responseFormat,
-            OutputParser<T> parser
+            OutputParser<T> parser,
+            List<String> failures
     ) {
         try {
             String outputText = complete(systemPrompt, userContent, responseFormat);
             if (outputText == null || outputText.isBlank()) {
+                failures.add(attemptName + ":empty_response");
                 return Optional.empty();
             }
-            return Optional.ofNullable(parser.parse(outputText));
-        } catch (Exception ignored) {
+            T parsed = parser.parse(outputText);
+            if (parsed == null) {
+                failures.add(attemptName + ":parser_returned_null");
+                return Optional.empty();
+            }
+            return Optional.of(parsed);
+        } catch (Exception exception) {
+            failures.add(attemptName + ":" + failureMessage(exception));
             return Optional.empty();
         }
     }
@@ -182,6 +229,20 @@ public class OpenAiChatCompletionClient {
             }
         }
         return "";
+    }
+
+    private String failureMessage(Exception exception) {
+        String message;
+        if (exception instanceof HttpStatusCodeException httpException) {
+            message = httpException.getStatusCode() + " " + httpException.getResponseBodyAsString();
+        } else {
+            message = exception.getMessage();
+        }
+        String normalizedMessage = message != null ? message.replaceAll("\\s+", " ").trim() : "";
+        if (normalizedMessage.length() > 260) {
+            normalizedMessage = normalizedMessage.substring(0, 260);
+        }
+        return exception.getClass().getSimpleName() + (normalizedMessage.isBlank() ? "" : ":" + normalizedMessage);
     }
 
     @FunctionalInterface
