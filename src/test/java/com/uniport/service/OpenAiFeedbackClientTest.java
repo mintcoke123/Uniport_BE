@@ -42,6 +42,19 @@ class OpenAiFeedbackClientTest {
     }
 
     @Test
+    void productionConfig_mapsRailwayOpenAiProxyVariables() {
+        YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+        yaml.setResources(new ClassPathResource("application-prod.yml"));
+
+        assertEquals("${OPENAI_API_KEY:${AI_PROVIDER_API_KEY:}}",
+                yaml.getObject().getProperty("openai.api-key"));
+        assertEquals("${OPENAI_BASE_URL:${AI_LLM_ENDPOINT:https://api.openai.com}}",
+                yaml.getObject().getProperty("openai.base-url"));
+        assertEquals("${OPENAI_FEEDBACK_ENABLED:true}",
+                yaml.getObject().getProperty("openai.feedback.enabled"));
+    }
+
+    @Test
     void generate_returnsEmptyWhenApiKeyIsMissing() {
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
                 new RestTemplate(),

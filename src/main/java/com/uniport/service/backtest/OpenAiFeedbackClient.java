@@ -24,6 +24,8 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String PROMPT_VERSION = "etf-feedback-v4-analysis-packet";
+    private static final String DEFAULT_BASE_URL = "https://api.openai.com";
+    private static final String DEFAULT_MODEL = "gpt-4.1-mini";
 
     private final RestTemplate restTemplate;
     private final String apiKey;
@@ -33,13 +35,13 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
 
     public OpenAiFeedbackClient(RestTemplate restTemplate,
                                 @Value("${openai.api-key:}") String apiKey,
-                                @Value("${openai.base-url:https://api.openai.com}") String baseUrl,
-                                @Value("${openai.model:gpt-4.1-mini}") String model,
+                                @Value("${openai.base-url:}") String baseUrl,
+                                @Value("${openai.model:}") String model,
                                 @Value("${openai.feedback.enabled:true}") boolean enabled) {
         this.restTemplate = restTemplate;
-        this.apiKey = apiKey != null ? apiKey.trim() : "";
-        this.baseUrl = baseUrl != null && !baseUrl.isBlank() ? baseUrl.trim() : "https://api.openai.com";
-        this.model = model != null && !model.isBlank() ? model.trim() : "gpt-4.1-mini";
+        this.apiKey = firstNonBlank(apiKey, System.getenv("OPENAI_API_KEY"), System.getenv("AI_PROVIDER_API_KEY"));
+        this.baseUrl = firstNonBlank(baseUrl, System.getenv("OPENAI_BASE_URL"), System.getenv("AI_LLM_ENDPOINT"), DEFAULT_BASE_URL);
+        this.model = firstNonBlank(model, System.getenv("OPENAI_MODEL"), DEFAULT_MODEL);
         this.enabled = enabled;
     }
 
@@ -266,7 +268,16 @@ public class OpenAiFeedbackClient implements LlmFeedbackClient {
         while (trimmed.endsWith("/")) {
             trimmed = trimmed.substring(0, trimmed.length() - 1);
         }
-        return trimmed.isBlank() ? "https://api.openai.com" : trimmed;
+        return trimmed.isBlank() ? DEFAULT_BASE_URL : trimmed;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return "";
     }
 
     private List<FeedbackBullet> parseBullets(Object value) {
