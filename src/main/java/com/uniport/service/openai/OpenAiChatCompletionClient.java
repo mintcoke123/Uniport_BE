@@ -1,16 +1,16 @@
 package com.uniport.service.openai;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,8 +22,9 @@ public class OpenAiChatCompletionClient {
 
     private static final String DEFAULT_BASE_URL = "https://api.openai.com";
     private static final String DEFAULT_MODEL = "gpt-4.1";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private final RestTemplate restTemplate;
+    private final ChatCompletionTransport transport;
     private final String apiKey;
     private final String baseUrl;
     private final String model;
@@ -35,7 +36,15 @@ public class OpenAiChatCompletionClient {
                                       @Value("${openai.base-url:}") String baseUrl,
                                       @Value("${openai.model:}") String model,
                                       @Value("${openai.feedback.enabled:true}") boolean enabled) {
-        this.restTemplate = restTemplate;
+        this(new JavaNetHttpChatCompletionTransport(), apiKey, baseUrl, model, enabled);
+    }
+
+    public OpenAiChatCompletionClient(ChatCompletionTransport transport,
+                                      String apiKey,
+                                      String baseUrl,
+                                      String model,
+                                      boolean enabled) {
+        this.transport = transport;
         this.apiKey = firstNonBlank(apiKey, System.getenv("OPENAI_API_KEY"), System.getenv("AI_PROVIDER_API_KEY"));
         this.baseUrl = firstNonBlank(
                 baseUrl,
@@ -136,12 +145,7 @@ public class OpenAiChatCompletionClient {
         }
     }
 
-    private String complete(String systemPrompt, String userContent, Map<String, Object> responseFormat) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-        headers.setBearerAuth(apiKey);
-        headers.set(HttpHeaders.USER_AGENT, "undici");
+    private String complete(String systemPrompt, String userContent, Map<String, Object> responseFormat) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
         body.put("messages", List.of(
@@ -151,14 +155,8 @@ public class OpenAiChatCompletionClient {
         if (responseFormat != null) {
             body.put("response_format", responseFormat);
         }
-        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                apiUrl("chat/completions"),
-                HttpMethod.POST,
-                new HttpEntity<>(body, headers),
-                new ParameterizedTypeReference<>() {
-                }
-        );
-        return extractOutputText(response.getBody());
+        Map<String, Object> response = transport.postChatCompletion(apiUrl("chat/completions"), body, apiKey);
+        return extractOutputText(response);
     }
 
     private Map<String, Object> jsonObjectResponseFormat() {
@@ -250,5 +248,43 @@ public class OpenAiChatCompletionClient {
     @FunctionalInterface
     public interface OutputParser<T> {
         T parse(String outputText) throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ChatCompletionTransport {
+        Map<String, Object> postChatCompletion(String url, Map<String, Object> body, String apiKey) throws Exception;
+    }
+
+    private static class JavaNetHttpChatCompletionTransport implements ChatCompletionTransport {
+
+        private final HttpClient httpClient = HttpClient.newHttpClient();
+
+        @Override
+        public Map<String, Object> postChatCompletion(String url, Map<String, Object> body, String apiKey) throws Exception {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(OBJECT_MAPPER.writeValueAsString(body)))
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new OpenAiHttpException(response.statusCode(), response.body());
+            }
+            return OBJECT_MAPPER.readValue(response.body(), new TypeReference<>() {
+            });
+        }
+    }
+
+    private static class OpenAiHttpException extends RuntimeException {
+
+        private final int statusCode;
+        private final String responseBody;
+
+        OpenAiHttpException(int statusCode, String responseBody) {
+            super(statusCode + " " + responseBody);
+            this.statusCode = statusCode;
+            this.responseBody = responseBody;
+        }
     }
 }

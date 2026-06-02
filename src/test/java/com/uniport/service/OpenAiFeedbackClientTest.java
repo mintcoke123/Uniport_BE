@@ -6,29 +6,17 @@ import com.uniport.service.openai.OpenAiChatCompletionClient;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
-import org.mockito.ArgumentCaptor;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentCaptor.forClass;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class OpenAiFeedbackClientTest {
 
@@ -65,36 +53,24 @@ class OpenAiFeedbackClientTest {
     @Test
     void generate_returnsEmptyWhenApiKeyIsMissing() {
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
-                chatClient(new RestTemplate(), "", "https://api.openai.com", "gpt-4.1", false)
+                chatClient(new CapturingTransport(), "", "https://api.openai.com", "gpt-4.1", false)
         );
 
         assertEquals(Optional.empty(), client.generate(baseFacts()));
     }
 
     @Test
-    @SuppressWarnings({"rawtypes", "unchecked"})
     void generate_requestsActionablePortfolioFeedbackFormat() {
-        RestTemplate restTemplate = mock(RestTemplate.class);
-        when(restTemplate.exchange(
-                eq("https://api.openai.com/v1/chat/completions"),
-                eq(HttpMethod.POST),
-                any(HttpEntity.class),
-                any(ParameterizedTypeReference.class)
-        )).thenReturn(chatCompletionResponse());
+        CapturingTransport transport = new CapturingTransport();
+        transport.thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
-                chatClient(restTemplate, "test-key", "https://api.openai.com", "gpt-4.1", true)
+                chatClient(transport, "test-key", "https://api.openai.com", "gpt-4.1", true)
         );
-        ArgumentCaptor<HttpEntity> captor = forClass(HttpEntity.class);
 
         client.generate(baseFacts());
 
-        verify(restTemplate).exchange(
-                eq("https://api.openai.com/v1/chat/completions"),
-                eq(HttpMethod.POST),
-                captor.capture(),
-                any(ParameterizedTypeReference.class)
-        );
-        Map<?, ?> body = (Map<?, ?>) captor.getValue().getBody();
+        assertEquals("https://api.openai.com/v1/chat/completions", transport.urls.get(0));
+        Map<?, ?> body = transport.bodies.get(0);
         List<?> messages = (List<?>) body.get("messages");
         Map<?, ?> systemMessage = (Map<?, ?>) messages.get(0);
         String prompt = String.valueOf(systemMessage.get("content"));
@@ -113,29 +89,16 @@ class OpenAiFeedbackClientTest {
     }
 
     @Test
-    @SuppressWarnings({"rawtypes", "unchecked"})
     void generate_sendsAnalysisPacketShapeInsteadOfRawInsightFacts() {
-        RestTemplate restTemplate = mock(RestTemplate.class);
-        when(restTemplate.exchange(
-                eq("https://api.openai.com/v1/chat/completions"),
-                eq(HttpMethod.POST),
-                any(HttpEntity.class),
-                any(ParameterizedTypeReference.class)
-        )).thenReturn(chatCompletionResponse());
+        CapturingTransport transport = new CapturingTransport();
+        transport.thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
-                chatClient(restTemplate, "test-key", "https://api.openai.com", "gpt-4.1", true)
+                chatClient(transport, "test-key", "https://api.openai.com", "gpt-4.1", true)
         );
-        ArgumentCaptor<HttpEntity> captor = forClass(HttpEntity.class);
 
         client.generate(baseFacts());
 
-        verify(restTemplate).exchange(
-                eq("https://api.openai.com/v1/chat/completions"),
-                eq(HttpMethod.POST),
-                captor.capture(),
-                any(ParameterizedTypeReference.class)
-        );
-        Map<?, ?> body = (Map<?, ?>) captor.getValue().getBody();
+        Map<?, ?> body = transport.bodies.get(0);
         List<?> messages = (List<?>) body.get("messages");
         Map<?, ?> userMessage = (Map<?, ?>) messages.get(1);
         String payload = String.valueOf(userMessage.get("content"));
@@ -148,18 +111,12 @@ class OpenAiFeedbackClientTest {
     }
 
     @Test
-    @SuppressWarnings({"rawtypes", "unchecked"})
     void generate_usesVersionedOpenAiCompatibleEndpointWithoutDuplicatingV1() {
-        RestTemplate restTemplate = mock(RestTemplate.class);
-        when(restTemplate.exchange(
-                eq("https://openai-oauth-production.up.railway.app/v1/chat/completions"),
-                eq(HttpMethod.POST),
-                any(HttpEntity.class),
-                any(ParameterizedTypeReference.class)
-        )).thenReturn(chatCompletionResponse());
+        CapturingTransport transport = new CapturingTransport();
+        transport.thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
                 chatClient(
-                        restTemplate,
+                        transport,
                         "proxy-key",
                         "https://openai-oauth-production.up.railway.app/v1",
                         "gpt-4.1",
@@ -170,52 +127,36 @@ class OpenAiFeedbackClientTest {
         Optional<?> feedback = client.generate(baseFacts());
 
         Assertions.assertTrue(feedback.isPresent());
-        verify(restTemplate).exchange(
-                eq("https://openai-oauth-production.up.railway.app/v1/chat/completions"),
-                eq(HttpMethod.POST),
-                any(HttpEntity.class),
-                any(ParameterizedTypeReference.class)
-        );
+        assertEquals("https://openai-oauth-production.up.railway.app/v1/chat/completions", transport.urls.get(0));
     }
 
     @Test
-    @SuppressWarnings({"rawtypes", "unchecked"})
     void generate_retriesWithJsonObjectWhenStrictSchemaIsRejected() {
-        RestTemplate restTemplate = mock(RestTemplate.class);
-        when(restTemplate.exchange(
-                eq("https://openai-oauth-production.up.railway.app/v1/chat/completions"),
-                eq(HttpMethod.POST),
-                any(HttpEntity.class),
-                any(ParameterizedTypeReference.class)
-        )).thenThrow(new HttpClientErrorException(HttpStatus.BAD_REQUEST))
-                .thenReturn(chatCompletionResponse());
+        CapturingTransport transport = new CapturingTransport();
+        transport.thenThrow(new RuntimeException("bad request"));
+        transport.thenReturn(chatCompletionResponse());
         OpenAiFeedbackClient client = new OpenAiFeedbackClient(
                 chatClient(
-                        restTemplate,
+                        transport,
                         "proxy-key",
                         "https://openai-oauth-production.up.railway.app/v1",
                         "gpt-4.1",
                         true
                 )
         );
-        ArgumentCaptor<HttpEntity> captor = forClass(HttpEntity.class);
 
         Optional<?> feedback = client.generate(baseFacts());
 
         Assertions.assertTrue(feedback.isPresent());
-        verify(restTemplate, times(2)).exchange(
-                eq("https://openai-oauth-production.up.railway.app/v1/chat/completions"),
-                eq(HttpMethod.POST),
-                captor.capture(),
-                any(ParameterizedTypeReference.class)
-        );
-        Map<?, ?> retryBody = (Map<?, ?>) captor.getAllValues().get(1).getBody();
+        assertEquals(2, transport.urls.size());
+        assertEquals("https://openai-oauth-production.up.railway.app/v1/chat/completions", transport.urls.get(1));
+        Map<?, ?> retryBody = transport.bodies.get(1);
         Map<?, ?> retryFormat = (Map<?, ?>) retryBody.get("response_format");
         assertEquals("json_object", retryFormat.get("type"));
     }
 
-    private ResponseEntity<Map<String, Object>> chatCompletionResponse() {
-        return ResponseEntity.ok(Map.of(
+    private Map<String, Object> chatCompletionResponse() {
+        return Map.of(
                 "choices", List.of(Map.of(
                         "message", Map.of(
                                 "content", """
@@ -223,17 +164,43 @@ class OpenAiFeedbackClientTest {
                                         """
                         )
                 ))
-        ));
+        );
     }
 
     private OpenAiChatCompletionClient chatClient(
-            RestTemplate restTemplate,
+            OpenAiChatCompletionClient.ChatCompletionTransport transport,
             String apiKey,
             String baseUrl,
             String model,
             boolean enabled
     ) {
-        return new OpenAiChatCompletionClient(restTemplate, apiKey, baseUrl, model, enabled);
+        return new OpenAiChatCompletionClient(transport, apiKey, baseUrl, model, enabled);
+    }
+
+    private class CapturingTransport implements OpenAiChatCompletionClient.ChatCompletionTransport {
+        private final List<String> urls = new ArrayList<>();
+        private final List<Map<String, Object>> bodies = new ArrayList<>();
+        private final Queue<Object> results = new ArrayDeque<>();
+
+        void thenReturn(Map<String, Object> response) {
+            results.add(response);
+        }
+
+        void thenThrow(Exception exception) {
+            results.add(exception);
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public Map<String, Object> postChatCompletion(String url, Map<String, Object> body, String apiKey) throws Exception {
+            urls.add(url);
+            bodies.add(body);
+            Object next = results.isEmpty() ? chatCompletionResponse() : results.remove();
+            if (next instanceof Exception exception) {
+                throw exception;
+            }
+            return (Map<String, Object>) next;
+        }
     }
 
     private InsightFacts baseFacts() {
