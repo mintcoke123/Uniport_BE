@@ -102,6 +102,56 @@ public class SaveTickerNewsDomExtractor {
               return items;
             }
             """;
+    private static final String REVEAL_FULL_BODY_SCRIPT = """
+            () => {
+              const clean = (value) => (value || "")
+                .replace(/\\u00a0/g, " ")
+                .replace(/[\\t\\v\\f\\r\\n]+/g, " ")
+                .replace(/[ ]{2,}/g, " ")
+                .trim();
+              const compact = (value) => clean(value).replace(/\\s+/g, "").toLowerCase();
+              const isVisible = (element) => Boolean(
+                element &&
+                (element.offsetWidth || element.offsetHeight || element.getClientRects().length)
+              );
+              const labelOf = (element) => clean([
+                element.innerText,
+                element.textContent,
+                element.getAttribute("aria-label"),
+                element.getAttribute("title"),
+              ].filter(Boolean).join(" "));
+              const matchesFullBody = (element) => {
+                const label = compact(labelOf(element));
+                if (!label) {
+                  return false;
+                }
+                return [
+                  "본문전체",
+                  "전체본문",
+                  "원문전체",
+                  "전체기사",
+                  "기사본문",
+                  "본문보기",
+                  "원문보기",
+                  "fulltext",
+                  "fullarticle",
+                  "articlebody",
+                  "originalarticle",
+                ].some((keyword) => label.includes(keyword));
+              };
+              const candidates = Array.from(document.querySelectorAll(
+                "button, a, [role='tab'], [role='button'], [tabindex]"
+              ));
+              const target = candidates.find((element) => isVisible(element) && matchesFullBody(element));
+              if (!target) {
+                return false;
+              }
+              target.scrollIntoView({ block: "center", inline: "center" });
+              target.click();
+              target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+              return true;
+            }
+            """;
     private static final String DETAIL_SCRIPT = """
             () => {
               const clean = (value) => (value || "")
@@ -188,6 +238,9 @@ public class SaveTickerNewsDomExtractor {
                         .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
         );
         page.waitForTimeout(1000);
+        if (revealFullBody(page)) {
+            page.waitForTimeout(700);
+        }
         Object result = page.evaluate(DETAIL_SCRIPT);
         if (!(result instanceof Map<?, ?> values)) {
             return DomDetail.empty(url);
@@ -199,6 +252,16 @@ public class SaveTickerNewsDomExtractor {
                 stringValue(values.get("datetime")),
                 stringValue(values.get("timeText"))
         );
+    }
+
+    private boolean revealFullBody(Page page) {
+        try {
+            Object result = page.evaluate(REVEAL_FULL_BODY_SCRIPT);
+            return result instanceof Boolean clicked && clicked;
+        } catch (Exception exception) {
+            LOGGER.warn("SaveTicker full-body tab reveal failed: {}", exception.getMessage());
+            return false;
+        }
     }
 
     private FetchedNewsArticle toArticle(PublicWebIssueSource source,

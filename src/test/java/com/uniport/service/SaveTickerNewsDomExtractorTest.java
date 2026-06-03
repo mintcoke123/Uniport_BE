@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import com.microsoft.playwright.Page;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import java.net.URI;
 import java.time.LocalDateTime;
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -24,7 +26,7 @@ class SaveTickerNewsDomExtractorTest {
     @Test
     void extract_readsListAndDetailTextFromPlaywrightDomWithoutSerializingHtml() {
         Page page = mock(Page.class);
-        when(page.evaluate(argThat(script -> script.contains("querySelectorAll")), eq(2)))
+        when(page.evaluate(argThat(script -> containsAll(script, "querySelectorAll")), eq(2)))
                 .thenReturn(List.of(
                         Map.of(
                                 "url", "https://www.saveticker.com/news/139026",
@@ -40,7 +42,7 @@ class SaveTickerNewsDomExtractorTest {
                                 "timeText", "2026-06-03 20:03"
                         )
                 ));
-        when(page.evaluate(argThat(script -> script.contains("document.querySelector"))))
+        when(page.evaluate(argThat(script -> containsAll(script, "bodyText"))))
                 .thenReturn(Map.of(
                         "url", "https://www.saveticker.com/news/139026",
                         "title", "시장조사기관 알파센스, 신규 자금 조달 라운드서 기업가치 75억 달러로 상승",
@@ -80,9 +82,50 @@ class SaveTickerNewsDomExtractorTest {
     }
 
     @Test
+    void extract_clicksFullBodyTabBeforeReadingDetailDomText() {
+        Page page = mock(Page.class);
+        when(page.evaluate(argThat(script -> containsAll(script, "querySelectorAll")), eq(1)))
+                .thenReturn(List.of(
+                        Map.of(
+                                "url", "https://www.saveticker.com/news/140003",
+                                "path", "/news/140003",
+                                "title", "본문 탭 뒤에 숨겨진 원문 기사",
+                                "listText", "본문 탭 뒤에 숨겨진 원문 기사",
+                                "datetime", "",
+                                "timeText", ""
+                        )
+                ));
+        when(page.evaluate(argThat(script -> containsAll(script, "본문", "click"))))
+                .thenReturn(true);
+        when(page.evaluate(argThat(script -> containsAll(script, "bodyText"))))
+                .thenReturn(Map.of(
+                        "url", "https://www.saveticker.com/news/140003",
+                        "title", "본문 탭 뒤에 숨겨진 원문 기사",
+                        "bodyText", "본문 탭을 누른 뒤 노출되는 전체 기사 문장입니다.",
+                        "datetime", "",
+                        "timeText", ""
+                ));
+        PublicWebIssueSource source = new PublicWebIssueSource(
+                "SaveTicker News",
+                URI.create("https://www.saveticker.com/news"),
+                NewsCategory.MARKET,
+                "세이브티커",
+                1
+        );
+
+        List<FetchedNewsArticle> articles = new SaveTickerNewsDomExtractor().extract(source, page, 6000);
+
+        assertEquals(1, articles.size());
+        assertTrue(articles.get(0).getSummary().contains("전체 기사 문장"));
+        InOrder inOrder = inOrder(page);
+        inOrder.verify(page).evaluate(argThat(script -> containsAll(script, "본문", "click")));
+        inOrder.verify(page).evaluate(argThat(script -> containsAll(script, "bodyText")));
+    }
+
+    @Test
     void extract_fallsBackToListTitleWhenDetailTitleIsSiteChrome() {
         Page page = mock(Page.class);
-        when(page.evaluate(argThat(script -> script.contains("querySelectorAll")), eq(1)))
+        when(page.evaluate(argThat(script -> containsAll(script, "querySelectorAll")), eq(1)))
                 .thenReturn(List.of(
                         Map.of(
                                 "url", "https://www.saveticker.com/news/140001",
@@ -93,7 +136,7 @@ class SaveTickerNewsDomExtractorTest {
                                 "timeText", ""
                         )
                 ));
-        when(page.evaluate(argThat(script -> script.contains("document.querySelector"))))
+        when(page.evaluate(argThat(script -> containsAll(script, "bodyText"))))
                 .thenReturn(Map.of(
                         "url", "https://www.saveticker.com/news/140001",
                         "title", "SaveTicker",
@@ -123,7 +166,7 @@ class SaveTickerNewsDomExtractorTest {
     @Test
     void extract_keepsListArticleWhenDetailPageFails() {
         Page page = mock(Page.class);
-        when(page.evaluate(argThat(script -> script.contains("querySelectorAll")), eq(1)))
+        when(page.evaluate(argThat(script -> containsAll(script, "querySelectorAll")), eq(1)))
                 .thenReturn(List.of(
                         Map.of(
                                 "url", "https://www.saveticker.com/news/140002",
@@ -154,5 +197,17 @@ class SaveTickerNewsDomExtractorTest {
         assertEquals("미국 고용지표 발표 앞두고 금리 인하 기대 재조정", articles.get(0).getTitle());
         assertTrue(articles.get(0).getSummary().contains("투자자들은 신규 고용과 임금 상승률을 확인"));
         assertEquals(LocalDateTime.of(2026, 6, 4, 8, 30), articles.get(0).getPublishedAt());
+    }
+
+    private static boolean containsAll(String value, String... needles) {
+        if (value == null) {
+            return false;
+        }
+        for (String needle : needles) {
+            if (!value.contains(needle)) {
+                return false;
+            }
+        }
+        return true;
     }
 }
