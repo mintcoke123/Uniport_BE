@@ -18,7 +18,6 @@ public class SaveTickerNewsJsonMapper {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final ZoneId KST_ZONE = ZoneId.of("Asia/Seoul");
-    private static final int MAX_SUMMARY_LENGTH = 180;
     private static final String SAVETICKER_WEB_NEWS_BASE_URL = "https://www.saveticker.com/news/";
 
     public List<FetchedNewsArticle> extract(PublicWebIssueSource source, String json) {
@@ -57,11 +56,11 @@ public class SaveTickerNewsJsonMapper {
                 .id("saveticker_" + saveTickerId.replaceAll("[^A-Za-z0-9_-]", "_"))
                 .category(source.category())
                 .title(title)
-                .summary(trimSummary(firstNonBlank(
+                .summary(firstNonBlank(
                         text(item, "group_summary"),
                         translatedSummary(item, "ko_KR"),
                         text(item, "content")
-                )))
+                ))
                 .content(tagText)
                 .sourceName(sourceName(source, item))
                 .publishedAt(parseDateTime(firstNonBlank(
@@ -71,6 +70,43 @@ public class SaveTickerNewsJsonMapper {
                 .featured(item.path("is_top_story").asBoolean(false))
                 .externalUrl(saveTickerUrl(saveTickerId, text(item, "news_group_id")))
                 .build();
+    }
+
+    public FetchedNewsArticle enrichWithDetail(PublicWebIssueSource source,
+                                               FetchedNewsArticle article,
+                                               String json) {
+        if (article == null || json == null || json.isBlank()) {
+            return article;
+        }
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(json);
+            JsonNode item = root.path("news");
+            if (item.isMissingNode() || item.isNull()) {
+                return article;
+            }
+
+            String title = firstNonBlank(translatedTitle(item, "ko_KR"), text(item, "title"), article.getTitle());
+            String fullContent = firstNonBlank(
+                    translatedContent(item, "ko_KR"),
+                    contentBlocks(item.path("content")),
+                    translatedSummary(item, "ko_KR"),
+                    article.getSummary()
+            );
+            LocalDateTime publishedAt = parseDateTime(text(item, "created_at"));
+            return FetchedNewsArticle.builder()
+                    .id(article.getId())
+                    .category(article.getCategory())
+                    .title(title)
+                    .summary(fullContent)
+                    .content(article.getContent())
+                    .sourceName(sourceName(source, item, article.getSourceName()))
+                    .publishedAt(publishedAt == null ? article.getPublishedAt() : publishedAt)
+                    .featured(article.isFeatured())
+                    .externalUrl(article.getExternalUrl())
+                    .build();
+        } catch (Exception exception) {
+            return article;
+        }
     }
 
     private String translatedTitle(JsonNode item, String locale) {
@@ -83,6 +119,11 @@ public class SaveTickerNewsJsonMapper {
         if (!summary.isBlank()) {
             return summary;
         }
+        return contentBlocks(translated.path("content"));
+    }
+
+    private String translatedContent(JsonNode item, String locale) {
+        JsonNode translated = item.path("translations").path("translated").path(locale);
         return contentBlocks(translated.path("content"));
     }
 
@@ -118,9 +159,15 @@ public class SaveTickerNewsJsonMapper {
     }
 
     private String sourceName(PublicWebIssueSource source, JsonNode item) {
+        return sourceName(source, item, source.sourceName());
+    }
+
+    private String sourceName(PublicWebIssueSource source, JsonNode item, String fallbackSourceName) {
         String rawSource = text(item, "source");
         if (rawSource.isBlank()) {
-            return source.sourceName();
+            return fallbackSourceName == null || fallbackSourceName.isBlank()
+                    ? source.sourceName()
+                    : fallbackSourceName;
         }
         return switch (rawSource.toLowerCase(Locale.ROOT)) {
             case "reuters" -> "Reuters";
@@ -171,14 +218,6 @@ public class SaveTickerNewsJsonMapper {
             return "";
         }
         return cleanText(node.path(fieldName).asText(""));
-    }
-
-    private String trimSummary(String value) {
-        String summary = cleanText(value);
-        if (summary.length() <= MAX_SUMMARY_LENGTH) {
-            return summary;
-        }
-        return summary.substring(0, MAX_SUMMARY_LENGTH).replaceAll("\\s+\\S*$", "").trim();
     }
 
     private String cleanText(String value) {

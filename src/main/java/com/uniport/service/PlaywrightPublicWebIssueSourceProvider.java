@@ -159,6 +159,7 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
             try {
                 String json = fetchJsonInPage(page, apiUrl);
                 for (FetchedNewsArticle article : saveTickerNewsJsonMapper.extract(source, json)) {
+                    article = enrichSaveTickerArticle(page, source, article);
                     articlesById.putIfAbsent(article.getId(), article);
                     if (articlesById.size() >= source.maxItems()) {
                         return List.copyOf(articlesById.values());
@@ -177,6 +178,7 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
             try {
                 String json = fetchText(apiUrl);
                 for (FetchedNewsArticle article : saveTickerNewsJsonMapper.extract(source, json)) {
+                    article = enrichSaveTickerArticleWithoutBrowser(source, article);
                     articlesById.putIfAbsent(article.getId(), article);
                     if (articlesById.size() >= source.maxItems()) {
                         return List.copyOf(articlesById.values());
@@ -189,12 +191,60 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
         return List.copyOf(articlesById.values());
     }
 
+    private FetchedNewsArticle enrichSaveTickerArticle(Page page,
+                                                       PublicWebIssueSource source,
+                                                       FetchedNewsArticle article) {
+        String saveTickerId = saveTickerId(article);
+        if (saveTickerId.isBlank()) {
+            return article;
+        }
+        String apiUrl = saveTickerDetailApiUrl(saveTickerId);
+        try {
+            String json = fetchJsonInPage(page, apiUrl);
+            return saveTickerNewsJsonMapper.enrichWithDetail(source, article, json);
+        } catch (Exception exception) {
+            LOGGER.warn("SaveTicker public news detail request failed at {}: {}", apiUrl, exception.getMessage());
+            return article;
+        }
+    }
+
+    private FetchedNewsArticle enrichSaveTickerArticleWithoutBrowser(PublicWebIssueSource source,
+                                                                     FetchedNewsArticle article) {
+        String saveTickerId = saveTickerId(article);
+        if (saveTickerId.isBlank()) {
+            return article;
+        }
+        String apiUrl = saveTickerDetailApiUrl(saveTickerId);
+        try {
+            String json = fetchText(apiUrl);
+            return saveTickerNewsJsonMapper.enrichWithDetail(source, article, json);
+        } catch (Exception exception) {
+            LOGGER.warn("SaveTicker public news detail HTTP fallback failed at {}: {}", apiUrl, exception.getMessage());
+            return article;
+        }
+    }
+
     private List<String> saveTickerApiUrls(PublicWebIssueSource source) {
         int pageSize = Math.max(1, source.maxItems());
         return List.of(
                 SAVETICKER_API_BASE_URL + "/news/top-stories",
                 SAVETICKER_API_BASE_URL + "/news/list?page=1&page_size=" + pageSize + "&sort=created_at_desc"
         );
+    }
+
+    private String saveTickerDetailApiUrl(String saveTickerId) {
+        return SAVETICKER_API_BASE_URL + "/news/detail/" + saveTickerId;
+    }
+
+    private String saveTickerId(FetchedNewsArticle article) {
+        if (article == null || article.getId() == null) {
+            return "";
+        }
+        String id = article.getId().trim();
+        if (id.startsWith("saveticker_")) {
+            return id.substring("saveticker_".length());
+        }
+        return "";
     }
 
     private String fetchJsonInPage(Page page, String apiUrl) {
