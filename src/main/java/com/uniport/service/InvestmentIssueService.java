@@ -451,7 +451,7 @@ public class InvestmentIssueService {
                 .label(label == null ? null : label.apiValue())
                 .labelText(label == null ? null : label.labelText())
                 .summary(issue.summary())
-                .body(generatedBody(issue))
+                .body(sourceArticleBody(issue))
                 .reasonBullets(limit(issue.reasonBullets(), maxReasonBullets))
                 .watchPoints(limit(issue.watchPoints(), maxWatchPoints))
                 .relatedStocks(relatedStocks(issue))
@@ -463,78 +463,37 @@ public class InvestmentIssueService {
                 .build();
     }
 
-    private String generatedBody(InvestmentIssue issue) {
+    private String sourceArticleBody(InvestmentIssue issue) {
         List<String> sections = new ArrayList<>();
-        String summary = trimToEmpty(issue.summary());
-        if (!summary.isBlank()) {
-            sections.add(summary);
-        }
-        List<String> articleEvidence = articleEvidenceSnippets(issue.sourceArticles(), 3);
-        if (!articleEvidence.isEmpty()) {
-            sections.add("기사에서 확인된 내용\n" + bulletLines(articleEvidence));
-        }
-        List<String> reasons = limit(issue.reasonBullets(), maxReasonBullets);
-        if (!reasons.isEmpty()) {
-            sections.add("주요 근거\n" + bulletLines(reasons));
-        }
-        List<String> watchPoints = limit(issue.watchPoints(), maxWatchPoints);
-        if (!watchPoints.isEmpty()) {
-            sections.add("확인할 점\n" + bulletLines(watchPoints));
-        }
-        sections.add(sourceContextLine(issue.sourceCount()));
-        return String.join("\n\n", sections);
-    }
-
-    private String sourceContextLine(int sourceCount) {
-        if (sourceCount > 1) {
-            return "이 설명은 같은 이슈로 묶인 기사 " + sourceCount + "건을 바탕으로 UniPort가 생성했어요.";
-        }
-        return "이 설명은 현재 확인된 기사 흐름을 바탕으로 UniPort가 생성했어요.";
-    }
-
-    private List<String> articleEvidenceSnippets(List<FetchedNewsArticle> articles, int limit) {
-        List<String> snippets = new ArrayList<>();
-        for (FetchedNewsArticle article : safeList(articles)) {
-            addArticleEvidenceSnippet(snippets, article.getSummary(), limit);
-            if (snippets.size() >= limit) {
-                break;
+        for (FetchedNewsArticle article : safeList(issue.sourceArticles())) {
+            String title = cleanSourceArticleText(article.getTitle());
+            String summary = cleanSourceArticleText(article.getSummary());
+            if (title.isBlank() && summary.isBlank()) {
+                continue;
             }
-            addArticleEvidenceSnippet(snippets, article.getTitle(), limit);
-            if (snippets.size() >= limit) {
-                break;
+            List<String> lines = new ArrayList<>();
+            String sourceName = trimToEmpty(article.getSourceName());
+            if (!title.isBlank()) {
+                lines.add(sourceName.isBlank() ? title : "[" + sourceName + "] " + title);
+            } else if (!sourceName.isBlank()) {
+                lines.add("[" + sourceName + "]");
             }
+            if (!summary.isBlank()) {
+                lines.add(summary);
+            }
+            sections.add(String.join("\n", lines));
         }
-        return List.copyOf(snippets);
+        if (!sections.isEmpty()) {
+            return String.join("\n\n", sections);
+        }
+        return cleanSourceArticleText(issue.summary());
     }
 
-    private void addArticleEvidenceSnippet(List<String> snippets, String value, int limit) {
-        if (snippets.size() >= limit) {
-            return;
-        }
-        String snippet = cleanEvidenceText(value);
-        if (snippet.length() < 8 || snippets.contains(snippet)) {
-            return;
-        }
-        snippets.add(snippet);
-    }
-
-    private String cleanEvidenceText(String value) {
-        String cleaned = trimToEmpty(value)
+    private String cleanSourceArticleText(String value) {
+        return trimToEmpty(value)
                 .replaceAll("\\.{2,}|…", "")
                 .replaceAll("\\s+", " ")
                 .trim();
-        if (cleaned.length() <= 110) {
-            return cleaned;
-        }
-        return cleaned.substring(0, 110).replaceAll("\\s+\\S*$", "").trim();
-    }
-
-    private String bulletLines(List<String> values) {
-        return values.stream()
-                .map(value -> "- " + value)
-                .toList()
-                .stream()
-                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     private List<InvestmentIssueRelatedStockDTO> relatedStocks(InvestmentIssue issue) {

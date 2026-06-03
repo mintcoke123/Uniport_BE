@@ -157,7 +157,7 @@ class InvestmentIssueServiceTest {
     }
 
     @Test
-    void getIssueDetail_bodyIncludesArticleEvidenceForSpecificIssueContext() {
+    void getIssueDetail_bodyUsesSourceArticleTextWithoutGeneratedAdviceSections() {
         InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(List.of(
                 article("nvidia-earnings-risk", NewsCategory.OVERSEAS_STOCK,
                         "엔비디아 실적 쇼크 우려에 AI 반도체주 약세",
@@ -178,9 +178,14 @@ class InvestmentIssueServiceTest {
 
         assertFalse(detail.getTitle().equals("엔비디아 실적"));
         assertTrue(detail.getTitle().contains("실적 쇼크 우려") || detail.getTitle().contains("마진 압박"));
-        assertTrue(detail.getBody().contains("기사에서 확인된 내용"));
+        assertTrue(detail.getBody().contains("[테스트뉴스] 엔비디아 실적 쇼크 우려에 AI 반도체주 약세"));
         assertTrue(detail.getBody().contains("데이터센터 매출 둔화"));
+        assertTrue(detail.getBody().contains("[테스트뉴스] 엔비디아 실적 둔화 우려에 마진 압박 전망"));
         assertTrue(detail.getBody().contains("AI 칩 수요는 유지되지만 비용 부담"));
+        assertFalse(detail.getBody().contains("기사에서 확인된 내용"));
+        assertFalse(detail.getBody().contains("주요 근거"));
+        assertFalse(detail.getBody().contains("확인할 점"));
+        assertFalse(detail.getBody().contains("UniPort가 생성"));
         assertFalse(detail.getBody().contains("본문 원문은 그대로 복사하지 않아야 합니다."));
         assertFalse(detail.getBody().contains("..."));
     }
