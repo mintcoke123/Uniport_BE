@@ -17,10 +17,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 @Component
 @ConditionalOnProperty(prefix = "uniport.investment-issue.public-web", name = "enabled", havingValue = "true")
@@ -31,19 +29,18 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
     private static final int DEFAULT_TIMEOUT_MS = 6000;
     private static final int DEFAULT_MAX_ITEMS = 20;
     private static final int MAX_CONFIGURED_SOURCES = 50;
-    private static final String SAVETICKER_API_BASE_URL = "https://api.saveticker.com/api";
 
     private final PublicWebIssueHtmlExtractor extractor;
-    private final SaveTickerNewsJsonMapper saveTickerNewsJsonMapper;
+    private final SaveTickerNewsDomExtractor saveTickerNewsDomExtractor;
     private final HttpClient httpClient;
     private final List<PublicWebIssueSource> sources;
     private final int timeoutMs;
 
     public PlaywrightPublicWebIssueSourceProvider(Environment environment,
                                                  PublicWebIssueHtmlExtractor extractor,
-                                                 SaveTickerNewsJsonMapper saveTickerNewsJsonMapper) {
+                                                 SaveTickerNewsDomExtractor saveTickerNewsDomExtractor) {
         this.extractor = extractor;
-        this.saveTickerNewsJsonMapper = saveTickerNewsJsonMapper;
+        this.saveTickerNewsDomExtractor = saveTickerNewsDomExtractor;
         this.httpClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(Duration.ofMillis(DEFAULT_TIMEOUT_MS))
@@ -91,7 +88,7 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
                             .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
             );
             if (isSaveTickerNewsSource(source)) {
-                List<FetchedNewsArticle> articles = fetchSaveTickerArticles(page, source);
+                List<FetchedNewsArticle> articles = saveTickerNewsDomExtractor.extract(source, page, timeoutMs);
                 LOGGER.info(
                         "Public web issue source '{}' fetched {} articles from {}",
                         source.name(),
@@ -123,16 +120,6 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
     private List<FetchedNewsArticle> fetchSourceWithoutBrowser(PublicWebIssueSource source) {
         try {
             String html = fetchText(source.url().toString());
-            if (isSaveTickerNewsSource(source)) {
-                List<FetchedNewsArticle> articles = fetchSaveTickerArticlesWithoutBrowser(source);
-                LOGGER.info(
-                        "Public web issue source '{}' fetched {} articles from {} using HTTP fallback",
-                        source.name(),
-                        articles.size(),
-                        source.url()
-                );
-                return articles;
-            }
             List<FetchedNewsArticle> articles = extractor.extract(source, html);
             LOGGER.info(
                     "Public web issue source '{}' fetched {} articles from {} using HTTP fallback",
@@ -151,119 +138,6 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
             );
             return List.of();
         }
-    }
-
-    private List<FetchedNewsArticle> fetchSaveTickerArticles(Page page, PublicWebIssueSource source) {
-        Map<String, FetchedNewsArticle> articlesById = new LinkedHashMap<>();
-        for (String apiUrl : saveTickerApiUrls(source)) {
-            try {
-                String json = fetchJsonInPage(page, apiUrl);
-                for (FetchedNewsArticle article : saveTickerNewsJsonMapper.extract(source, json)) {
-                    article = enrichSaveTickerArticle(page, source, article);
-                    articlesById.putIfAbsent(article.getId(), article);
-                    if (articlesById.size() >= source.maxItems()) {
-                        return List.copyOf(articlesById.values());
-                    }
-                }
-            } catch (Exception exception) {
-                LOGGER.warn("SaveTicker public news request failed at {}: {}", apiUrl, exception.getMessage());
-            }
-        }
-        return List.copyOf(articlesById.values());
-    }
-
-    private List<FetchedNewsArticle> fetchSaveTickerArticlesWithoutBrowser(PublicWebIssueSource source) {
-        Map<String, FetchedNewsArticle> articlesById = new LinkedHashMap<>();
-        for (String apiUrl : saveTickerApiUrls(source)) {
-            try {
-                String json = fetchText(apiUrl);
-                for (FetchedNewsArticle article : saveTickerNewsJsonMapper.extract(source, json)) {
-                    article = enrichSaveTickerArticleWithoutBrowser(source, article);
-                    articlesById.putIfAbsent(article.getId(), article);
-                    if (articlesById.size() >= source.maxItems()) {
-                        return List.copyOf(articlesById.values());
-                    }
-                }
-            } catch (Exception exception) {
-                LOGGER.warn("SaveTicker public news HTTP fallback failed at {}: {}", apiUrl, exception.getMessage());
-            }
-        }
-        return List.copyOf(articlesById.values());
-    }
-
-    private FetchedNewsArticle enrichSaveTickerArticle(Page page,
-                                                       PublicWebIssueSource source,
-                                                       FetchedNewsArticle article) {
-        String saveTickerId = saveTickerId(article);
-        if (saveTickerId.isBlank()) {
-            return article;
-        }
-        String apiUrl = saveTickerDetailApiUrl(saveTickerId);
-        try {
-            String json = fetchJsonInPage(page, apiUrl);
-            return saveTickerNewsJsonMapper.enrichWithDetail(source, article, json);
-        } catch (Exception exception) {
-            LOGGER.warn("SaveTicker public news detail request failed at {}: {}", apiUrl, exception.getMessage());
-            return article;
-        }
-    }
-
-    private FetchedNewsArticle enrichSaveTickerArticleWithoutBrowser(PublicWebIssueSource source,
-                                                                     FetchedNewsArticle article) {
-        String saveTickerId = saveTickerId(article);
-        if (saveTickerId.isBlank()) {
-            return article;
-        }
-        String apiUrl = saveTickerDetailApiUrl(saveTickerId);
-        try {
-            String json = fetchText(apiUrl);
-            return saveTickerNewsJsonMapper.enrichWithDetail(source, article, json);
-        } catch (Exception exception) {
-            LOGGER.warn("SaveTicker public news detail HTTP fallback failed at {}: {}", apiUrl, exception.getMessage());
-            return article;
-        }
-    }
-
-    private List<String> saveTickerApiUrls(PublicWebIssueSource source) {
-        int pageSize = Math.max(1, source.maxItems());
-        return List.of(
-                SAVETICKER_API_BASE_URL + "/news/top-stories",
-                SAVETICKER_API_BASE_URL + "/news/list?page=1&page_size=" + pageSize + "&sort=created_at_desc"
-        );
-    }
-
-    private String saveTickerDetailApiUrl(String saveTickerId) {
-        return SAVETICKER_API_BASE_URL + "/news/detail/" + saveTickerId;
-    }
-
-    private String saveTickerId(FetchedNewsArticle article) {
-        if (article == null || article.getId() == null) {
-            return "";
-        }
-        String id = article.getId().trim();
-        if (id.startsWith("saveticker_")) {
-            return id.substring("saveticker_".length());
-        }
-        return "";
-    }
-
-    private String fetchJsonInPage(Page page, String apiUrl) {
-        Object result = page.evaluate(
-                """
-                        async (url) => {
-                          const response = await fetch(url, {
-                            headers: { accept: "application/json" },
-                            credentials: "omit",
-                          });
-                          if (!response.ok) {
-                            throw new Error(`${response.status} ${response.statusText}`);
-                          }
-                          return await response.text();
-                        }
-                        """,
-                apiUrl
-        );
-        return result instanceof String text ? text : "";
     }
 
     private String fetchText(String url) {
