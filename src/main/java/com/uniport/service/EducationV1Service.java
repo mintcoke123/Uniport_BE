@@ -535,6 +535,7 @@ public class EducationV1Service {
         step.put("asset_id", card.getAssetId());
         step.put("title", card.getTitle());
         step.put("text", card.getText());
+        step.put("glossary_terms", EducationGlossaryClassifier.classify(card.getText()));
         step.put("image_type", normalizedVisual.imageType());
         step.put("renderer_type", normalizedVisual.rendererType());
         step.put("visual_type", normalizedVisual.visualType());

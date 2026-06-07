@@ -229,6 +229,37 @@ class EducationV1ServiceTest {
     }
 
     @Test
+    void courseDayAddsGlossaryTermsWithExactOffsetsToCardSteps() {
+        String text = "보통주는 주주총회에서 의결권을 갖고, 우선주는 배당에 강점이 있어요.";
+        when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(emptyLearningState()));
+        when(educationOverviewRepository.findByTrackAndSectorAndDayNumber(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(Optional.of(overview("intro_core", null, 1, "Day 1")));
+        when(educationCardRepository.findByTrackAndSectorAndDayNumberOrderBySourceIdxAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of(cardWithText(1, "주식의 종류", text)));
+        when(educationQuizRepository.findByTrackAndSectorAndDayNumberOrderByQuizNumberAsc(eq("intro_core"), isNull(), eq(1)))
+                .thenReturn(List.of());
+
+        Map<String, Object> response = service.getCourseDay(user, "intro", 1);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> flow = (List<Map<String, Object>>) response.get("flow");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> cardStep = flow.stream()
+                .filter(step -> "card".equals(step.get("step_type")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> glossaryTerms = (List<Map<String, Object>>) cardStep.get("glossary_terms");
+        assertFalse(glossaryTerms.isEmpty());
+        assertTrue(glossaryTerms.stream().anyMatch(term ->
+                "보통주".equals(term.get("term"))
+                        && Integer.valueOf(text.indexOf("보통주")).equals(term.get("start"))
+                        && Integer.valueOf(text.indexOf("보통주") + "보통주".length()).equals(term.get("end"))));
+        assertTrue(glossaryTerms.stream().anyMatch(term -> "의결권".equals(term.get("term"))));
+        assertTrue(glossaryTerms.stream().anyMatch(term -> "우선주".equals(term.get("term"))));
+    }
+
+    @Test
     void updateAdvancedSectorSelectionSeedsIntroWhenIntroSelectionIsMissing() {
         when(learningUserStateRepository.findById(1L)).thenReturn(Optional.of(emptyLearningState()));
 
@@ -868,6 +899,21 @@ class EducationV1ServiceTest {
                 .text("본문")
                 .imageType(imageType)
                 .visualJson(visualJson)
+                .build();
+    }
+
+    private EducationCardEntity cardWithText(int idx, String title, String text) {
+        return EducationCardEntity.builder()
+                .sourceIdx(idx)
+                .assetId("asset-" + idx)
+                .sheet("입문_카드_FINAL")
+                .track("intro_core")
+                .dayNumber(1)
+                .section("섹션")
+                .cardNumber((idx + 1) + "/2")
+                .title(title)
+                .text(text)
+                .imageType("none")
                 .build();
     }
 
