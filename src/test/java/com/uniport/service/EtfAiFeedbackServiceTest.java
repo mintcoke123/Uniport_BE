@@ -76,7 +76,7 @@ class EtfAiFeedbackServiceTest {
         assertTrue(feedback.bullets().get(0).message().contains("NVIDIA Corp."));
         assertTrue(feedback.bullets().get(0).message().contains("45.0%"));
         assertTrue(feedback.bullets().get(0).message().contains("Apple Inc. 30.0%"));
-        assertTrue(feedback.bullets().get(1).message().startsWith("가장 큰 리스크:"));
+        assertTrue(feedback.bullets().get(1).message().startsWith("최대 리스크 요인:"));
         assertTrue(feedback.bullets().get(2).message().startsWith("조정 방향:"));
     }
 
@@ -100,7 +100,7 @@ class EtfAiFeedbackServiceTest {
 
         assertTrue(feedback.summary().contains("NVIDIA 35.0%"));
         assertTrue(feedback.summary().contains("Apple 25.0%"));
-        assertTrue(feedback.bullets().get(0).message().contains("Microsoft 20.0%"));
+        assertTrue(!feedback.bullets().get(0).message().contains("Microsoft 20.0%"));
         assertTrue(feedback.bullets().get(1).message().contains("JPMorgan"));
         assertTrue(!feedback.bullets().get(0).message().contains("상위 종목 몇 개"));
     }
@@ -122,7 +122,7 @@ class EtfAiFeedbackServiceTest {
 
         RuleBasedFeedback feedback = service.buildFallbackFeedback(facts);
 
-        assertTrue(feedback.summary().contains("포트폴리오"));
+        assertTrue(feedback.summary().contains("공격형"));
         assertTrue(feedback.summary().contains("방어"));
         assertTrue(feedback.bullets().get(1).message().contains("성장주 편중"));
         assertTrue(feedback.bullets().get(2).message().startsWith("조정 방향:"));
@@ -154,7 +154,7 @@ class EtfAiFeedbackServiceTest {
         assertTrue(feedback.bullets().get(0).message().contains("NVIDIA"));
         assertTrue(feedback.bullets().get(0).message().contains("70.0%"));
         assertTrue(feedback.bullets().get(0).message().contains("Apple 30.0%"));
-        assertTrue(feedback.bullets().get(1).message().startsWith("가장 큰 리스크:"));
+        assertTrue(feedback.bullets().get(1).message().startsWith("최대 리스크 요인:"));
         assertTrue(feedback.bullets().get(1).message().contains("방어"));
         assertTrue(feedback.bullets().get(2).message().startsWith("조정 방향:"));
         assertTrue(feedback.bullets().get(2).message().contains("AI 칩 수요"));
@@ -438,7 +438,7 @@ class EtfAiFeedbackServiceTest {
                 "한 줄 결론: " + "균형을 확인해야 합니다. ".repeat(20),
                 List.of(
                         new FeedbackBullet("INFO", "핵심 원인: 엔비디아 35.0%가 성장축입니다."),
-                        new FeedbackBullet("RISK", "가장 큰 리스크: 기술주 변동성입니다."),
+                        new FeedbackBullet("RISK", "최대 리스크 요인: 기술주 변동성입니다."),
                         new FeedbackBullet("INFO", "조정 방향: 실적 발표를 보세요."),
                         new FeedbackBullet("INFO", "추가 문장은 잘립니다.")
                 ),
@@ -451,7 +451,7 @@ class EtfAiFeedbackServiceTest {
 
         assertEquals(false, validated.usedFallback());
         assertEquals(3, validated.bullets().size());
-        assertTrue(validated.summary().length() <= 220);
+        assertTrue(validated.summary().length() <= 90);
     }
 
     @Test

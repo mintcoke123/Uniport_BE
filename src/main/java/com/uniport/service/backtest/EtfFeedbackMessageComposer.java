@@ -28,39 +28,34 @@ final class EtfFeedbackMessageComposer {
         String leadContext = lead + holdingMixContext(facts);
         if (hasText(lead)) {
             if (isConcentrationRisk(facts)) {
-                return "한 줄 결론: 이 포트폴리오는 테마가 선명한 대신 방어력이 약한 \""
-                        + profile + "\"입니다. " + leadContext + "에 성과 체감이 크게 묶입니다.";
+                return "한 줄 결론: 방어력보다 " + leadContext + " 성과에 크게 기댄 \"" + profile + "\"입니다.";
             }
             if (facts.excessReturnPercent() != null && facts.excessReturnPercent().compareTo(BigDecimal.valueOf(-1)) <= 0) {
-                return "한 줄 결론: 이 포트폴리오는 분산돼 보여도 시장을 이기는 힘이 약했던 \""
-                        + profile + "\"입니다. " + leadContext + "가 기대한 역할을 했는지 봐야 합니다.";
+                return "한 줄 결론: " + leadContext + "가 기대만큼 시장을 이기지 못한 \"" + profile + "\"입니다.";
             }
             if (isHighVolatility(facts)) {
-                return "한 줄 결론: 이 포트폴리오는 상승 탄력은 있지만 초보자에게 흔들림이 크게 느껴질 수 있는 \""
-                        + profile + "\"입니다. " + leadContext + "가 변동성의 중심입니다.";
+                return "한 줄 결론: " + leadContext + "가 상승 탄력과 흔들림을 함께 키우는 \"" + profile + "\"입니다.";
             }
-            return "한 줄 결론: 이 포트폴리오는 큰 한 방보다 역할 분담을 봐야 하는 \""
-                    + profile + "\"입니다. " + leadContext + "가 성장축이고 방어축은 따로 확인해야 합니다.";
+            return "한 줄 결론: " + leadContext + "가 성장축인 \"" + profile + "\"입니다.";
         }
         if (isConcentrationRisk(facts)) {
-            return "한 줄 결론: " + top + " 쪽으로 운전대가 크게 기울어 있는 \"" + profile
-                    + "\"라, 방향을 맞히면 시원하지만 틀리면 방어가 약한 편입니다.";
+            return "한 줄 결론: " + top + " 쪽으로 기울어 방어가 약한 \"" + profile + "\"입니다.";
         }
         if (facts.excessReturnPercent() != null && facts.excessReturnPercent().compareTo(BigDecimal.valueOf(-1)) <= 0) {
-            return "한 줄 결론: 겉보기엔 무난하지만 \"" + profile
-                    + "\"라, 왜 시장보다 힘이 약했는지 먼저 따져봐야 합니다.";
+            return "한 줄 결론: 시장보다 힘이 약했던 \"" + profile + "\"입니다.";
         }
         if (isHighVolatility(facts)) {
-            return "한 줄 결론: " + top + "와 " + dominantSectorOrTop(facts) + " 흐름을 따라가는 \"" + profile
-                    + "\"라 상승 탄력은 있지만, 초보자에게는 흔들림이 생각보다 크게 느껴질 수 있습니다.";
+            return "한 줄 결론: 상승 탄력만큼 흔들림도 큰 \"" + profile + "\"입니다.";
         }
-        return "한 줄 결론: " + top + "와 " + dominantSectorOrTop(facts) + " 흐름을 따라가는 \"" + profile
-                + "\"라 큰 한 방보다는 꾸준함을 기대하는 쪽에 가까운 구성입니다.";
+        return "한 줄 결론: 큰 한 방보다 꾸준함을 기대하는 \"" + profile + "\"입니다.";
     }
 
     private static String portfolioProfile(InsightFacts facts) {
         String sector = dominantSectorOrTop(facts);
         if (normalize(facts.topHoldingWeightPercent()).compareTo(BigDecimal.valueOf(60)) >= 0) {
+            return sector + "에 크게 베팅한 공격형 ETF";
+        }
+        if (normalize(facts.dominantSectorWeightPercent()).compareTo(BigDecimal.valueOf(75)) >= 0) {
             return sector + "에 크게 베팅한 공격형 ETF";
         }
         if (normalize(facts.dominantSectorWeightPercent()).compareTo(BigDecimal.valueOf(60)) >= 0 && isHighVolatility(facts)) {
@@ -99,28 +94,25 @@ final class EtfFeedbackMessageComposer {
         List<BacktestHolding> holdings = sortedHoldings(facts);
         if (!holdings.isEmpty()) {
             BacktestHolding top = holdings.get(0);
-            message = "핵심 원인: " + holdingLabel(top)
-                    + "가 중심을 잡고";
+            message = "핵심 원인: " + holdingLabel(top);
             if (holdings.size() >= 2) {
-                message += ", " + holdingLabel(holdings.get(1)) + "가 두 번째 축입니다";
-            } else {
-                message += " 있습니다";
+                message += ", " + holdingLabel(holdings.get(1));
             }
-            if (holdings.size() >= 3) {
-                message += ". 여기에 " + holdingLabel(holdings.get(2)) + "까지 더해져 포트폴리오 성격이 성장 쪽으로 기웁니다.";
-            } else {
-                message += ". 이 비중이 ETF 전체 인상으로 바로 이어집니다.";
-            }
+            message += "가 ETF 성격을 정합니다.";
             if (hasText(facts.dominantSector())
                     && normalize(facts.dominantSectorWeightPercent()).compareTo(BigDecimal.valueOf(60)) >= 0) {
-                message += " " + facts.dominantSector() + "에 집중된 구조라 업황 변화가 좋든 나쁘든 바로 체감됩니다.";
+                message += " " + facts.dominantSector() + " 집중도 큽니다.";
             }
         } else if (hasText(facts.topHoldingName()) && facts.topHoldingWeightPercent() != null) {
             message = "핵심 원인: " + facts.topHoldingName()
-                    + "가 사실상 운전대를 잡고 있어 이 종목의 분위기가 ETF 전체 인상으로 바로 이어집니다.";
+                    + " 비중이 ETF 방향을 크게 좌우합니다.";
+            if (hasText(facts.dominantSector())
+                    && normalize(facts.dominantSectorWeightPercent()).compareTo(BigDecimal.valueOf(60)) >= 0) {
+                message += " " + facts.dominantSector() + " 집중도 큽니다.";
+            }
         } else if (facts.excessReturnPercent() != null) {
             message = "핵심 원인: " + facts.benchmarkName()
-                    + "와 다른 길을 택한 포트폴리오라 시장 전체 흐름과 결과가 벌어졌습니다.";
+                    + "와 다른 종목 구성이 성과 차이를 만들었습니다.";
         } else {
             message = "핵심 원인: 보유 종목별 비중과 변동성이 ETF 성격을 결정합니다.";
         }
@@ -129,10 +121,10 @@ final class EtfFeedbackMessageComposer {
 
     private static FeedbackBullet riskBullet(InsightFacts facts) {
         List<BacktestHolding> holdings = sortedHoldings(facts);
-        StringBuilder builder = new StringBuilder("가장 큰 리스크: ");
+        StringBuilder builder = new StringBuilder("최대 리스크 요인: ");
         if (facts.excessReturnPercent() != null && facts.excessReturnPercent().compareTo(BigDecimal.valueOf(-1)) <= 0) {
             builder.append(facts.benchmarkName())
-                    .append("보다 힘이 약했던 구간이 있어, 테마 선택이 맞았는지보다 방어력과 성장 동력을 다시 봐야 합니다.");
+                    .append("보다 약했던 구간이 있어 방어력과 성장 동력을 다시 봐야 합니다.");
         } else if (!holdings.isEmpty()) {
             builder.append(holdingName(holdings.get(0)))
                     .append(" 쪽 재료가 흔들리면 전체 인상이 먼저 흔들립니다.");
@@ -145,12 +137,12 @@ final class EtfFeedbackMessageComposer {
                 if (holdings.size() >= 4) {
                     builder.append(", ").append(holdingName(holdings.get(3)));
                 }
-                builder.append("까지 같이 보면 성장주 편중인지, 방어 자산이 섞였는지 바로 드러납니다.");
+                builder.append("까지 같이 보면 성장주 편중과 방어력 부족 여부가 드러납니다.");
             }
         } else if (isConcentrationRisk(facts)) {
-            builder.append("한 종목이나 한 섹터에 집중되어 있어, 그 축이 흔들리면 포트폴리오 전체가 같이 끌려가 방어가 약해질 수 있다는 점입니다.");
+            builder.append("한 종목이나 섹터가 흔들리면 포트폴리오 전체 방어가 약해질 수 있습니다.");
         } else if (isHighVolatility(facts)) {
-            builder.append("좋을 때는 빠르게 오르지만, 하락장에서는 체감 손실이 커져 버티기 어려울 수 있습니다.");
+            builder.append("좋을 때는 빠르지만 하락장에서는 체감 손실이 커질 수 있습니다.");
         } else {
             builder.append("수익률을 더 키우기보다 하락 폭을 얼마나 안정적으로 관리하는지가 핵심입니다.");
         }

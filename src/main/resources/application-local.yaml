@@ -12,8 +12,8 @@ kis:
 
 backtest:
   price-fallback:
-    # 외부/캐시 가격이 비는 종목도 분석 흐름은 유지한다. 실제 가격만 검증할 때는 BACKTEST_PRICE_FALLBACK_ENABLED=false.
-    enabled: ${BACKTEST_PRICE_FALLBACK_ENABLED:true}
+    # 실제 백테스트 기본값은 실가격만 사용한다. 로컬 UI 흐름 데모가 필요할 때만 env 로 true 를 명시한다.
+    enabled: ${BACKTEST_PRICE_FALLBACK_ENABLED:false}
 
 uniport:
   investment-issue:

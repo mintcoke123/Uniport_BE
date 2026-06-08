@@ -223,8 +223,8 @@ public class EtfAiFeedbackService {
 
     private RuleBasedFeedback normalizeGenerated(RuleBasedFeedback generated) {
         String summary = generated.summary() != null ? generated.summary().trim() : "";
-        if (summary.length() > 220) {
-            summary = summary.substring(0, 217).trim() + "...";
+        if (summary.length() > 90) {
+            summary = summary.substring(0, 87).trim() + "...";
         }
         List<FeedbackBullet> bullets = generated.bullets() != null
                 ? generated.bullets().stream().limit(3).toList()

@@ -76,7 +76,7 @@ class OpenAiFeedbackClientTest {
         String prompt = String.valueOf(systemMessage.get("content"));
         Assertions.assertTrue(prompt.contains("한 줄 결론:"));
         Assertions.assertTrue(prompt.contains("핵심 원인:"));
-        Assertions.assertTrue(prompt.contains("가장 큰 리스크:"));
+        Assertions.assertTrue(prompt.contains("최대 리스크 요인:"));
         Assertions.assertTrue(prompt.contains("조정 방향:"));
         Assertions.assertTrue(prompt.contains("actual holding names and weights"));
         Assertions.assertTrue(prompt.contains("portfolio's character"));

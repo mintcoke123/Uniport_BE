@@ -19,7 +19,7 @@ public class CachedFallbackHistoricalPriceProvider implements HistoricalPricePro
     private final boolean syntheticPriceFallbackEnabled;
 
     public CachedFallbackHistoricalPriceProvider(AssetPriceDailyRepository assetPriceDailyRepository,
-                                                 @Value("${backtest.price-fallback.enabled:true}") boolean syntheticPriceFallbackEnabled) {
+                                                 @Value("${backtest.price-fallback.enabled:false}") boolean syntheticPriceFallbackEnabled) {
         this.assetPriceDailyRepository = assetPriceDailyRepository;
         this.syntheticPriceFallbackEnabled = syntheticPriceFallbackEnabled;
     }

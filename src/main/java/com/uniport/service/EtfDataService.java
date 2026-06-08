@@ -109,7 +109,7 @@ public class EtfDataService {
     private static final List<String> SUPPORTED_REBALANCE_POLICIES = List.of("MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "NONE");
     private static final String ANALYSIS_VERSION = "backtest-v2.0.0";
     private static final String MESSAGE_VERSION = "ai-feedback-v2.0.0";
-    private static final String PRICE_SOURCE = "Yahoo Finance chart API; approximate fallback only when enabled";
+    private static final String PRICE_SOURCE = "Yahoo Finance chart API, KIS chart API, or cached real prices";
     private static final String PRICE_CACHE_POLICY = "none";
     private static final String FX_CACHE_POLICY = "fx_rate_daily";
     private static final int DEFAULT_ASSET_SEARCH_SIZE = 10;
@@ -127,11 +127,10 @@ public class EtfDataService {
     private static final String ASSET_TYPE_BOND = "BOND";
     private static final String ASSET_TYPE_CASH = "CASH";
     private static final String DATA_STATUS_VERIFIED = "VERIFIED";
-    private static final String DATA_STATUS_FALLBACK_AVAILABLE = "FALLBACK_AVAILABLE";
     private static final String DATA_STATUS_PROXY = "PROXY";
     private static final String DATA_STATUS_PENDING = "PENDING_VERIFICATION";
     private static final String DATA_STATUS_PRICE_UNAVAILABLE = "PRICE_UNAVAILABLE";
-    private static final String FALLBACK_AVAILABLE_MESSAGE = "분석 시점에 실가격을 확인하며, 가격 데이터가 부족하면 분석이 제한됩니다.";
+    private static final String PENDING_VERIFICATION_MESSAGE = "분석 시점에 실가격을 확인하며, 가격 데이터가 부족하면 분석이 제한됩니다.";
     private static final String ERROR_CODE_PRICE_DATA_UNAVAILABLE = "ETF_PRICE_DATA_UNAVAILABLE";
     private static final String ERROR_CODE_BENCHMARK_PRICE_DATA_UNAVAILABLE = "ETF_BENCHMARK_PRICE_DATA_UNAVAILABLE";
     private static final Set<String> KNOWN_ETF_SYMBOLS = Set.of(
@@ -1271,11 +1270,11 @@ public class EtfDataService {
         if (Boolean.TRUE.equals(item.backtestEnabled()) && DATA_STATUS_VERIFIED.equals(item.priceSourceStatus())) {
             return DATA_STATUS_VERIFIED;
         }
-        return DATA_STATUS_FALLBACK_AVAILABLE;
+        return DATA_STATUS_PENDING;
     }
 
     private String searchDataStatusMessage(String dataStatus) {
-        return DATA_STATUS_VERIFIED.equals(dataStatus) ? null : FALLBACK_AVAILABLE_MESSAGE;
+        return DATA_STATUS_VERIFIED.equals(dataStatus) ? null : PENDING_VERIFICATION_MESSAGE;
     }
 
     private ResolvedStockVisual resolveStockVisual(String market, String symbol, String name) {

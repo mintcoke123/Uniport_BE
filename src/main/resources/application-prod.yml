@@ -77,6 +77,10 @@ openai:
   feedback:
     enabled: ${OPENAI_FEEDBACK_ENABLED:true}
 
+backtest:
+  price-fallback:
+    enabled: ${BACKTEST_PRICE_FALLBACK_ENABLED:false}
+
 wisereport:
   company-introduction:
     enabled: ${WISEREPORT_COMPANY_INTRODUCTION_ENABLED:true}

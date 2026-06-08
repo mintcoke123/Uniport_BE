@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -55,7 +56,7 @@ class HistoricalPriceProviderBeanTest {
     }
 
     @Test
-    void defaultConfigKeepsBacktestAvailableWhenExternalAndCachedPricesAreMissing() {
+    void defaultConfigDoesNotInventPricesWhenExternalAndCachedPricesAreMissing() {
         contextRunner.run(context -> {
             AssetPriceDailyRepository priceRepository = context.getBean(AssetPriceDailyRepository.class);
             when(priceRepository.findByAssetIdAndTradeDateBetweenOrderByTradeDateAsc(anyString(), any(), any()))
@@ -65,8 +66,26 @@ class HistoricalPriceProviderBeanTest {
             LocalDate startDate = LocalDate.parse("2025-01-01");
             LocalDate endDate = LocalDate.parse("2025-01-10");
 
-            assertTrue(provider.getSecurityPriceSeries("US_MISSING", startDate, endDate).size() >= 2);
-            assertTrue(provider.getBenchmarkSeries("SP500", startDate, endDate).size() >= 2);
+            assertEquals(List.of(), provider.getSecurityPriceSeries("US_MISSING", startDate, endDate));
+            assertEquals(List.of(), provider.getBenchmarkSeries("SP500", startDate, endDate));
         });
+    }
+
+    @Test
+    void syntheticFallbackIsAvailableOnlyWhenExplicitlyEnabled() {
+        contextRunner
+                .withPropertyValues("backtest.price-fallback.enabled=true")
+                .run(context -> {
+                    AssetPriceDailyRepository priceRepository = context.getBean(AssetPriceDailyRepository.class);
+                    when(priceRepository.findByAssetIdAndTradeDateBetweenOrderByTradeDateAsc(anyString(), any(), any()))
+                            .thenReturn(List.of());
+
+                    HistoricalPriceProvider provider = context.getBean(HistoricalPriceProvider.class);
+                    LocalDate startDate = LocalDate.parse("2025-01-01");
+                    LocalDate endDate = LocalDate.parse("2025-01-10");
+
+                    assertTrue(provider.getSecurityPriceSeries("US_MISSING", startDate, endDate).size() >= 2);
+                    assertTrue(provider.getBenchmarkSeries("SP500", startDate, endDate).size() >= 2);
+                });
     }
 }
