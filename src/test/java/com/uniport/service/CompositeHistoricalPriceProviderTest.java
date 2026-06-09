@@ -1,5 +1,6 @@
 package com.uniport.service;
 
+import com.uniport.exception.ApiException;
 import com.uniport.service.backtest.BacktestPricePoint;
 import com.uniport.service.backtest.CachedFallbackHistoricalPriceProvider;
 import com.uniport.service.backtest.CompositeHistoricalPriceProvider;
@@ -7,12 +8,15 @@ import com.uniport.service.backtest.KisHistoricalPriceProvider;
 import com.uniport.service.backtest.NasdaqHistoricalPriceProvider;
 import com.uniport.service.backtest.YahooHistoricalPriceProvider;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -89,6 +93,27 @@ class CompositeHistoricalPriceProviderTest {
         List<BacktestPricePoint> result = provider.getSecurityPriceSeries("US_AAPL", startDate, endDate);
 
         assertEquals(cachedSeries, result);
+    }
+
+    @Test
+    void getBenchmarkSeriesRethrowsFxConfigurationFailure() {
+        LocalDate startDate = LocalDate.parse("2025-05-19");
+        LocalDate endDate = LocalDate.parse("2026-05-19");
+        ApiException fxException = new ApiException(
+                "USD/KRW FX rate is required for overseas backtesting",
+                HttpStatus.UNPROCESSABLE_ENTITY
+        );
+        when(yahooProvider.getBenchmarkSeries("SP500", startDate, endDate)).thenThrow(fxException);
+
+        ApiException thrown = assertThrows(
+                ApiException.class,
+                () -> provider.getBenchmarkSeries("SP500", startDate, endDate)
+        );
+
+        assertSame(fxException, thrown);
+        verify(kisProvider, never()).getBenchmarkSeries(eq("SP500"), eq(startDate), eq(endDate));
+        verify(nasdaqProvider, never()).getBenchmarkSeries(eq("SP500"), eq(startDate), eq(endDate));
+        verify(cachedProvider, never()).getBenchmarkSeries(eq("SP500"), eq(startDate), eq(endDate));
     }
 
     private List<BacktestPricePoint> priceSeries(LocalDate startDate, LocalDate endDate) {

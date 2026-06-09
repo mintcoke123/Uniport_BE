@@ -1,5 +1,6 @@
 package com.uniport.service.backtest;
 
+import com.uniport.exception.ApiException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Primary;
@@ -79,11 +80,21 @@ public class CompositeHistoricalPriceProvider implements HistoricalPriceProvider
                 if (series != null && series.size() >= 2) {
                     return series;
                 }
+            } catch (ApiException e) {
+                if (isConfigurationFailure(e)) {
+                    throw e;
+                }
+                log.debug("[backtest-price] provider failed for {}: {}", lookupLabel, safeMessage(e));
             } catch (RuntimeException e) {
                 log.debug("[backtest-price] provider failed for {}: {}", lookupLabel, safeMessage(e));
             }
         }
         return List.of();
+    }
+
+    private boolean isConfigurationFailure(ApiException e) {
+        String message = e.getMessage();
+        return message != null && message.contains("FX rate is required");
     }
 
     private String safeId(String value) {
