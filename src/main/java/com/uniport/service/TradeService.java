@@ -18,6 +18,7 @@ import com.uniport.repository.MatchingRoomMemberRepository;
 import com.uniport.repository.OrderRepository;
 import com.uniport.repository.TeamAccountRepository;
 import com.uniport.repository.TeamHoldingRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +54,7 @@ public class TradeService {
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
     private final Clock clock;
 
+    @Autowired
     public TradeService(OrderRepository orderRepository, KisApiService kisApiService,
                         TeamAccountRepository teamAccountRepository,
                         TeamHoldingRepository teamHoldingRepository,
