@@ -218,6 +218,9 @@ public class EtfAiFeedbackService {
         if (unknownNumber.isPresent()) {
             return FeedbackValidationResult.rejected("unknown_number:" + unknownNumber.get());
         }
+        if (generated.bullets() == null || generated.bullets().isEmpty()) {
+            return FeedbackValidationResult.rejected("missing_bullets");
+        }
         return FeedbackValidationResult.accepted(normalizeGenerated(generated));
     }
 

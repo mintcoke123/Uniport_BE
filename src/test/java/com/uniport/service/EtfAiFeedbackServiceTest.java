@@ -493,6 +493,44 @@ class EtfAiFeedbackServiceTest {
     }
 
     @Test
+    void buildFeedbackResult_rejectsLlmOutputWithoutBullets() {
+        EtfAiFeedbackService llmService = new EtfAiFeedbackService(new LlmFeedbackClient() {
+            @Override
+            public Optional<RuleBasedFeedback> generate(InsightFacts facts) {
+                return Optional.of(new RuleBasedFeedback(
+                        "AI 리스크 진단",
+                        "한 줄 결론: 입력된 포트폴리오는 집중도를 점검해야 합니다.",
+                        List.of(),
+                        "BALANCED",
+                        facts.disclaimer(),
+                        false
+                ));
+            }
+
+            @Override
+            public String modelName() {
+                return "test-model";
+            }
+
+            @Override
+            public String promptVersion() {
+                return "test-prompt";
+            }
+
+            @Override
+            public String lastAttemptStatus() {
+                return "success:json_schema";
+            }
+        });
+
+        EtfAiFeedbackService.FeedbackBuildResult result = llmService.buildFeedbackResult(baseFacts().build());
+
+        assertEquals(true, result.feedback().usedFallback());
+        assertEquals(true, !result.feedback().bullets().isEmpty());
+        assertEquals("rejected:missing_bullets", result.fallbackReason());
+    }
+
+    @Test
     void buildFeedbackResult_accumulatesAllClientStatusesWhenNoLlmOutput() {
         class EmptyClient implements LlmFeedbackClient {
             @Override

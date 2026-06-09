@@ -381,12 +381,17 @@ public class EtfDataService {
         if (!report.getOwnerUserId().equals(user.getId())) {
             throw new ApiException("ETF analysis report not found", HttpStatus.NOT_FOUND);
         }
-        EtfAnalysisReportResponseDTO stored = readValue(report.getReportJson(), EtfAnalysisReportResponseDTO.class);
+        EtfAnalysisReportResponseDTO stored = ensureAiFeedbackBullets(
+                readValue(report.getReportJson(), EtfAnalysisReportResponseDTO.class)
+        );
         if (periodOverride == null || periodOverride.isBlank()) {
             return stored;
         }
         String period = safeUpper(periodOverride);
         validatePeriod(period);
+        if (period.equals(safeUpper(report.getPeriod()))) {
+            return stored;
+        }
         ManagedEtf etf = getRequiredCustomEtf(user, report.getEtfCode());
         BigDecimal principalAmount = stored.getMetadata() != null && stored.getMetadata().getPrincipalAmountKrw() != null
                 ? BigDecimal.valueOf(stored.getMetadata().getPrincipalAmountKrw())
@@ -395,6 +400,82 @@ public class EtfDataService {
                 ? stored.getMetadata().getRebalancePolicy()
                 : DEFAULT_REBALANCE_POLICY;
         return buildReport(reportId, etf, period, report.getBenchmark(), principalAmount, rebalancePolicy);
+    }
+
+    private EtfAnalysisReportResponseDTO ensureAiFeedbackBullets(EtfAnalysisReportResponseDTO report) {
+        if (report == null || hasFeedbackBullets(report.getAiFeedback())) {
+            return report;
+        }
+        List<EtfAnalysisFeedbackBulletDTO> fallbackBullets = fallbackFeedbackBullets(report.getRiskDiagnosis());
+        if (fallbackBullets.isEmpty()) {
+            return report;
+        }
+        EtfAnalysisAiFeedbackDTO existing = report.getAiFeedback();
+        EtfAnalysisAiFeedbackDTO feedback = EtfAnalysisAiFeedbackDTO.builder()
+                .title(nonBlankOr(existing != null ? existing.getTitle() : null, "AI 리스크 진단"))
+                .summary(nonBlankOr(existing != null ? existing.getSummary() : null,
+                        report.getRiskDiagnosis() != null ? report.getRiskDiagnosis().getSummary() : "리스크 요인을 함께 점검해야 합니다."))
+                .bullets(fallbackBullets)
+                .tone(nonBlankOr(existing != null ? existing.getTone() : null, "CAUTION"))
+                .disclaimer(existing != null ? existing.getDisclaimer() : null)
+                .usedFallback(Boolean.TRUE)
+                .build();
+        return EtfAnalysisReportResponseDTO.builder()
+                .reportId(report.getReportId())
+                .etfId(report.getEtfId())
+                .period(report.getPeriod())
+                .benchmark(report.getBenchmark())
+                .highlights(report.getHighlights())
+                .cumulativeProfit(report.getCumulativeProfit())
+                .riskDiagnosis(report.getRiskDiagnosis())
+                .allocation(report.getAllocation())
+                .aiFeedback(feedback)
+                .metadata(report.getMetadata())
+                .insightFacts(report.getInsightFacts())
+                .analysisPacket(report.getAnalysisPacket())
+                .createdAt(report.getCreatedAt())
+                .build();
+    }
+
+    private boolean hasFeedbackBullets(EtfAnalysisAiFeedbackDTO feedback) {
+        return feedback != null && feedback.getBullets() != null && !feedback.getBullets().isEmpty();
+    }
+
+    private List<EtfAnalysisFeedbackBulletDTO> fallbackFeedbackBullets(EtfAnalysisRiskDiagnosisDTO riskDiagnosis) {
+        if (riskDiagnosis == null) {
+            return List.of();
+        }
+        List<String> riskFacts = riskDiagnosis.getRiskFacts() != null ? riskDiagnosis.getRiskFacts() : List.of();
+        if (!riskFacts.isEmpty()) {
+            return riskFacts.stream()
+                    .limit(3)
+                    .map(message -> EtfAnalysisFeedbackBulletDTO.builder()
+                            .type("RISK")
+                            .message(message)
+                            .build())
+                    .toList();
+        }
+        List<String> positiveFacts = riskDiagnosis.getPositiveFacts() != null ? riskDiagnosis.getPositiveFacts() : List.of();
+        if (!positiveFacts.isEmpty()) {
+            return positiveFacts.stream()
+                    .limit(3)
+                    .map(message -> EtfAnalysisFeedbackBulletDTO.builder()
+                            .type("STRENGTH")
+                            .message(message)
+                            .build())
+                    .toList();
+        }
+        if (riskDiagnosis.getSummary() != null && !riskDiagnosis.getSummary().isBlank()) {
+            return List.of(EtfAnalysisFeedbackBulletDTO.builder()
+                    .type("INFO")
+                    .message(riskDiagnosis.getSummary())
+                    .build());
+        }
+        return List.of();
+    }
+
+    private String nonBlankOr(String value, String fallback) {
+        return value != null && !value.isBlank() ? value : fallback;
     }
 
     @Transactional

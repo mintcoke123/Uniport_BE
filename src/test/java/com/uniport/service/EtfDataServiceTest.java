@@ -6,10 +6,12 @@ import com.uniport.dto.CustomEtfAssetSearchResponseDTO;
 import com.uniport.dto.CustomEtfCreateRequestDTO;
 import com.uniport.dto.CustomEtfItemRequestDTO;
 import com.uniport.dto.CustomEtfMutationResponseDTO;
+import com.uniport.dto.EtfAnalysisAiFeedbackDTO;
 import com.uniport.dto.EtfPortfolioFitRecommendationRequestDTO;
 import com.uniport.dto.EtfPortfolioFitRecommendationResponseDTO;
 import com.uniport.dto.EtfAnalysisReportResponseDTO;
 import com.uniport.dto.EtfAnalysisRequestDTO;
+import com.uniport.dto.EtfAnalysisRiskDiagnosisDTO;
 import com.uniport.dto.EtfAnalysisStartResponseDTO;
 import com.uniport.dto.EtfDiscoveryDetailResponseDTO;
 import com.uniport.dto.EtfDiscoveryResponseDTO;
@@ -688,6 +690,50 @@ class EtfDataServiceTest {
 
         assertEquals("검증 ETF", response.getTitle());
         assertEquals(100, response.getTotalWeight());
+    }
+
+    @Test
+    void getReport_returnsStoredReportWhenRequestedPeriodMatchesSavedPeriod() throws Exception {
+        User user = User.builder().id(1L).build();
+        EtfAnalysisReportResponseDTO stored = EtfAnalysisReportResponseDTO.builder()
+                .reportId("REPORT_STORED")
+                .etfId("ETF_CUSTOM")
+                .period("1Y")
+                .benchmark("SP500")
+                .riskDiagnosis(EtfAnalysisRiskDiagnosisDTO.builder()
+                        .summary("반도체 집중도가 높은 포트폴리오입니다.")
+                        .riskFacts(List.of("단일 종목 비중이 40.0%로 높습니다."))
+                        .build())
+                .aiFeedback(EtfAnalysisAiFeedbackDTO.builder()
+                        .title("AI 리스크 진단")
+                        .summary("한 줄 결론: 반도체 집중형입니다.")
+                        .bullets(List.of())
+                        .usedFallback(Boolean.FALSE)
+                        .build())
+                .createdAt("2026-06-09T10:38:39Z")
+                .build();
+        ManagedEtfAnalysisReport report = ManagedEtfAnalysisReport.builder()
+                .reportId("REPORT_STORED")
+                .ownerUserId(1L)
+                .etfCode("ETF_CUSTOM")
+                .period("1Y")
+                .benchmark("SP500")
+                .reportJson(new ObjectMapper().writeValueAsString(stored))
+                .build();
+        when(managedEtfAnalysisReportRepository.findByReportId("REPORT_STORED"))
+                .thenReturn(Optional.of(report));
+
+        EtfAnalysisReportResponseDTO response = etfDataService.getReport(user, "REPORT_STORED", "1Y");
+
+        assertEquals("REPORT_STORED", response.getReportId());
+        assertEquals("1Y", response.getPeriod());
+        assertEquals(1, response.getAiFeedback().getBullets().size());
+        assertEquals("RISK", response.getAiFeedback().getBullets().get(0).getType());
+        assertEquals("단일 종목 비중이 40.0%로 높습니다.", response.getAiFeedback().getBullets().get(0).getMessage());
+        assertEquals(true, response.getAiFeedback().getUsedFallback());
+        verify(managedEtfRepository, never()).findByEtfCode(any());
+        verify(historicalPriceProvider, never()).getSecurityPriceSeries(any(), any(LocalDate.class), any(LocalDate.class));
+        verify(historicalPriceProvider, never()).getBenchmarkSeries(any(), any(LocalDate.class), any(LocalDate.class));
     }
 
     @Test
