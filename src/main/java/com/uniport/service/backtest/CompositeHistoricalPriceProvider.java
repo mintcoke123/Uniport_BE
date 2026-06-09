@@ -17,13 +17,16 @@ public class CompositeHistoricalPriceProvider implements HistoricalPriceProvider
 
     private final YahooHistoricalPriceProvider yahooHistoricalPriceProvider;
     private final KisHistoricalPriceProvider kisHistoricalPriceProvider;
+    private final NasdaqHistoricalPriceProvider nasdaqHistoricalPriceProvider;
     private final CachedFallbackHistoricalPriceProvider cachedFallbackHistoricalPriceProvider;
 
     public CompositeHistoricalPriceProvider(YahooHistoricalPriceProvider yahooHistoricalPriceProvider,
                                             KisHistoricalPriceProvider kisHistoricalPriceProvider,
+                                            NasdaqHistoricalPriceProvider nasdaqHistoricalPriceProvider,
                                             CachedFallbackHistoricalPriceProvider cachedFallbackHistoricalPriceProvider) {
         this.yahooHistoricalPriceProvider = yahooHistoricalPriceProvider;
         this.kisHistoricalPriceProvider = kisHistoricalPriceProvider;
+        this.nasdaqHistoricalPriceProvider = nasdaqHistoricalPriceProvider;
         this.cachedFallbackHistoricalPriceProvider = cachedFallbackHistoricalPriceProvider;
     }
 
@@ -60,6 +63,7 @@ public class CompositeHistoricalPriceProvider implements HistoricalPriceProvider
                 List.of(
                         () -> yahooHistoricalPriceProvider.getBenchmarkSeries(benchmarkId, startDate, endDate),
                         () -> kisHistoricalPriceProvider.getBenchmarkSeries(benchmarkId, startDate, endDate),
+                        () -> nasdaqHistoricalPriceProvider.getBenchmarkSeries(benchmarkId, startDate, endDate),
                         () -> cachedFallbackHistoricalPriceProvider.getBenchmarkSeries(benchmarkId, startDate, endDate)
                 )
         );

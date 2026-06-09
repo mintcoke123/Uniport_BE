@@ -4,6 +4,7 @@ import com.uniport.service.backtest.BacktestPricePoint;
 import com.uniport.service.backtest.CachedFallbackHistoricalPriceProvider;
 import com.uniport.service.backtest.CompositeHistoricalPriceProvider;
 import com.uniport.service.backtest.KisHistoricalPriceProvider;
+import com.uniport.service.backtest.NasdaqHistoricalPriceProvider;
 import com.uniport.service.backtest.YahooHistoricalPriceProvider;
 import org.junit.jupiter.api.Test;
 
@@ -22,10 +23,12 @@ class CompositeHistoricalPriceProviderTest {
 
     private final YahooHistoricalPriceProvider yahooProvider = mock(YahooHistoricalPriceProvider.class);
     private final KisHistoricalPriceProvider kisProvider = mock(KisHistoricalPriceProvider.class);
+    private final NasdaqHistoricalPriceProvider nasdaqProvider = mock(NasdaqHistoricalPriceProvider.class);
     private final CachedFallbackHistoricalPriceProvider cachedProvider = mock(CachedFallbackHistoricalPriceProvider.class);
     private final CompositeHistoricalPriceProvider provider = new CompositeHistoricalPriceProvider(
             yahooProvider,
             kisProvider,
+            nasdaqProvider,
             cachedProvider
     );
 
@@ -50,11 +53,27 @@ class CompositeHistoricalPriceProviderTest {
         List<BacktestPricePoint> cachedSeries = priceSeries(startDate, endDate);
         when(yahooProvider.getBenchmarkSeries("SP500", startDate, endDate)).thenReturn(List.of());
         when(kisProvider.getBenchmarkSeries("SP500", startDate, endDate)).thenReturn(List.of());
+        when(nasdaqProvider.getBenchmarkSeries("SP500", startDate, endDate)).thenReturn(List.of());
         when(cachedProvider.getBenchmarkSeries("SP500", startDate, endDate)).thenReturn(cachedSeries);
 
         List<BacktestPricePoint> result = provider.getBenchmarkSeries("SP500", startDate, endDate);
 
         assertEquals(cachedSeries, result);
+    }
+
+    @Test
+    void getBenchmarkSeriesFallsBackToNasdaqProviderBeforeCachedProviderWhenYahooAndKisMiss() {
+        LocalDate startDate = LocalDate.parse("2025-05-19");
+        LocalDate endDate = LocalDate.parse("2026-05-19");
+        List<BacktestPricePoint> nasdaqSeries = priceSeries(startDate, endDate);
+        when(yahooProvider.getBenchmarkSeries("SP500", startDate, endDate)).thenReturn(List.of());
+        when(kisProvider.getBenchmarkSeries("SP500", startDate, endDate)).thenReturn(List.of());
+        when(nasdaqProvider.getBenchmarkSeries("SP500", startDate, endDate)).thenReturn(nasdaqSeries);
+
+        List<BacktestPricePoint> result = provider.getBenchmarkSeries("SP500", startDate, endDate);
+
+        assertEquals(nasdaqSeries, result);
+        verify(cachedProvider, never()).getBenchmarkSeries(eq("SP500"), eq(startDate), eq(endDate));
     }
 
     @Test

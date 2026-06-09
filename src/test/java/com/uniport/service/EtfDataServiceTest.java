@@ -1253,6 +1253,60 @@ class EtfDataServiceTest {
     }
 
     @Test
+    void analyze_keepsSelectedSp500BenchmarkForDomesticPortfolio() throws Exception {
+        User user = User.builder().id(1L).build();
+        ManagedEtf etf = ManagedEtf.builder()
+                .etfCode("ETF_CUSTOM")
+                .ownerUserId(1L)
+                .sourceType("CUSTOM")
+                .title("국내 기본 ETF")
+                .theme("국내 주식")
+                .holdingsJson("""
+                        [{"stockId":"KRX_005930","weight":40},{"stockId":"KRX_000660","weight":35},{"stockId":"KRX_373220","weight":25}]
+                        """)
+                .build();
+        AssetMaster samsung = asset("KRX_005930", "STOCK", "삼성전자", "005930", "KOSPI", "KRW");
+        AssetMaster hynix = asset("KRX_000660", "STOCK", "SK하이닉스", "000660", "KOSPI", "KRW");
+        AssetMaster lgEnergy = asset("KRX_373220", "STOCK", "LG에너지솔루션", "373220", "KOSPI", "KRW");
+        when(managedEtfRepository.findByEtfCode("ETF_CUSTOM")).thenReturn(Optional.of(etf));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_005930")).thenReturn(Optional.of(samsung));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_000660")).thenReturn(Optional.of(hynix));
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_373220")).thenReturn(Optional.of(lgEnergy));
+        when(historicalPriceProvider.getSecurityPriceSeries(any(), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(this::fullCoverageSeries);
+        when(historicalPriceProvider.getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(this::fullCoverageSeries);
+        BacktestResult result = backtestResult();
+        when(etfBacktestEngine.run(any())).thenReturn(result);
+        InsightFacts facts = InsightFacts.builder().positiveFacts(List.of()).riskFacts(List.of()).build();
+        when(etfAiFeedbackService.buildInsightFacts(eq("국내 기본 ETF"), eq("1년"), eq("S&P 500"), eq(result), any(), any()))
+                .thenReturn(facts);
+        when(etfAiFeedbackService.buildFeedback(facts)).thenReturn(new RuleBasedFeedback(
+                "AI 리스크 진단",
+                "S&P 500 기준 백테스트 요약입니다.",
+                List.of(),
+                "BALANCED",
+                "과거 데이터 기반 백테스트이며 미래 수익을 보장하지 않습니다.",
+                true
+        ));
+        ArgumentCaptor<BacktestRequest> backtestRequestCaptor = ArgumentCaptor.forClass(BacktestRequest.class);
+        ArgumentCaptor<ManagedEtfAnalysisReport> reportCaptor = ArgumentCaptor.forClass(ManagedEtfAnalysisReport.class);
+
+        etfDataService.analyze(user, "ETF_CUSTOM",
+                EtfAnalysisRequestDTO.builder().period("1Y").benchmark("SP500").build());
+
+        verify(historicalPriceProvider).getBenchmarkSeries(eq("SP500"), any(LocalDate.class), any(LocalDate.class));
+        verify(historicalPriceProvider, never()).getBenchmarkSeries(eq("KOSPI"), any(LocalDate.class), any(LocalDate.class));
+        verify(etfBacktestEngine).run(backtestRequestCaptor.capture());
+        assertEquals("S&P 500", backtestRequestCaptor.getValue().getBenchmarkName());
+        verify(managedEtfAnalysisReportRepository).save(reportCaptor.capture());
+        EtfAnalysisReportResponseDTO report = new ObjectMapper()
+                .readValue(reportCaptor.getValue().getReportJson(), EtfAnalysisReportResponseDTO.class);
+        assertEquals("SP500", reportCaptor.getValue().getBenchmark());
+        assertEquals("SP500", report.getBenchmark());
+    }
+
+    @Test
     void recommendPortfolioFitStocks_excludesCurrentHoldingsAndRanksByPortfolioFit() {
         User user = User.builder().id(1L).build();
         ManagedEtf etf = ManagedEtf.builder()
