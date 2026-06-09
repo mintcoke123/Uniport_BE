@@ -75,6 +75,7 @@ class SaveTickerNewsJsonMapperTest {
         assertTrue(nvidia.getSummary().contains("엔비디아"));
         assertTrue(nvidia.getSummary().contains("데이터센터 전력 수요까지 연결되는 상세 설명입니다."));
         assertEquals("정보 $FLNC FLNC $NVDA NVDA", nvidia.getContent());
+        assertTrue(nvidia.getFullBody().contains("데이터센터 전력 수요까지 연결되는 상세 설명입니다."));
         assertFalse(nvidia.getContent().contains("데이터센터 전력 수요까지 연결되는 상세 설명입니다."));
         assertEquals("세이브티커", nvidia.getSourceName());
         assertTrue(nvidia.isFeatured());
@@ -140,6 +141,117 @@ class SaveTickerNewsJsonMapperTest {
         assertTrue(enriched.getSummary().contains("글로벌 고객 지원 인프라 확장을 지원할 것이라고 밝혔다."));
         assertFalse(enriched.getSummary().contains("짧은 목록 요약"));
         assertEquals("AI $NVDA NVDA", enriched.getContent());
+        assertEquals("""
+                6월 3일 (로이터) - 시장 인텔리전스 플랫폼 알파센스는 수요일 3억 5천만 달러를 조달했다고 밝혔다.
+                이번 라운드는 비트루비안 파트너스, 액센츄어 벤처스, J.P. 모건 자산운용이 주도했다.
+                회사는 신규 투자가 국제 확장과 글로벌 고객 지원 인프라 확장을 지원할 것이라고 밝혔다.
+                """.trim(), enriched.getFullBody());
+        assertEquals("Reuters", enriched.getSourceName());
+    }
+
+    @Test
+    void enrichWithDetail_acceptsLiveRootArticleShapeAndPreservesFullBodyLines() {
+        PublicWebIssueSource source = new PublicWebIssueSource(
+                "SaveTicker News",
+                URI.create("https://www.saveticker.com/news"),
+                NewsCategory.OVERSEAS_STOCK,
+                "세이브티커",
+                20
+        );
+        FetchedNewsArticle article = FetchedNewsArticle.builder()
+                .id("saveticker_142152")
+                .category(NewsCategory.OVERSEAS_STOCK)
+                .title("[미국증시] 목록 제목")
+                .summary("짧은 목록 요약")
+                .content("$MRVL MRVL")
+                .sourceName("세이브티커")
+                .publishedAt(LocalDateTime.of(2026, 6, 9, 1, 0))
+                .featured(false)
+                .externalUrl("https://www.saveticker.com/news/142152")
+                .build();
+        String detailJson = """
+                {
+                  "id": "142152",
+                  "title": "[미국증시] 상세 제목",
+                  "content": [
+                    {"type": "text", "content": "첫 번째 상세 문단입니다."},
+                    {"type": "text", "content": "두 번째 상세 문단입니다."}
+                  ],
+                  "source": "reuters",
+                  "created_at": "2026-06-09T01:00:00+09:00",
+                  "translations": {
+                    "source_locale": "en_US",
+                    "translated": {
+                      "ko_KR": {
+                        "title": "[미국증시] 번역 상세 제목",
+                        "content": [
+                          {"type": "text", "content": "첫 번째 번역 문단입니다."},
+                          {"type": "text", "content": "두 번째 번역 문단입니다."}
+                        ],
+                        "summary": [{"type": "text", "content": ""}]
+                      }
+                    }
+                  }
+                }
+                """;
+
+        FetchedNewsArticle enriched = mapper.enrichWithDetail(source, article, detailJson);
+
+        assertEquals("[미국증시] 번역 상세 제목", enriched.getTitle());
+        assertEquals("""
+                첫 번째 번역 문단입니다.
+                두 번째 번역 문단입니다.
+                """.trim(), enriched.getFullBody());
+        assertEquals(enriched.getFullBody(), enriched.getSummary());
+        assertEquals("Reuters", enriched.getSourceName());
+    }
+
+    @Test
+    void enrichWithDetail_doesNotPromoteSummaryToFullBodyWhenDetailContentIsMissing() {
+        PublicWebIssueSource source = new PublicWebIssueSource(
+                "SaveTicker News",
+                URI.create("https://www.saveticker.com/news"),
+                NewsCategory.OVERSEAS_STOCK,
+                "세이브티커",
+                20
+        );
+        FetchedNewsArticle article = FetchedNewsArticle.builder()
+                .id("saveticker_142153")
+                .category(NewsCategory.OVERSEAS_STOCK)
+                .title("[미국증시] 목록 제목")
+                .summary("짧은 목록 요약")
+                .content("$NVDA NVDA")
+                .sourceName("세이브티커")
+                .publishedAt(LocalDateTime.of(2026, 6, 9, 2, 0))
+                .featured(false)
+                .externalUrl("https://www.saveticker.com/news/142153")
+                .build();
+        String detailJson = """
+                {
+                  "id": "142153",
+                  "title": "[미국증시] 상세 제목",
+                  "content": [],
+                  "source": "reuters",
+                  "created_at": "2026-06-09T02:00:00+09:00",
+                  "translations": {
+                    "source_locale": "en_US",
+                    "translated": {
+                      "ko_KR": {
+                        "title": "[미국증시] 번역 상세 제목",
+                        "content": [{"type": "text", "content": ""}],
+                        "summary": [
+                          {"type": "text", "content": "상세 API가 내려준 요약 문장입니다."}
+                        ]
+                      }
+                    }
+                  }
+                }
+                """;
+
+        FetchedNewsArticle enriched = mapper.enrichWithDetail(source, article, detailJson);
+
+        assertEquals("상세 API가 내려준 요약 문장입니다.", enriched.getSummary());
+        assertEquals("", enriched.getFullBody());
         assertEquals("Reuters", enriched.getSourceName());
     }
 }

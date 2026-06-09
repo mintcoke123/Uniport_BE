@@ -1,7 +1,9 @@
 package com.uniport.service;
 
 import com.uniport.entity.AssetMaster;
+import com.uniport.entity.AssetPriceDaily;
 import com.uniport.repository.AssetMasterRepository;
+import com.uniport.repository.AssetPriceDailyRepository;
 import com.uniport.service.backtest.BacktestPricePoint;
 import com.uniport.service.backtest.YahooHistoricalPriceProvider;
 import org.junit.jupiter.api.Test;
@@ -59,6 +61,48 @@ class YahooHistoricalPriceProviderTest {
         URI uri = capturedUri(restTemplate);
         assertEquals(true, uri.toString().contains("/v8/finance/chart/AAPL?"));
         assertEquals(true, capturedRequest(restTemplate).getHeaders().getFirst("User-Agent").contains("Mozilla"));
+    }
+
+    @Test
+    void getSecurityPriceSeries_savesFetchedYahooRowsToPriceCache() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        AssetMasterRepository assetMasterRepository = mock(AssetMasterRepository.class);
+        AssetPriceDailyRepository priceRepository = mock(AssetPriceDailyRepository.class);
+        YahooHistoricalPriceProvider provider = new YahooHistoricalPriceProvider(
+                restTemplate,
+                (currency, date) -> "USD".equals(currency) ? BigDecimal.valueOf(1300) : BigDecimal.ONE,
+                assetMasterRepository,
+                priceRepository,
+                false,
+                "https://query1.finance.yahoo.com"
+        );
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_AAPL")).thenReturn(Optional.of(asset(
+                "US_AAPL", "AAPL", "NASDAQ", "USD"
+        )));
+        when(priceRepository.findByAssetIdAndTradeDate(eq("US_AAPL"), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+        stubYahoo(restTemplate, chartJson(
+                List.of(1735689600L, 1735776000L),
+                List.of("10.0", "11.0"),
+                List.of("9.5", "10.5")
+        ));
+
+        provider.getSecurityPriceSeries(
+                "US_AAPL",
+                LocalDate.parse("2025-01-01"),
+                LocalDate.parse("2025-01-02")
+        );
+
+        ArgumentCaptor<Iterable<AssetPriceDaily>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(priceRepository).saveAll(captor.capture());
+        List<AssetPriceDaily> rows = iterableToList(captor.getValue());
+        assertEquals(2, rows.size());
+        assertEquals("US_AAPL", rows.get(0).getAssetId());
+        assertEquals(LocalDate.parse("2025-01-01"), rows.get(0).getTradeDate());
+        assertEquals(0, new BigDecimal("9.5").compareTo(rows.get(0).getCloseNative()));
+        assertEquals(0, new BigDecimal("12350.000000").compareTo(rows.get(0).getCloseKrw()));
+        assertEquals("USD", rows.get(0).getCurrency());
+        assertEquals("YAHOO_FINANCE_CHART_API", rows.get(0).getSource());
     }
 
     @Test
@@ -191,6 +235,12 @@ class YahooHistoricalPriceProviderTest {
     private void stubYahoo(RestTemplate restTemplate, String body) {
         when(restTemplate.exchange(any(URI.class), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(ResponseEntity.ok(body));
+    }
+
+    private List<AssetPriceDaily> iterableToList(Iterable<AssetPriceDaily> rows) {
+        java.util.ArrayList<AssetPriceDaily> list = new java.util.ArrayList<>();
+        rows.forEach(list::add);
+        return list;
     }
 
     private AssetMaster asset(String assetId, String symbol, String market, String currency) {

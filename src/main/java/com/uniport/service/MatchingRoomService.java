@@ -160,6 +160,7 @@ public class MatchingRoomService {
         String resolvedMatchType = normalizeMatchType(matchType);
         String resolvedMarketType = normalizeMarketType(marketType);
         Long resolvedCompetitionId = validateTournamentMatchingContext(competitionId, creator, resolvedMatchType, cap);
+        assertNoActiveMockInvestment(creator);
         log.info("[matching-room] create requested name={} visibility={} capacity={} matchType={} marketType={} competitionId={} creatorUserId={} inviteeCount={}",
                 name,
                 vis,
@@ -340,6 +341,9 @@ public class MatchingRoomService {
         if (!matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())) {
             throw new ApiException("공유는 방 참가자만 할 수 있습니다.", HttpStatus.FORBIDDEN);
         }
+        if (room.getCapacity() == 1) {
+            throw new ApiException("개인 모의투자는 공유할 수 없습니다.", HttpStatus.FORBIDDEN);
+        }
 
         String inviteCode = room.getInviteCode();
         String deepLink = "uniport://matching-room/" + toApiId(room.getId()) + "?inviteCode=" + inviteCode;
@@ -377,6 +381,7 @@ public class MatchingRoomService {
         if (competitionId != null && !"RANDOM".equals(normalizedMode)) {
             throw new ApiException("대회 매칭은 랜덤 매칭만 사용할 수 있습니다.", HttpStatus.BAD_REQUEST);
         }
+        assertNoActiveMockInvestment(creator);
         return switch (normalizedMode) {
             case "SOLO" -> {
                 Map<String, Object> created = create("Solo Room", VISIBILITY_PRIVATE, 1, "RANDOM", marketType, List.of(), creator);
@@ -469,10 +474,12 @@ public class MatchingRoomService {
         List<User> eligibleApplicants = applicants.stream()
                 .filter(Objects::nonNull)
                 .filter(user -> user.getId() != null)
+                .map(user -> lockUserForActiveRoomMutation(user.getId(), "사용자를 찾을 수 없습니다."))
                 .filter(user -> !matchingRoomMemberRepository.existsByUserIdAndMatchingRoom_CompetitionId(
                         user.getId(),
                         competition.getId()
                 ))
+                .filter(user -> findActiveMemberships(user.getId()).isEmpty())
                 .distinct()
                 .toList();
 
@@ -523,6 +530,7 @@ public class MatchingRoomService {
             body.put("roomId", toApiId(room.getId()));
             body.put("name", room.getName());
             body.put("createdAt", room.getCreatedAt().toString());
+            body.put("endedAt", toIsoString(room.getEndedAt()));
             body.put("competitionId", room.getCompetitionId());
             body.put("status", resolveMatchingStatus(room, joinedMembers, invitedUserIds));
             body.put("marketType", room.getMarketType() != null ? room.getMarketType() : "KR");
@@ -538,11 +546,14 @@ public class MatchingRoomService {
             body.put("memberCount", joinedMembers.size());
             body.put("capacity", room.getCapacity());
             body.put("members", buildMemberCards(room, currentUser, joinedMembers, invitedUserIds));
+            boolean soloRoom = room.getCapacity() == 1;
+            boolean friendRoom = "FRIEND".equalsIgnoreCase(room.getMatchType());
+            boolean randomRoom = "RANDOM".equalsIgnoreCase(room.getMatchType());
             body.put("actions", Map.of(
-                    "shareEnabled", "FRIEND".equalsIgnoreCase(room.getMatchType()),
-                    "directInviteEnabled", "FRIEND".equalsIgnoreCase(room.getMatchType()),
-                    "randomMatchingEnabled", "RANDOM".equalsIgnoreCase(room.getMatchType()),
-                    "chatEnabled", "started".equalsIgnoreCase(room.getStatus()) || joinedMembers.size() >= room.getCapacity(),
+                    "shareEnabled", friendRoom && !soloRoom,
+                    "directInviteEnabled", friendRoom && !soloRoom,
+                    "randomMatchingEnabled", randomRoom && !soloRoom,
+                    "chatEnabled", !soloRoom && ("started".equalsIgnoreCase(room.getStatus()) || joinedMembers.size() >= room.getCapacity()),
                     "startEnabled", joinedMembers.size() >= Math.min(room.getCapacity(), 2)
             ));
             return body;
@@ -592,6 +603,7 @@ public class MatchingRoomService {
         if (matchingRoomMemberRepository.existsByMatchingRoomIdAndUserId(room.getId(), user.getId())) {
             throw new ApiException("이미 참여 중인 방입니다.", HttpStatus.BAD_REQUEST);
         }
+        assertNoActiveMockInvestment(user);
         assertJoinableTournamentRoom(room, user);
 
         long currentCount = matchingRoomMemberRepository.countByMatchingRoomId(room.getId());
@@ -638,8 +650,7 @@ public class MatchingRoomService {
                 continue;
             }
 
-            User invitee = userRepository.findById(inviteeUserId)
-                    .orElseThrow(() -> new ApiException("존재하지 않는 초대 대상이 포함되어 있습니다.", HttpStatus.BAD_REQUEST));
+            User invitee = lockUserForActiveRoomMutation(inviteeUserId, "존재하지 않는 초대 대상이 포함되어 있습니다.");
             boolean acceptedFriend = friendRelationRepository
                     .findBetweenUsersByStatus(host.getId(), invitee.getId(), "ACCEPTED")
                     .isPresent();
@@ -651,6 +662,7 @@ public class MatchingRoomService {
             if (activeTournamentRoom != null && !room.getId().equals(activeTournamentRoom.getId())) {
                 throw new ApiException("이미 해당 대회에 참여 중인 사용자가 포함되어 있습니다.", HttpStatus.BAD_REQUEST);
             }
+            assertNoActiveMockInvestmentAfterLock(invitee);
 
             usersToAdd.add(invitee);
         }
@@ -713,6 +725,31 @@ public class MatchingRoomService {
                 .filter(room -> Objects.equals(room.getCompetitionId(), competitionId))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private void assertNoActiveMockInvestment(User user) {
+        if (user == null || user.getId() == null) {
+            return;
+        }
+        lockUserForActiveRoomMutation(user.getId(), "사용자를 찾을 수 없습니다.");
+        assertNoActiveMockInvestmentAfterLock(user);
+    }
+
+    private void assertNoActiveMockInvestmentAfterLock(User user) {
+        if (user == null || user.getId() == null) {
+            return;
+        }
+        if (!findActiveMemberships(user.getId()).isEmpty()) {
+            throw new ApiException("진행 중인 모의투자가 종료된 후 새 모의투자를 시작할 수 있습니다.", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private User lockUserForActiveRoomMutation(Long userId, String notFoundMessage) {
+        if (userId == null) {
+            throw new ApiException("사용자 ID가 필요합니다.", HttpStatus.BAD_REQUEST);
+        }
+        return userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new ApiException(notFoundMessage, HttpStatus.BAD_REQUEST));
     }
 
     private Long validateTournamentMatchingContext(Long competitionId, User user, String matchType, int capacity) {
@@ -895,7 +932,12 @@ public class MatchingRoomService {
         map.put("competitionId", room.getCompetitionId());
         map.put("inviteCode", room.getInviteCode());
         map.put("createdAt", room.getCreatedAt().toString());
+        map.put("endedAt", toIsoString(room.getEndedAt()));
         return map;
+    }
+
+    private String toIsoString(Instant instant) {
+        return instant != null ? instant.toString() : null;
     }
 
     private void logMatchingRoomMemberDiagnostics(Long roomId, RuntimeException ex) {

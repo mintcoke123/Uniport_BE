@@ -3,8 +3,13 @@ package com.uniport.service.backtest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniport.entity.AssetMaster;
+import com.uniport.entity.AssetPriceDaily;
 import com.uniport.repository.AssetMasterRepository;
+import com.uniport.repository.AssetPriceDailyRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -29,27 +34,41 @@ import java.util.Optional;
 @Service
 public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
 
+    private static final Logger log = LoggerFactory.getLogger(YahooHistoricalPriceProvider.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String CURRENCY_USD = "USD";
     private static final String CURRENCY_KRW = "KRW";
     private static final String USER_AGENT = "Mozilla/5.0 UniportETFBacktest/1.0";
+    private static final String SOURCE_YAHOO_CHART = "YAHOO_FINANCE_CHART_API";
 
     private final RestTemplate restTemplate;
     private final FxRateProvider fxRateProvider;
     private final AssetMasterRepository assetMasterRepository;
+    private final AssetPriceDailyRepository assetPriceDailyRepository;
     private final boolean syntheticPriceFallbackEnabled;
     private final String chartBaseUrl;
 
+    @Autowired
     public YahooHistoricalPriceProvider(RestTemplate restTemplate,
                                         FxRateProvider fxRateProvider,
                                         AssetMasterRepository assetMasterRepository,
+                                        AssetPriceDailyRepository assetPriceDailyRepository,
                                         @Value("${backtest.price-fallback.enabled:false}") boolean syntheticPriceFallbackEnabled,
                                         @Value("${backtest.yahoo.chart-base-url:https://query1.finance.yahoo.com}") String chartBaseUrl) {
         this.restTemplate = restTemplate;
         this.fxRateProvider = fxRateProvider;
         this.assetMasterRepository = assetMasterRepository;
+        this.assetPriceDailyRepository = assetPriceDailyRepository;
         this.syntheticPriceFallbackEnabled = syntheticPriceFallbackEnabled;
         this.chartBaseUrl = trimTrailingSlash(chartBaseUrl);
+    }
+
+    public YahooHistoricalPriceProvider(RestTemplate restTemplate,
+                                        FxRateProvider fxRateProvider,
+                                        AssetMasterRepository assetMasterRepository,
+                                        boolean syntheticPriceFallbackEnabled,
+                                        String chartBaseUrl) {
+        this(restTemplate, fxRateProvider, assetMasterRepository, null, syntheticPriceFallbackEnabled, chartBaseUrl);
     }
 
     @Override
@@ -73,7 +92,7 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
         if (normalizedSecurityId.startsWith("CASH_") || normalizedSecurityId.startsWith("BOND_")) {
             return List.of();
         }
-        return fetchYahooSeries(toSecurityTicker(normalizedSecurityId), startDate, endDate);
+        return fetchYahooSeries(null, toSecurityTicker(normalizedSecurityId), startDate, endDate);
     }
 
     @Override
@@ -93,7 +112,7 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
                                                         AssetTicker ticker,
                                                         LocalDate startDate,
                                                         LocalDate endDate) {
-        List<BacktestPricePoint> external = fetchYahooSeries(ticker, startDate, endDate);
+        List<BacktestPricePoint> external = fetchYahooSeries(fallbackKey, ticker, startDate, endDate);
         if (external.size() >= 2) {
             return external;
         }
@@ -145,7 +164,10 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
         return normalizedSecurityId.startsWith("KRX_") ? CURRENCY_KRW : CURRENCY_USD;
     }
 
-    private List<BacktestPricePoint> fetchYahooSeries(AssetTicker ticker, LocalDate startDate, LocalDate endDate) {
+    private List<BacktestPricePoint> fetchYahooSeries(String cacheAssetId,
+                                                      AssetTicker ticker,
+                                                      LocalDate startDate,
+                                                      LocalDate endDate) {
         if (ticker.symbol().isBlank() || startDate == null || endDate == null || startDate.isAfter(endDate)) {
             return List.of();
         }
@@ -157,7 +179,11 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
                     String.class
             );
             String body = response.getBody();
-            return parseChartResponse(body, ticker.currency());
+            List<YahooPriceCandidate> candidates = parseChartResponse(body, ticker.currency());
+            trySaveFetchedPrices(cacheAssetId, candidates, ticker.currency());
+            return candidates.stream()
+                    .map(candidate -> new BacktestPricePoint(candidate.date(), candidate.closeKrw()))
+                    .toList();
         } catch (Exception ignored) {
             return List.of();
         }
@@ -179,7 +205,7 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
                 + "&interval=1d&events=history&includeAdjustedClose=true");
     }
 
-    private List<BacktestPricePoint> parseChartResponse(String body, String currency) throws Exception {
+    private List<YahooPriceCandidate> parseChartResponse(String body, String currency) throws Exception {
         if (body == null || body.isBlank()) {
             return List.of();
         }
@@ -196,7 +222,7 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
         JsonNode adjusted = first.path("indicators").path("adjclose");
         JsonNode adjustedCloses = adjusted.isArray() && !adjusted.isEmpty() ? adjusted.get(0).path("adjclose") : OBJECT_MAPPER.createArrayNode();
 
-        List<BacktestPricePoint> points = new ArrayList<>();
+        List<YahooPriceCandidate> points = new ArrayList<>();
         int size = Math.min(timestamps.size(), Math.max(closes.size(), adjustedCloses.size()));
         for (int i = 0; i < size; i++) {
             int index = i;
@@ -209,11 +235,45 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
                     .toLocalDate();
             BigDecimal closeKrw = close.multiply(fxRateProvider.getKrwRate(currency, date))
                     .setScale(6, RoundingMode.HALF_UP);
-            points.add(new BacktestPricePoint(date, closeKrw));
+            points.add(new YahooPriceCandidate(date, close, closeKrw));
         }
         return points.stream()
-                .sorted(Comparator.comparing(BacktestPricePoint::date))
+                .sorted(Comparator.comparing(YahooPriceCandidate::date))
                 .toList();
+    }
+
+    private void saveFetchedPrices(String assetId, List<YahooPriceCandidate> candidates, String currency) {
+        if (assetPriceDailyRepository == null
+                || assetId == null
+                || assetId.isBlank()
+                || candidates == null
+                || candidates.isEmpty()) {
+            return;
+        }
+        List<AssetPriceDaily> rows = candidates.stream()
+                .map(candidate -> {
+                    AssetPriceDaily row = assetPriceDailyRepository
+                            .findByAssetIdAndTradeDate(assetId, candidate.date())
+                            .orElseGet(() -> AssetPriceDaily.builder()
+                                    .assetId(assetId)
+                                    .tradeDate(candidate.date())
+                                    .build());
+                    row.setCloseNative(candidate.closeNative());
+                    row.setCloseKrw(candidate.closeKrw());
+                    row.setCurrency(currency);
+                    row.setSource(SOURCE_YAHOO_CHART);
+                    return row;
+                })
+                .toList();
+        assetPriceDailyRepository.saveAll(rows);
+    }
+
+    private void trySaveFetchedPrices(String assetId, List<YahooPriceCandidate> candidates, String currency) {
+        try {
+            saveFetchedPrices(assetId, candidates, currency);
+        } catch (RuntimeException e) {
+            log.warn("[yahoo-price-cache] failed to save fetched prices for {}", assetId, e);
+        }
     }
 
     private Optional<BigDecimal> priceAt(JsonNode values, int index) {
@@ -288,5 +348,8 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
     }
 
     private record AssetTicker(String symbol, String currency) {
+    }
+
+    private record YahooPriceCandidate(LocalDate date, BigDecimal closeNative, BigDecimal closeKrw) {
     }
 }

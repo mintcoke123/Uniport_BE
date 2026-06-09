@@ -141,7 +141,7 @@ class MatchingRoomServiceTest {
     }
 
     @Test
-    void quickMatchFriendMode_allowsInviteesWhoAlreadyParticipateInAnotherOrdinaryRoom() {
+    void quickMatchFriendMode_rejectsInviteesWhoAlreadyParticipateInAnotherOrdinaryRoom() {
         User host = persistUser("20263012", "occupied-host");
         User friend = persistUser("20263013", "occupied-friend");
         persistAcceptedFriend(host, friend);
@@ -149,11 +149,14 @@ class MatchingRoomServiceTest {
 
         matchingRoomService.quickMatch("RANDOM", "KR", List.of(), friend);
 
-        Map<String, Object> response = matchingRoomService.quickMatch("FRIEND", "KR", List.of(friend.getId()), host);
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> matchingRoomService.quickMatch("FRIEND", "KR", List.of(friend.getId()), host)
+        );
 
-        Map<String, Object> detail = map(response.get("detail"));
-        assertEquals(2, detail.get("memberCount"));
-        assertEquals(2, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(friend.getId()).size());
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("진행 중인 모의투자가 종료된 후 새 모의투자를 시작할 수 있습니다.", exception.getMessage());
+        assertEquals(1, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(friend.getId()).size());
     }
 
     @Test
@@ -246,8 +249,14 @@ class MatchingRoomServiceTest {
 
         Map<String, Object> started = matchingRoomService.start(roomId, firstUser);
         Map<String, Object> startedDetail = map(started.get("detail"));
+        MatchingRoom startedRoom = findRoom(roomId);
         assertEquals("started", findRoom(roomId).getStatus());
         assertEquals("COMPLETED", startedDetail.get("status"));
+        assertEquals(startedRoom.getEndedAt().toString(), startedDetail.get("endedAt"));
+        assertEquals(
+                startedRoom.getEndedAt().toString(),
+                matchingRoomService.listRoomsJoinedBy(firstUser).get(0).get("endedAt")
+        );
         assertTrue((Boolean) map(startedDetail.get("actions")).get("chatEnabled"));
     }
 
@@ -343,44 +352,32 @@ class MatchingRoomServiceTest {
     }
 
     @Test
-    void quickMatchRandomMode_allowsOrdinaryAndTournamentRoomsForSameUser() {
+    void quickMatchRandomMode_rejectsTournamentRoomWhenUserAlreadyHasOrdinaryRoom() {
         User user = persistUser("20263032", "multi-room-user");
         Competition competition = persistOngoingCompetition("동시 참여 대회");
         persistApplication(competition, user);
         entityManager.flush();
 
-        Map<String, Object> ordinaryResponse = matchingRoomService.quickMatch("RANDOM", "KR", List.of(), user);
-        Map<String, Object> tournamentResponse = matchingRoomService.quickMatch(
-                "RANDOM",
-                "KR",
-                List.of(),
-                competition.getId(),
-                user
+        matchingRoomService.quickMatch("RANDOM", "KR", List.of(), user);
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> matchingRoomService.quickMatch("RANDOM", "KR", List.of(), competition.getId(), user)
         );
 
-        String ordinaryRoomId = (String) map(ordinaryResponse.get("detail")).get("roomId");
-        String tournamentRoomId = (String) map(tournamentResponse.get("detail")).get("roomId");
-        assertFalse(ordinaryRoomId.equals(tournamentRoomId));
-        assertEquals(null, findRoom(ordinaryRoomId).getCompetitionId());
-        assertEquals(competition.getId(), findRoom(tournamentRoomId).getCompetitionId());
-        assertEquals(2, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(user.getId()).size());
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("진행 중인 모의투자가 종료된 후 새 모의투자를 시작할 수 있습니다.", exception.getMessage());
+        assertEquals(1, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(user.getId()).size());
     }
 
     @Test
-    void quickMatchRandomMode_returnsExistingRoomForSameCompetition() {
+    void quickMatchRandomMode_rejectsSecondMatchingRequestBeforeCurrentRoomEnds() {
         User user = persistUser("20263033", "same-competition-user");
         Competition competition = persistOngoingCompetition("중복 방지 대회");
         persistApplication(competition, user);
         entityManager.flush();
 
-        Map<String, Object> firstResponse = matchingRoomService.quickMatch(
-                "RANDOM",
-                "KR",
-                List.of(),
-                competition.getId(),
-                user
-        );
-        Map<String, Object> secondResponse = matchingRoomService.quickMatch(
+        matchingRoomService.quickMatch(
                 "RANDOM",
                 "KR",
                 List.of(),
@@ -388,9 +385,53 @@ class MatchingRoomServiceTest {
                 user
         );
 
-        String firstRoomId = (String) map(firstResponse.get("detail")).get("roomId");
-        String secondRoomId = (String) map(secondResponse.get("detail")).get("roomId");
-        assertEquals(firstRoomId, secondRoomId);
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> matchingRoomService.quickMatch(
+                        "RANDOM",
+                        "KR",
+                        List.of(),
+                        competition.getId(),
+                        user
+                )
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("진행 중인 모의투자가 종료된 후 새 모의투자를 시작할 수 있습니다.", exception.getMessage());
+        assertEquals(1, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(user.getId()).size());
+    }
+
+    @Test
+    void quickMatchSoloMode_startsPersonalRoomWithoutChatOrShareActions() {
+        User user = persistUser("20263035", "solo-actions-user");
+        entityManager.flush();
+
+        Map<String, Object> response = matchingRoomService.quickMatch("SOLO", "KR", List.of(), user);
+        Map<String, Object> detail = map(response.get("detail"));
+        Map<String, Object> actions = map(detail.get("actions"));
+
+        assertEquals("SOLO", response.get("mode"));
+        assertEquals(1, detail.get("capacity"));
+        assertEquals("started", findRoom((String) detail.get("roomId")).getStatus());
+        assertFalse((Boolean) actions.get("chatEnabled"));
+        assertFalse((Boolean) actions.get("shareEnabled"));
+        assertFalse((Boolean) actions.get("directInviteEnabled"));
+        assertEquals(1, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(user.getId()).size());
+    }
+
+    @Test
+    void quickMatchSoloMode_rejectsWhenUserAlreadyHasActiveRoom() {
+        User user = persistUser("20263036", "solo-retry-user");
+        entityManager.flush();
+        matchingRoomService.quickMatch("SOLO", "KR", List.of(), user);
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> matchingRoomService.quickMatch("SOLO", "KR", List.of(), user)
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals("진행 중인 모의투자가 종료된 후 새 모의투자를 시작할 수 있습니다.", exception.getMessage());
         assertEquals(1, matchingRoomMemberRepository.findActiveByUserIdOrderByJoinedAtDesc(user.getId()).size());
     }
 

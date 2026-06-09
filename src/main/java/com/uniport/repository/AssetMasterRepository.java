@@ -21,6 +21,17 @@ public interface AssetMasterRepository extends JpaRepository<AssetMaster, String
             SELECT asset
             FROM AssetMaster asset
             WHERE asset.active = true
+            ORDER BY
+              CASE WHEN asset.lastPriceVerifiedAt IS NULL THEN 0 ELSE 1 END,
+              asset.lastPriceVerifiedAt ASC,
+              asset.assetId ASC
+            """)
+    List<AssetMaster> findActiveForBacktestVerification(Pageable pageable);
+
+    @Query("""
+            SELECT asset
+            FROM AssetMaster asset
+            WHERE asset.active = true
               AND (:assetType IS NULL OR asset.assetType = :assetType)
               AND (
                     :market IS NULL

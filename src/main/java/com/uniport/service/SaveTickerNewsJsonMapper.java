@@ -52,6 +52,10 @@ public class SaveTickerNewsJsonMapper {
         }
 
         String tagText = tagText(item.path("tag_names"));
+        String fullBody = firstNonBlankBody(
+                translatedContent(item, "ko_KR", true),
+                contentBlocks(item.path("content"), true)
+        );
         return FetchedNewsArticle.builder()
                 .id("saveticker_" + saveTickerId.replaceAll("[^A-Za-z0-9_-]", "_"))
                 .category(source.category())
@@ -59,9 +63,10 @@ public class SaveTickerNewsJsonMapper {
                 .summary(firstNonBlank(
                         text(item, "group_summary"),
                         translatedSummary(item, "ko_KR"),
-                        text(item, "content")
+                        contentBlocks(item.path("content"), false)
                 ))
                 .content(tagText)
+                .fullBody(fullBody)
                 .sourceName(sourceName(source, item))
                 .publishedAt(parseDateTime(firstNonBlank(
                         text(item, "created_at"),
@@ -80,25 +85,30 @@ public class SaveTickerNewsJsonMapper {
         }
         try {
             JsonNode root = OBJECT_MAPPER.readTree(json);
-            JsonNode item = root.path("news");
+            JsonNode item = detailItem(root);
             if (item.isMissingNode() || item.isNull()) {
                 return article;
             }
 
             String title = firstNonBlank(translatedTitle(item, "ko_KR"), text(item, "title"), article.getTitle());
-            String fullContent = firstNonBlank(
-                    translatedContent(item, "ko_KR"),
-                    contentBlocks(item.path("content")),
+            String detailFullBody = firstNonBlankBody(
+                    translatedContent(item, "ko_KR", true),
+                    contentBlocks(item.path("content"), true)
+            );
+            String summary = firstNonBlankBody(
+                    detailFullBody,
                     translatedSummary(item, "ko_KR"),
                     article.getSummary()
             );
+            String fullBody = firstNonBlankBody(detailFullBody, article.getFullBody());
             LocalDateTime publishedAt = parseDateTime(text(item, "created_at"));
             return FetchedNewsArticle.builder()
                     .id(article.getId())
                     .category(article.getCategory())
                     .title(title)
-                    .summary(fullContent)
+                    .summary(summary)
                     .content(article.getContent())
+                    .fullBody(fullBody)
                     .sourceName(sourceName(source, item, article.getSourceName()))
                     .publishedAt(publishedAt == null ? article.getPublishedAt() : publishedAt)
                     .featured(article.isFeatured())
@@ -109,34 +119,51 @@ public class SaveTickerNewsJsonMapper {
         }
     }
 
+    private JsonNode detailItem(JsonNode root) {
+        JsonNode wrapped = root.path("news");
+        if (!wrapped.isMissingNode() && !wrapped.isNull()) {
+            return wrapped;
+        }
+        if (!root.path("id").asText("").isBlank() || !root.path("title").asText("").isBlank()) {
+            return root;
+        }
+        return wrapped;
+    }
+
     private String translatedTitle(JsonNode item, String locale) {
         return text(item.path("translations").path("translated").path(locale), "title");
     }
 
     private String translatedSummary(JsonNode item, String locale) {
         JsonNode translated = item.path("translations").path("translated").path(locale);
-        String summary = contentBlocks(translated.path("summary"));
+        String summary = contentBlocks(translated.path("summary"), false);
         if (!summary.isBlank()) {
             return summary;
         }
-        return contentBlocks(translated.path("content"));
+        return contentBlocks(translated.path("content"), false);
     }
 
-    private String translatedContent(JsonNode item, String locale) {
+    private String translatedContent(JsonNode item, String locale, boolean preserveLines) {
         JsonNode translated = item.path("translations").path("translated").path(locale);
-        return contentBlocks(translated.path("content"));
+        return contentBlocks(translated.path("content"), preserveLines);
     }
 
-    private String contentBlocks(JsonNode node) {
+    private String contentBlocks(JsonNode node, boolean preserveLines) {
+        if (node.isTextual()) {
+            return preserveLines ? cleanBodyText(node.asText("")) : cleanText(node.asText(""));
+        }
         if (!node.isArray()) {
             return "";
         }
         List<String> values = new ArrayList<>();
         for (JsonNode block : node) {
-            String content = text(block, "content");
+            String content = block.path("content").asText("");
             if (!content.isBlank()) {
                 values.add(content);
             }
+        }
+        if (preserveLines) {
+            return cleanBodyText(String.join("\n", values));
         }
         return cleanText(String.join(" ", values));
     }
@@ -213,6 +240,16 @@ public class SaveTickerNewsJsonMapper {
         return "";
     }
 
+    private String firstNonBlankBody(String... values) {
+        for (String value : values) {
+            String cleaned = cleanBodyText(value);
+            if (!cleaned.isBlank()) {
+                return cleaned;
+            }
+        }
+        return "";
+    }
+
     private String text(JsonNode node, String fieldName) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return "";
@@ -227,6 +264,19 @@ public class SaveTickerNewsJsonMapper {
         return value
                 .replace('\u00A0', ' ')
                 .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private String cleanBodyText(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replace('\u00A0', ' ')
+                .replaceAll("[\\t\\x0B\\f\\r]+", " ")
+                .replaceAll(" *\\n+ *", "\n")
+                .replaceAll("[ ]{2,}", " ")
+                .replaceAll("\\n{3,}", "\n\n")
                 .trim();
     }
 }

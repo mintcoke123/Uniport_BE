@@ -12,9 +12,11 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,21 +28,26 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PlaywrightPublicWebIssueSourceProvider.class);
     private static final String SOURCE_PREFIX = "uniport.investment-issue.public-web.sources";
+    private static final String SAVETICKER_API_BASE_URL = "https://www.saveticker.com/api";
+    private static final String SAVETICKER_ID_PREFIX = "saveticker_";
     private static final int DEFAULT_TIMEOUT_MS = 6000;
     private static final int DEFAULT_MAX_ITEMS = 20;
     private static final int MAX_CONFIGURED_SOURCES = 50;
 
     private final PublicWebIssueHtmlExtractor extractor;
     private final SaveTickerNewsDomExtractor saveTickerNewsDomExtractor;
+    private final SaveTickerNewsJsonMapper saveTickerNewsJsonMapper;
     private final HttpClient httpClient;
     private final List<PublicWebIssueSource> sources;
     private final int timeoutMs;
 
     public PlaywrightPublicWebIssueSourceProvider(Environment environment,
                                                  PublicWebIssueHtmlExtractor extractor,
-                                                 SaveTickerNewsDomExtractor saveTickerNewsDomExtractor) {
+                                                 SaveTickerNewsDomExtractor saveTickerNewsDomExtractor,
+                                                 SaveTickerNewsJsonMapper saveTickerNewsJsonMapper) {
         this.extractor = extractor;
         this.saveTickerNewsDomExtractor = saveTickerNewsDomExtractor;
+        this.saveTickerNewsJsonMapper = saveTickerNewsJsonMapper;
         this.httpClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(Duration.ofMillis(DEFAULT_TIMEOUT_MS))
@@ -79,7 +86,14 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
         return List.copyOf(articles);
     }
 
-    private List<FetchedNewsArticle> fetchSource(Browser browser, PublicWebIssueSource source) {
+    List<FetchedNewsArticle> fetchSource(Browser browser, PublicWebIssueSource source) {
+        if (isSaveTickerNewsSource(source)) {
+            List<FetchedNewsArticle> articles = fetchSaveTickerSourceFromDom(browser, source);
+            if (!articles.isEmpty()) {
+                return articles;
+            }
+            return fetchSaveTickerSourceFromApi(source);
+        }
         try (Page page = browser.newPage()) {
             page.navigate(
                     source.url().toString(),
@@ -87,16 +101,6 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
                             .setTimeout(timeoutMs)
                             .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
             );
-            if (isSaveTickerNewsSource(source)) {
-                List<FetchedNewsArticle> articles = saveTickerNewsDomExtractor.extract(source, page, timeoutMs);
-                LOGGER.info(
-                        "Public web issue source '{}' fetched {} articles from {}",
-                        source.name(),
-                        articles.size(),
-                        source.url()
-                );
-                return articles;
-            }
             List<FetchedNewsArticle> articles = extractor.extract(source, page.content());
             LOGGER.info(
                     "Public web issue source '{}' fetched {} articles from {}",
@@ -118,6 +122,9 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
     }
 
     private List<FetchedNewsArticle> fetchSourceWithoutBrowser(PublicWebIssueSource source) {
+        if (isSaveTickerNewsSource(source)) {
+            return fetchSaveTickerSourceFromApi(source);
+        }
         try {
             String html = fetchText(source.url().toString());
             List<FetchedNewsArticle> articles = extractor.extract(source, html);
@@ -138,6 +145,110 @@ public class PlaywrightPublicWebIssueSourceProvider implements PublicIssueSource
             );
             return List.of();
         }
+    }
+
+    private List<FetchedNewsArticle> fetchSaveTickerSourceFromDom(Browser browser, PublicWebIssueSource source) {
+        try (Page page = browser.newPage()) {
+            page.navigate(
+                    source.url().toString(),
+                    new Page.NavigateOptions()
+                            .setTimeout(timeoutMs)
+                            .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
+            );
+            List<FetchedNewsArticle> articles = saveTickerNewsDomExtractor.extract(source, page, timeoutMs);
+            LOGGER.info(
+                    "Public web issue source '{}' fetched {} articles from SaveTicker DOM",
+                    source.name(),
+                    articles.size()
+            );
+            return articles;
+        } catch (Exception exception) {
+            LOGGER.warn(
+                    "Public web issue source '{}' SaveTicker DOM fetch failed at {}: {}",
+                    source.name(),
+                    source.url(),
+                    exception.getMessage(),
+                    exception
+            );
+            return List.of();
+        }
+    }
+
+    private List<FetchedNewsArticle> fetchSaveTickerSourceFromApi(PublicWebIssueSource source) {
+        try {
+            String listJson = fetchText(saveTickerListUrl(source.maxItems()));
+            List<FetchedNewsArticle> listArticles = saveTickerNewsJsonMapper.extract(source, listJson);
+            List<FetchedNewsArticle> articles = new ArrayList<>();
+            for (FetchedNewsArticle article : listArticles) {
+                articles.add(enrichSaveTickerArticle(source, article));
+            }
+            LOGGER.info(
+                    "Public web issue source '{}' fetched {} articles from SaveTicker API",
+                    source.name(),
+                    articles.size()
+            );
+            return List.copyOf(articles);
+        } catch (Exception exception) {
+            LOGGER.warn(
+                    "Public web issue source '{}' SaveTicker API fetch failed at {}: {}",
+                    source.name(),
+                    source.url(),
+                    exception.getMessage(),
+                    exception
+            );
+            return List.of();
+        }
+    }
+
+    private FetchedNewsArticle enrichSaveTickerArticle(PublicWebIssueSource source, FetchedNewsArticle article) {
+        String saveTickerId = saveTickerId(article);
+        if (saveTickerId.isBlank()) {
+            return article;
+        }
+        try {
+            String detailJson = fetchText(saveTickerDetailUrl(saveTickerId));
+            return saveTickerNewsJsonMapper.enrichWithDetail(source, article, detailJson);
+        } catch (Exception exception) {
+            LOGGER.warn(
+                    "SaveTicker detail API fetch failed for {}: {}",
+                    saveTickerId,
+                    exception.getMessage()
+            );
+            return article;
+        }
+    }
+
+    private String saveTickerListUrl(int maxItems) {
+        return SAVETICKER_API_BASE_URL
+                + "/news/list?page=1&page_size="
+                + Math.max(1, maxItems)
+                + "&sort=created_at_desc";
+    }
+
+    private String saveTickerDetailUrl(String saveTickerId) {
+        return SAVETICKER_API_BASE_URL + "/news/detail?id=" + encode(saveTickerId);
+    }
+
+    private String saveTickerId(FetchedNewsArticle article) {
+        if (article == null) {
+            return "";
+        }
+        String id = article.getId() == null ? "" : article.getId().trim();
+        if (id.startsWith(SAVETICKER_ID_PREFIX) && id.length() > SAVETICKER_ID_PREFIX.length()) {
+            return id.substring(SAVETICKER_ID_PREFIX.length());
+        }
+        try {
+            URI uri = URI.create(article.getExternalUrl());
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            String[] segments = path.split("/");
+            return segments.length == 0 ? "" : segments[segments.length - 1].trim();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     private String fetchText(String url) {

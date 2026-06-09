@@ -85,6 +85,28 @@ class NaverNewsFeedClientTest {
     }
 
     @Test
+    void fetchLatest_returnsEmptyAndSkipsHttpCallWhenDisabled() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        NaverNewsFeedClient client = new NaverNewsFeedClient(
+                restTemplate,
+                false,
+                "client-id",
+                "client-secret",
+                300,
+                10,
+                List.of(NaverNewsFeedClient.FeedDefinition.market("코스피 시황"))
+        );
+
+        assertEquals(List.of(), client.fetchLatest());
+        verify(restTemplate, never()).exchange(
+                any(URI.class),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(String.class)
+        );
+    }
+
+    @Test
     void fetchLatest_skipsOriginalArticleContentDuringListRefresh() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         NaverNewsFeedClient client = new NaverNewsFeedClient(

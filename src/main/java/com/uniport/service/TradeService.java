@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -50,6 +51,7 @@ public class TradeService {
     private final MatchingRoomMemberRepository matchingRoomMemberRepository;
     private final StockVisualAssetResolver stockVisualAssetResolver;
     private final StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver;
+    private final Clock clock;
 
     public TradeService(OrderRepository orderRepository, KisApiService kisApiService,
                         TeamAccountRepository teamAccountRepository,
@@ -58,6 +60,27 @@ public class TradeService {
                         MatchingRoomMemberRepository matchingRoomMemberRepository,
                         StockVisualAssetResolver stockVisualAssetResolver,
                         StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver) {
+        this(
+                orderRepository,
+                kisApiService,
+                teamAccountRepository,
+                teamHoldingRepository,
+                chatService,
+                matchingRoomMemberRepository,
+                stockVisualAssetResolver,
+                stockSymbolLogoUrlResolver,
+                Clock.system(KOREA_ZONE)
+        );
+    }
+
+    TradeService(OrderRepository orderRepository, KisApiService kisApiService,
+                 TeamAccountRepository teamAccountRepository,
+                 TeamHoldingRepository teamHoldingRepository,
+                 ChatService chatService,
+                 MatchingRoomMemberRepository matchingRoomMemberRepository,
+                 StockVisualAssetResolver stockVisualAssetResolver,
+                 StockSymbolLogoUrlResolver stockSymbolLogoUrlResolver,
+                 Clock clock) {
         this.orderRepository = orderRepository;
         this.kisApiService = kisApiService;
         this.teamAccountRepository = teamAccountRepository;
@@ -66,20 +89,21 @@ public class TradeService {
         this.matchingRoomMemberRepository = matchingRoomMemberRepository;
         this.stockVisualAssetResolver = stockVisualAssetResolver;
         this.stockSymbolLogoUrlResolver = stockSymbolLogoUrlResolver;
+        this.clock = clock == null ? Clock.system(KOREA_ZONE) : clock.withZone(KOREA_ZONE);
     }
 
     public boolean isTradingHoursNow() {
-        LocalTime now = ZonedDateTime.now(KOREA_ZONE).toLocalTime();
+        LocalTime now = ZonedDateTime.now(clock).toLocalTime();
         return isTradingHours(now);
     }
 
     static boolean isTradingHours(LocalTime now) {
-        return true;
+        return now != null && !now.isBefore(MARKET_OPEN) && now.isBefore(MARKET_CLOSE);
     }
 
     /** 한국 시간 기준 거래 가능 여부. 09:00 ~ 15:30 미만만 허용. */
-    private static void assertTradingHours() {
-        LocalTime now = ZonedDateTime.now(KOREA_ZONE).toLocalTime();
+    private void assertTradingHours() {
+        LocalTime now = ZonedDateTime.now(clock).toLocalTime();
         if (!isTradingHours(now)) {
             throw new ApiException(TRADING_HOURS_MESSAGE, HttpStatus.FORBIDDEN);
         }

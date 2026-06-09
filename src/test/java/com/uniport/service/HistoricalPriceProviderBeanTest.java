@@ -46,12 +46,12 @@ class HistoricalPriceProviderBeanTest {
     }
 
     @Test
-    void assetBacktestVerificationServiceUsesKisProviderForRealPriceVerification() {
+    void assetBacktestVerificationServiceUsesCompositeProviderForRealPriceVerification() {
         contextRunner.run(context -> {
             AssetBacktestVerificationService service = context.getBean(AssetBacktestVerificationService.class);
             Field field = AssetBacktestVerificationService.class.getDeclaredField("historicalPriceProvider");
             field.setAccessible(true);
-            assertInstanceOf(KisHistoricalPriceProvider.class, field.get(service));
+            assertInstanceOf(CompositeHistoricalPriceProvider.class, field.get(service));
         });
     }
 

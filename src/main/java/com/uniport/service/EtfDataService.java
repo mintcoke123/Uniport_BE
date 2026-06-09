@@ -10,6 +10,7 @@ import com.uniport.dto.CustomEtfHoldingDTO;
 import com.uniport.dto.CustomEtfItemRequestDTO;
 import com.uniport.dto.CustomEtfListResponseDTO;
 import com.uniport.dto.CustomEtfMutationResponseDTO;
+import com.uniport.dto.CustomEtfPriceCoverageDTO;
 import com.uniport.dto.CustomEtfSummaryDTO;
 import com.uniport.dto.CustomEtfUpdateRequestDTO;
 import com.uniport.dto.EtfAnalysisAiFeedbackDTO;
@@ -47,6 +48,7 @@ import com.uniport.entity.User;
 import com.uniport.exception.ApiException;
 import com.uniport.repository.AssetMasterRepository;
 import com.uniport.repository.AssetAliasRepository;
+import com.uniport.repository.AssetPriceDailyRepository;
 import com.uniport.repository.ManagedEtfAnalysisReportRepository;
 import com.uniport.repository.ManagedEtfFavoriteRepository;
 import com.uniport.repository.ManagedEtfRepository;
@@ -110,7 +112,7 @@ public class EtfDataService {
     private static final String ANALYSIS_VERSION = "backtest-v2.0.0";
     private static final String MESSAGE_VERSION = "ai-feedback-v2.0.0";
     private static final String PRICE_SOURCE = "Yahoo Finance chart API, KIS chart API, or cached real prices";
-    private static final String PRICE_CACHE_POLICY = "none";
+    private static final String PRICE_CACHE_POLICY = "asset_price_daily";
     private static final String FX_CACHE_POLICY = "fx_rate_daily";
     private static final int DEFAULT_ASSET_SEARCH_SIZE = 10;
     private static final int MAX_ASSET_SEARCH_SIZE = 30;
@@ -130,6 +132,10 @@ public class EtfDataService {
     private static final String DATA_STATUS_PROXY = "PROXY";
     private static final String DATA_STATUS_PENDING = "PENDING_VERIFICATION";
     private static final String DATA_STATUS_PRICE_UNAVAILABLE = "PRICE_UNAVAILABLE";
+    private static final String PRICE_COVERAGE_READY = "READY";
+    private static final String PRICE_COVERAGE_PARTIAL = "PARTIAL";
+    private static final String PRICE_COVERAGE_PENDING = "PENDING";
+    private static final String PRICE_COVERAGE_UNAVAILABLE = "UNAVAILABLE";
     private static final String PENDING_VERIFICATION_MESSAGE = "분석 시점에 실가격을 확인하며, 가격 데이터가 부족하면 분석이 제한됩니다.";
     private static final String ERROR_CODE_PRICE_DATA_UNAVAILABLE = "ETF_PRICE_DATA_UNAVAILABLE";
     private static final String ERROR_CODE_BENCHMARK_PRICE_DATA_UNAVAILABLE = "ETF_BENCHMARK_PRICE_DATA_UNAVAILABLE";
@@ -149,6 +155,7 @@ public class EtfDataService {
     private final StockMasterRepository stockMasterRepository;
     private final AssetMasterRepository assetMasterRepository;
     private final AssetAliasRepository assetAliasRepository;
+    private final AssetPriceDailyRepository assetPriceDailyRepository;
     private final HistoricalPriceProvider historicalPriceProvider;
     private final EtfBacktestEngine etfBacktestEngine;
     private final EtfAiFeedbackService etfAiFeedbackService;
@@ -165,6 +172,7 @@ public class EtfDataService {
                           StockMasterRepository stockMasterRepository,
                           AssetMasterRepository assetMasterRepository,
                           AssetAliasRepository assetAliasRepository,
+                          AssetPriceDailyRepository assetPriceDailyRepository,
                           HistoricalPriceProvider historicalPriceProvider,
                           EtfBacktestEngine etfBacktestEngine,
                           EtfAiFeedbackService etfAiFeedbackService,
@@ -179,6 +187,7 @@ public class EtfDataService {
         this.stockMasterRepository = stockMasterRepository;
         this.assetMasterRepository = assetMasterRepository;
         this.assetAliasRepository = assetAliasRepository;
+        this.assetPriceDailyRepository = assetPriceDailyRepository;
         this.historicalPriceProvider = historicalPriceProvider;
         this.etfBacktestEngine = etfBacktestEngine;
         this.etfAiFeedbackService = etfAiFeedbackService;
@@ -207,19 +216,19 @@ public class EtfDataService {
                 ? DEFAULT_ASSET_SEARCH_SIZE
                 : Math.min(sizeParam, MAX_ASSET_SEARCH_SIZE);
 
-        LinkedHashMap<String, CustomEtfAssetSearchItemDTO> candidates = new LinkedHashMap<>();
+        LinkedHashMap<String, EtfAssetCatalogItem> candidates = new LinkedHashMap<>();
         String repositoryAssetType = assetType.isBlank() ? null : assetType;
         String repositoryMarket = market.isBlank() || "ALL".equals(market) ? null : market;
         searchActiveAssets(keyword, repositoryAssetType, repositoryMarket).stream()
                 .map(this::toAssetCatalogItem)
                 .filter(item -> matchesAssetSearch(item, keyword, assetType, market))
                 .filter(this::isSearchVisibleAsset)
-                .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
+                .forEach(item -> candidates.putIfAbsent(item.assetId(), item));
         searchAliasMatchedAssets(keyword, repositoryAssetType, repositoryMarket).stream()
                 .map(this::toAssetCatalogItem)
                 .filter(item -> matchesAssetSearch(item, "", assetType, market))
                 .filter(this::isSearchVisibleAsset)
-                .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
+                .forEach(item -> candidates.putIfAbsent(item.assetId(), item));
 
         if (assetType.isBlank() || ASSET_TYPE_STOCK.equals(assetType)) {
             List<StockMaster> stocks = keyword.isBlank()
@@ -229,18 +238,21 @@ public class EtfDataService {
                     .map(this::toAssetCatalogItem)
                     .filter(item -> matchesAssetSearch(item, keyword, assetType, market))
                     .filter(this::isSearchVisibleAsset)
-                    .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
+                    .forEach(item -> candidates.putIfAbsent(item.assetId(), item));
         }
         yahooSearchFallback(keyword, assetType, market, size).stream()
                 .filter(this::isSearchVisibleAsset)
-                .forEach(item -> candidates.putIfAbsent(item.assetId(), toAssetSearchItem(item)));
+                .forEach(item -> candidates.putIfAbsent(item.assetId(), item));
         if (candidates.isEmpty()) {
             exactUsTickerFallback(keyword, assetType, market)
                     .filter(this::isSearchVisibleAsset)
-                    .ifPresent(item -> candidates.put(item.assetId(), toAssetSearchItem(item)));
+                    .ifPresent(item -> candidates.put(item.assetId(), item));
         }
 
-        List<CustomEtfAssetSearchItemDTO> all = new ArrayList<>(candidates.values());
+        Map<String, CachedPriceCoverage> coverageByAssetId = cachedPriceCoverageByAssetId(candidates.keySet());
+        List<CustomEtfAssetSearchItemDTO> all = candidates.values().stream()
+                .map(item -> toAssetSearchItem(item, coverageByAssetId.getOrDefault(item.assetId(), CachedPriceCoverage.empty(item.assetId()))))
+                .toList();
         int fromIndex = Math.min(page * size, all.size());
         int toIndex = Math.min(fromIndex + size, all.size());
         return CustomEtfAssetSearchResponseDTO.builder()
@@ -656,8 +668,9 @@ public class EtfDataService {
             EtfAssetCatalogItem item,
             RecommendationProfile profile) {
         ResolvedStockVisual visual = resolveStockVisual(item.market(), item.symbol(), item.name());
-        boolean selectable = isCustomEtfSelectableAsset(item);
-        String dataStatus = selectable ? searchDataStatus(item) : item.priceSourceStatus();
+        CachedPriceCoverage coverage = cachedPriceCoverageForAsset(item.assetId());
+        boolean selectable = isSearchSelectableAsset(item, coverage);
+        String dataStatus = searchDataStatus(item, coverage);
         List<String> candidateKeywords = inferThemeKeywords(item.name() + " " + item.symbol() + " " + item.market());
         boolean sameMarket = broadMarket(item.market()).equals(profile.dominantMarket());
         boolean themeMatch = candidateKeywords.stream().anyMatch(profile.keywords()::contains);
@@ -675,7 +688,7 @@ public class EtfDataService {
                 .tags(tags)
                 .backtestEnabled(selectable)
                 .dataStatus(dataStatus)
-                .dataStatusMessage(selectable ? searchDataStatusMessage(dataStatus) : item.lastPriceError())
+                .dataStatusMessage(searchDataStatusMessage(item, dataStatus, coverage))
                 .logoUrl(visual.logoUrl())
                 .visual(visual.visual())
                 .build();
@@ -1246,10 +1259,10 @@ public class EtfDataService {
         return false;
     }
 
-    private CustomEtfAssetSearchItemDTO toAssetSearchItem(EtfAssetCatalogItem item) {
+    private CustomEtfAssetSearchItemDTO toAssetSearchItem(EtfAssetCatalogItem item, CachedPriceCoverage coverage) {
         ResolvedStockVisual visual = resolveStockVisual(item.market(), item.symbol(), item.name());
-        boolean selectable = isCustomEtfSelectableAsset(item);
-        String dataStatus = selectable ? searchDataStatus(item) : item.priceSourceStatus();
+        boolean selectable = isSearchSelectableAsset(item, coverage);
+        String dataStatus = searchDataStatus(item, coverage);
         return CustomEtfAssetSearchItemDTO.builder()
                 .assetId(item.assetId())
                 .stockId(item.assetId())
@@ -1260,21 +1273,116 @@ public class EtfDataService {
                 .currency(item.currency())
                 .backtestEnabled(selectable)
                 .dataStatus(dataStatus)
-                .dataStatusMessage(selectable ? searchDataStatusMessage(dataStatus) : item.lastPriceError())
+                .dataStatusMessage(searchDataStatusMessage(item, dataStatus, coverage))
+                .priceCoverage1Y(priceCoverageDto("1Y", item, coverage))
+                .priceCoverage3Y(priceCoverageDto("3Y", item, coverage))
+                .priceCoverage5Y(priceCoverageDto("5Y", item, coverage))
                 .logoUrl(visual.logoUrl())
                 .visual(visual.visual())
                 .build();
     }
 
-    private String searchDataStatus(EtfAssetCatalogItem item) {
-        if (Boolean.TRUE.equals(item.backtestEnabled()) && DATA_STATUS_VERIFIED.equals(item.priceSourceStatus())) {
+    private String searchDataStatus(EtfAssetCatalogItem item, CachedPriceCoverage coverage) {
+        if (PRICE_COVERAGE_READY.equals(priceCoverageStatus("1Y", item, coverage))) {
             return DATA_STATUS_VERIFIED;
+        }
+        if (DATA_STATUS_PRICE_UNAVAILABLE.equals(item.priceSourceStatus())) {
+            return DATA_STATUS_PRICE_UNAVAILABLE;
         }
         return DATA_STATUS_PENDING;
     }
 
-    private String searchDataStatusMessage(String dataStatus) {
-        return DATA_STATUS_VERIFIED.equals(dataStatus) ? null : PENDING_VERIFICATION_MESSAGE;
+    private String searchDataStatusMessage(EtfAssetCatalogItem item, String dataStatus, CachedPriceCoverage coverage) {
+        if (DATA_STATUS_VERIFIED.equals(dataStatus)) {
+            return null;
+        }
+        if (DATA_STATUS_PRICE_UNAVAILABLE.equals(dataStatus)) {
+            return blankToDefault(item.lastPriceError(), priceCoverageMessage(PRICE_COVERAGE_UNAVAILABLE));
+        }
+        return PENDING_VERIFICATION_MESSAGE;
+    }
+
+    private Map<String, CachedPriceCoverage> cachedPriceCoverageByAssetId(Set<String> assetIds) {
+        if (assetIds.isEmpty()) {
+            return Map.of();
+        }
+        List<String> orderedAssetIds = new ArrayList<>(assetIds);
+        List<AssetPriceDailyRepository.AssetPriceCoverageSummary> summaries =
+                assetPriceDailyRepository.findCoverageSummariesByAssetIds(orderedAssetIds);
+        if (summaries == null || summaries.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, CachedPriceCoverage> coverageByAssetId = new LinkedHashMap<>();
+        for (AssetPriceDailyRepository.AssetPriceCoverageSummary summary : summaries) {
+            CachedPriceCoverage coverage = toCachedPriceCoverage(summary);
+            coverageByAssetId.put(coverage.assetId(), coverage);
+        }
+        return coverageByAssetId;
+    }
+
+    private CachedPriceCoverage cachedPriceCoverageForAsset(String assetId) {
+        if (assetId == null || assetId.isBlank()) {
+            return CachedPriceCoverage.empty(assetId);
+        }
+        Optional<AssetPriceDailyRepository.AssetPriceCoverageSummary> summary =
+                assetPriceDailyRepository.findCoverageSummaryByAssetId(assetId);
+        return summary == null
+                ? CachedPriceCoverage.empty(assetId)
+                : summary.map(this::toCachedPriceCoverage).orElse(CachedPriceCoverage.empty(assetId));
+    }
+
+    private CachedPriceCoverage toCachedPriceCoverage(AssetPriceDailyRepository.AssetPriceCoverageSummary summary) {
+        return new CachedPriceCoverage(
+                summary.getAssetId(),
+                summary.getFirstTradeDate(),
+                summary.getLastTradeDate(),
+                summary.getPriceCount() == null ? 0L : summary.getPriceCount()
+        );
+    }
+
+    private CustomEtfPriceCoverageDTO priceCoverageDto(String period,
+                                                       EtfAssetCatalogItem item,
+                                                       CachedPriceCoverage coverage) {
+        String status = priceCoverageStatus(period, item, coverage);
+        return CustomEtfPriceCoverageDTO.builder()
+                .period(period)
+                .status(status)
+                .availableFrom(coverage.firstTradeDate())
+                .availableTo(coverage.lastTradeDate())
+                .priceCount(coverage.priceCount())
+                .message(priceCoverageMessage(status))
+                .build();
+    }
+
+    private String priceCoverageStatus(String period, EtfAssetCatalogItem item, CachedPriceCoverage coverage) {
+        if (isPriceCoverageReady(period, coverage)) {
+            return PRICE_COVERAGE_READY;
+        }
+        if (coverage.hasAnyPriceHistory()) {
+            return PRICE_COVERAGE_PARTIAL;
+        }
+        if (DATA_STATUS_PRICE_UNAVAILABLE.equals(item.priceSourceStatus())) {
+            return PRICE_COVERAGE_UNAVAILABLE;
+        }
+        return PRICE_COVERAGE_PENDING;
+    }
+
+    private boolean isPriceCoverageReady(String period, CachedPriceCoverage coverage) {
+        if (!coverage.hasAnyPriceHistory()) {
+            return false;
+        }
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = startDateForPeriod(period, endDate);
+        return coverageRatio(startDate, endDate, coverage.firstTradeDate(), coverage.lastTradeDate()) >= MIN_PERIOD_COVERAGE_RATIO;
+    }
+
+    private String priceCoverageMessage(String status) {
+        return switch (status) {
+            case PRICE_COVERAGE_READY -> null;
+            case PRICE_COVERAGE_PARTIAL -> "일부 가격 캐시가 있어 분석 시 기간이 줄어들 수 있습니다.";
+            case PRICE_COVERAGE_UNAVAILABLE -> "가격 데이터가 부족해 분석할 수 없습니다.";
+            default -> PENDING_VERIFICATION_MESSAGE;
+        };
     }
 
     private ResolvedStockVisual resolveStockVisual(String market, String symbol, String name) {
@@ -1283,11 +1391,16 @@ public class EtfDataService {
     }
 
     private boolean isSearchVisibleAsset(EtfAssetCatalogItem item) {
-        return isCustomEtfSelectableAsset(item);
+        return isEquityLikeAssetType(item.assetType());
     }
 
-    private boolean isCustomEtfSelectableAsset(EtfAssetCatalogItem item) {
-        return isEquityLikeAssetType(item.assetType());
+    private boolean isCustomEtfSelectableAsset(EtfAssetCatalogItem item, CachedPriceCoverage coverage) {
+        return isEquityLikeAssetType(item.assetType())
+                && !PRICE_COVERAGE_UNAVAILABLE.equals(priceCoverageStatus("1Y", item, coverage));
+    }
+
+    private boolean isSearchSelectableAsset(EtfAssetCatalogItem item, CachedPriceCoverage coverage) {
+        return isCustomEtfSelectableAsset(item, coverage);
     }
 
     private boolean isBacktestEligible(EtfAssetCatalogItem item) {
@@ -1718,7 +1831,9 @@ public class EtfDataService {
             SecurityPriceSeries priceSeries = joinPriceFetch(future);
             List<BacktestPricePoint> cleanSeries = cleanPriceSeries(priceSeries.series());
             if (cleanSeries.size() < 2) {
-                throw new ApiException("ETF asset has insufficient price data for backtest: " + priceSeries.securityId(),
+                String message = "ETF asset has insufficient price data for backtest: " + priceSeries.securityId();
+                markBacktestDataUnavailable(priceSeries.securityId(), message);
+                throw new ApiException(message,
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         ERROR_CODE_PRICE_DATA_UNAVAILABLE);
             }
@@ -1774,6 +1889,8 @@ public class EtfDataService {
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     ERROR_CODE_BENCHMARK_PRICE_DATA_UNAVAILABLE);
         }
+        holdingSeriesBySecurityId.keySet().forEach(assetId ->
+                markBacktestDataUnavailable(assetId, "ETF assets have insufficient price coverage for requested backtest period."));
         throw new ApiException("ETF assets have insufficient price coverage for requested backtest period.",
                 HttpStatus.UNPROCESSABLE_ENTITY,
                 ERROR_CODE_PRICE_DATA_UNAVAILABLE);
@@ -2184,6 +2301,21 @@ public class EtfDataService {
     }
 
     private void markBacktestDataVerified(String assetId) {
+        CachedPriceCoverage coverage = cachedPriceCoverageForAsset(assetId);
+        EtfAssetCatalogItem coverageItem = new EtfAssetCatalogItem(
+                assetId,
+                assetId,
+                assetId,
+                "",
+                ASSET_TYPE_STOCK,
+                "",
+                true,
+                DATA_STATUS_PENDING,
+                null
+        );
+        if (!PRICE_COVERAGE_READY.equals(priceCoverageStatus("1Y", coverageItem, coverage))) {
+            return;
+        }
         assetMasterRepository.findByAssetIdAndActiveTrue(assetId).ifPresent(asset -> {
             if (isEquityLikeAssetType(asset.getAssetType())
                     && (!Boolean.TRUE.equals(asset.getBacktestEnabled())
@@ -2192,6 +2324,18 @@ public class EtfDataService {
                 asset.setBacktestEnabled(true);
                 asset.setPriceSourceStatus(DATA_STATUS_VERIFIED);
                 asset.setLastPriceError(null);
+                asset.setLastPriceVerifiedAt(LocalDateTime.now());
+                assetMasterRepository.save(asset);
+            }
+        });
+    }
+
+    private void markBacktestDataUnavailable(String assetId, String reason) {
+        assetMasterRepository.findByAssetIdAndActiveTrue(assetId).ifPresent(asset -> {
+            if (isEquityLikeAssetType(asset.getAssetType())) {
+                asset.setBacktestEnabled(false);
+                asset.setPriceSourceStatus(DATA_STATUS_PRICE_UNAVAILABLE);
+                asset.setLastPriceError(reason);
                 asset.setLastPriceVerifiedAt(LocalDateTime.now());
                 assetMasterRepository.save(asset);
             }
@@ -2385,6 +2529,18 @@ public class EtfDataService {
     private record StockRef(String name, String symbol, String market, String assetType, String currency) {}
     private record ResolvedStockVisual(String logoUrl, StockVisualDTO visual) {}
     private record SecurityPriceSeries(String securityId, List<BacktestPricePoint> series) {}
+    private record CachedPriceCoverage(String assetId,
+                                       LocalDate firstTradeDate,
+                                       LocalDate lastTradeDate,
+                                       long priceCount) {
+        private static CachedPriceCoverage empty(String assetId) {
+            return new CachedPriceCoverage(assetId, null, null, 0L);
+        }
+
+        private boolean hasAnyPriceHistory() {
+            return priceCount >= 2L && firstTradeDate != null && lastTradeDate != null;
+        }
+    }
     private record BacktestPriceSeries(Map<String, List<BacktestPricePoint>> priceSeriesBySecurityId,
                                        List<BacktestPricePoint> benchmarkSeries,
                                        String actualPeriod,

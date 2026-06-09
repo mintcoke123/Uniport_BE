@@ -52,7 +52,7 @@ public class NaverNewsFeedClient implements NewsFeedClient {
 
     @Autowired
     public NaverNewsFeedClient(RestTemplate restTemplate,
-                               @Value("${naver.news.enabled:true}") boolean enabled,
+                               @Value("${naver.news.enabled:false}") boolean enabled,
                                @Value("${naver.news.client-id:}") String clientId,
                                @Value("${naver.news.client-secret:}") String clientSecret,
                                @Value("${naver.news.cache-ttl-seconds:300}") int cacheTtlSeconds,

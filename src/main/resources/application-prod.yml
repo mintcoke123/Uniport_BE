@@ -64,7 +64,7 @@ jwt:
 
 naver:
   news:
-    enabled: ${NAVER_NEWS_ENABLED:true}
+    enabled: ${NAVER_NEWS_ENABLED:false}
     client-id: ${NAVER_NEWS_CLIENT_ID:}
     client-secret: ${NAVER_NEWS_CLIENT_SECRET:}
     cache-ttl-seconds: ${NAVER_NEWS_CACHE_TTL_SECONDS:300}
@@ -80,6 +80,13 @@ openai:
 backtest:
   price-fallback:
     enabled: ${BACKTEST_PRICE_FALLBACK_ENABLED:false}
+
+asset:
+  backtest-verification:
+    enabled: ${ASSET_BACKTEST_VERIFICATION_ENABLED:true}
+    batch-size: ${ASSET_BACKTEST_VERIFICATION_BATCH_SIZE:200}
+    cron: ${ASSET_BACKTEST_VERIFICATION_CRON:0 30 8 * * *}
+    zone: ${ASSET_BACKTEST_VERIFICATION_ZONE:Asia/Seoul}
 
 wisereport:
   company-introduction:

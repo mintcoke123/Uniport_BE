@@ -18,6 +18,7 @@ public class FetchedNewsArticle {
     private String title;
     private String summary;
     private String content;
+    private String fullBody;
     private String sourceName;
     private LocalDateTime publishedAt;
     private boolean featured;

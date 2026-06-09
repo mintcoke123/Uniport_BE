@@ -4,7 +4,6 @@ import com.uniport.entity.AssetMaster;
 import com.uniport.repository.AssetMasterRepository;
 import com.uniport.service.backtest.BacktestPricePoint;
 import com.uniport.service.backtest.HistoricalPriceProvider;
-import com.uniport.service.backtest.KisHistoricalPriceProvider;
 import com.uniport.service.importer.ImportResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +21,7 @@ public class AssetBacktestVerificationService {
     private static final Logger log = LoggerFactory.getLogger(AssetBacktestVerificationService.class);
     private static final int DEFAULT_BATCH_SIZE = 200;
     private static final int MAX_BATCH_SIZE = 1_000;
-    private static final int LOOKBACK_DAYS = 45;
+    private static final int LOOKBACK_DAYS = 366 * 5 + 14;
     private static final String ASSET_TYPE_BOND = "BOND";
     private static final String ASSET_TYPE_CASH = "CASH";
     private static final String DATA_STATUS_VERIFIED = "VERIFIED";
@@ -33,7 +32,7 @@ public class AssetBacktestVerificationService {
     private final HistoricalPriceProvider historicalPriceProvider;
 
     public AssetBacktestVerificationService(AssetMasterRepository assetMasterRepository,
-                                            KisHistoricalPriceProvider historicalPriceProvider) {
+                                            HistoricalPriceProvider historicalPriceProvider) {
         this.assetMasterRepository = assetMasterRepository;
         this.historicalPriceProvider = historicalPriceProvider;
     }
@@ -41,7 +40,7 @@ public class AssetBacktestVerificationService {
     @Transactional
     public ImportResult verifyActiveAssets(int batchSize) {
         int safeBatchSize = batchSize < 1 ? DEFAULT_BATCH_SIZE : Math.min(batchSize, MAX_BATCH_SIZE);
-        List<AssetMaster> assets = assetMasterRepository.findByActiveTrue(PageRequest.of(0, safeBatchSize));
+        List<AssetMaster> assets = assetMasterRepository.findActiveForBacktestVerification(PageRequest.of(0, safeBatchSize));
         if (assets.isEmpty()) {
             return ImportResult.empty();
         }

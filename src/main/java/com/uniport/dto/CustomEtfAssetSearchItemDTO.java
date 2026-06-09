@@ -43,6 +43,15 @@ public class CustomEtfAssetSearchItemDTO {
     @Schema(example = "No recent KIS price", description = "미검증 또는 비활성 사유. 사용 가능 자산이면 null")
     private String dataStatusMessage;
 
+    @Schema(implementation = CustomEtfPriceCoverageDTO.class)
+    private CustomEtfPriceCoverageDTO priceCoverage1Y;
+
+    @Schema(implementation = CustomEtfPriceCoverageDTO.class)
+    private CustomEtfPriceCoverageDTO priceCoverage3Y;
+
+    @Schema(implementation = CustomEtfPriceCoverageDTO.class)
+    private CustomEtfPriceCoverageDTO priceCoverage5Y;
+
     @Schema(example = "https://cdn.example.com/samsung.png")
     private String logoUrl;
 

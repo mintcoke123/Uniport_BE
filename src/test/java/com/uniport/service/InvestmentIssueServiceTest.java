@@ -45,7 +45,7 @@ class InvestmentIssueServiceTest {
 
     @Test
     void getIssueList_acceptsAllSupportedCategories() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(List.of())));
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(List.of())));
 
         for (String category : List.of("ALL", "MARKET", "THEME", "COMPANY", "OVERSEAS")) {
             InvestmentIssueListResponseDTO response = investmentIssueService.getIssueList(category, null, 20);
@@ -56,7 +56,7 @@ class InvestmentIssueServiceTest {
 
     @Test
     void getIssueList_defaultsNullAndBlankCategoryToAll() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(List.of())));
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(List.of())));
 
         assertEquals("ALL", investmentIssueService.getIssueList(null, null, null).getSelectedCategory());
         assertEquals("ALL", investmentIssueService.getIssueList("   ", null, null).getSelectedCategory());
@@ -64,7 +64,7 @@ class InvestmentIssueServiceTest {
 
     @Test
     void getIssueList_rejectsUnsupportedCategoryWithBadRequest() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(List.of())));
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(List.of())));
 
         ApiException exception = assertThrows(
                 ApiException.class,
@@ -78,7 +78,7 @@ class InvestmentIssueServiceTest {
 
     @Test
     void getIssueList_returnsIssueFeedWithHeroAndSourceCount() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(hbmArticles())));
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(hbmArticles())));
 
         InvestmentIssueListResponseDTO response = investmentIssueService.getIssueList("THEME", null, 20);
 
@@ -99,7 +99,7 @@ class InvestmentIssueServiceTest {
 
     @Test
     void getIssueDetail_returnsMultipleSourceArticlesWithoutBodyCopy() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(hbmArticles())));
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(hbmArticles())));
         String issueId = investmentIssueService.getIssueList("THEME", null, 20)
                 .getHeroIssue()
                 .getIssueId();
@@ -116,7 +116,7 @@ class InvestmentIssueServiceTest {
 
     @Test
     void getIssueDetail_keepsListAndDetailLabelsConsistentForNegativeIssue() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(List.of(
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(List.of(
                 article("shock-1", NewsCategory.DOMESTIC_STOCK,
                         "삼성전자 실적 쇼크에 급락",
                         "영업이익 감소와 비용 부담 우려가 커졌다는 요약",
@@ -140,7 +140,7 @@ class InvestmentIssueServiceTest {
 
     @Test
     void getIssueDetail_bodyIsGeneratedExplanationNotRawSnippetJoinOrPlaceholder() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(hbmArticles())));
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(hbmArticles())));
         String issueId = investmentIssueService.getIssueList("THEME", null, 20)
                 .getHeroIssue()
                 .getIssueId();
@@ -158,7 +158,7 @@ class InvestmentIssueServiceTest {
 
     @Test
     void getIssueDetail_bodyUsesSourceArticleTextWithoutGeneratedAdviceSections() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(List.of(
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(List.of(
                 article("nvidia-earnings-risk", NewsCategory.OVERSEAS_STOCK,
                         "엔비디아 실적 쇼크 우려에 AI 반도체주 약세",
                         "데이터센터 매출 둔화와 마진 압박 우려가 커졌어요",
@@ -191,8 +191,75 @@ class InvestmentIssueServiceTest {
     }
 
     @Test
+    void getIssueDetail_preservesSaveTickerFullBodyWithoutTitleSummaryRecomposition() {
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(List.of(
+                article("saveticker-140003", NewsCategory.OVERSEAS_STOCK,
+                        "본문 탭 뒤에 숨겨진 원문 기사",
+                        "목록 요약은 상세 본문이 아니에요",
+                        "AI $NVDA NVDA",
+                        """
+                                첫 번째 원문 문단입니다.
+                                두 번째 원문 문단입니다.
+                                """.trim(),
+                        BASE_TIME)
+        ))));
+        String issueId = investmentIssueService.getIssueList("OVERSEAS", null, 20)
+                .getHeroIssue()
+                .getIssueId();
+
+        InvestmentIssueDetailResponseDTO detail = investmentIssueService.getIssueDetail(issueId);
+
+        assertEquals("""
+                첫 번째 원문 문단입니다.
+                두 번째 원문 문단입니다.
+                """.trim(), detail.getBody());
+        assertFalse(detail.getBody().contains("[테스트뉴스]"));
+        assertFalse(detail.getBody().contains("본문 탭 뒤에 숨겨진 원문 기사"));
+        assertFalse(detail.getBody().contains("목록 요약은 상세 본문이 아니에요"));
+    }
+
+    @Test
+    void getIssueDetail_joinsDistinctSaveTickerFullBodiesWithoutFallingBackToListSummaries() {
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(List.of(
+                article("saveticker-140101", NewsCategory.OVERSEAS_STOCK,
+                        "엔비디아 AI 서버 수요 강세",
+                        "AI 서버 주문이 늘었다는 목록 요약",
+                        "AI $NVDA NVDA",
+                        """
+                                첫 번째 SaveTicker 원문 본문입니다.
+                                이 문단만 상세 본문으로 보여야 합니다.
+                                """.trim(),
+                        BASE_TIME),
+                article("saveticker-140102", NewsCategory.OVERSEAS_STOCK,
+                        "엔비디아 AI 서버 수요 확대",
+                        "AI 서버 주문 확대가 이어진다는 목록 요약",
+                        "AI $NVDA NVDA",
+                        """
+                                두 번째 SaveTicker 원문 본문입니다.
+                                이 본문도 상세 본문으로 보여야 합니다.
+                                """.trim(),
+                        BASE_TIME.plusMinutes(3))
+        ))));
+        String issueId = investmentIssueService.getIssueList("OVERSEAS", null, 20)
+                .getHeroIssue()
+                .getIssueId();
+
+        InvestmentIssueDetailResponseDTO detail = investmentIssueService.getIssueDetail(issueId);
+
+        assertEquals(2, detail.getSourceCount());
+        assertEquals("""
+                첫 번째 SaveTicker 원문 본문입니다.
+                이 문단만 상세 본문으로 보여야 합니다.
+
+                두 번째 SaveTicker 원문 본문입니다.
+                이 본문도 상세 본문으로 보여야 합니다.
+                """.trim(), detail.getBody());
+        assertFalse(detail.getBody().contains("AI 서버 주문이 늘었다는 목록 요약"));
+    }
+
+    @Test
     void getIssueList_filtersCategoryAndPaginatesItemsAfterCursor() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(List.of(
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(List.of(
                 article("hbm-newest", NewsCategory.DOMESTIC_STOCK,
                         "HBM 수요 폭발에 AI 반도체주 상승",
                         "AI 서버 투자 확대와 HBM 수요 증가 기대 요약",
@@ -239,7 +306,7 @@ class InvestmentIssueServiceTest {
     @Test
     void getIssueList_usesCacheWithinTtlAndRefetchesAfterExpiry() {
         MutableClock clock = new MutableClock(Instant.parse("2026-05-19T00:00:00Z"), ZoneOffset.UTC);
-        FakeNewsFeedClient feedClient = new FakeNewsFeedClient(List.of(
+        SequencedPublicIssueSourceProvider feedClient = new SequencedPublicIssueSourceProvider(List.of(
                 hbmArticles(),
                 List.of(article("fx-refetched", NewsCategory.MARKET,
                         "환율 상승 전망",
@@ -264,7 +331,7 @@ class InvestmentIssueServiceTest {
     @Test
     void refreshIssueCache_forcesRefreshBeforeTtlExpiry() {
         MutableClock clock = new MutableClock(Instant.parse("2026-05-19T00:00:00Z"), ZoneOffset.UTC);
-        FakeNewsFeedClient feedClient = new FakeNewsFeedClient(List.of(
+        SequencedPublicIssueSourceProvider feedClient = new SequencedPublicIssueSourceProvider(List.of(
                 hbmArticles(),
                 List.of(article("jetblue-fuel", NewsCategory.MARKET,
                         "이란 분쟁 장기화에 제트블루 유류비 상승 경고",
@@ -286,7 +353,7 @@ class InvestmentIssueServiceTest {
     @Test
     void getIssueDetail_usesStaleCacheWhenRefreshMissesPriorIssueAfterTtl() {
         MutableClock clock = new MutableClock(Instant.parse("2026-05-19T00:00:00Z"), ZoneOffset.UTC);
-        FakeNewsFeedClient feedClient = new FakeNewsFeedClient(List.of(
+        SequencedPublicIssueSourceProvider feedClient = new SequencedPublicIssueSourceProvider(List.of(
                 hbmArticles(),
                 List.of()
         ));
@@ -317,7 +384,7 @@ class InvestmentIssueServiceTest {
     @Test
     void getIssueList_keepsIssueIdDateStableWhenClusterGrowsAcrossMidnight() {
         MutableClock clock = new MutableClock(Instant.parse("2026-05-19T14:50:00Z"), ZoneOffset.UTC);
-        FakeNewsFeedClient feedClient = new FakeNewsFeedClient(List.of(
+        SequencedPublicIssueSourceProvider feedClient = new SequencedPublicIssueSourceProvider(List.of(
                 List.of(article("hbm-night-1", NewsCategory.DOMESTIC_STOCK,
                         "HBM 수요 폭발에 AI 반도체주 상승",
                         "AI 서버 투자 확대와 HBM 수요 증가 기대 요약",
@@ -351,8 +418,8 @@ class InvestmentIssueServiceTest {
     }
 
     @Test
-    void getIssueList_mergesPublicWebIssueSourcesWithPrimaryNewsFeed() {
-        FakeNewsFeedClient feedClient = new FakeNewsFeedClient(List.of(List.of(
+    void getIssueList_prefersPublicWebIssueSourcesOverPrimaryNewsFeed() {
+        SequencedPublicIssueSourceProvider feedClient = new SequencedPublicIssueSourceProvider(List.of(List.of(
                 article("hbm-1", NewsCategory.DOMESTIC_STOCK,
                         "HBM 수요 폭발에 AI 반도체주 상승",
                         "AI 서버 투자 확대와 HBM 수요 증가 기대 요약",
@@ -364,6 +431,10 @@ class InvestmentIssueServiceTest {
                         "Dell 실적 예상 상회, AI 서버 수요 강세",
                         "매출과 주당순이익이 시장 예상치를 웃돌고 AI 서버 주문이 확대됐어요",
                         "공개 페이지 본문은 복사하지 않아요",
+                        """
+                                SaveTicker 상세 API에서 받은 전체 본문입니다.
+                                두 번째 문단도 잘리지 않아야 합니다.
+                                """.trim(),
                         BASE_TIME.plusHours(2))
         ));
         InvestmentIssueService investmentIssueService = service(
@@ -374,19 +445,58 @@ class InvestmentIssueServiceTest {
         );
 
         InvestmentIssueListResponseDTO overseasResponse = investmentIssueService.getIssueList("OVERSEAS", null, 20);
+        InvestmentIssueListResponseDTO allResponse = investmentIssueService.getIssueList("ALL", null, 20);
 
-        assertEquals(1, feedClient.fetchCount());
+        assertEquals(0, feedClient.fetchCount());
         assertEquals(1, publicProvider.fetchCount());
+        assertNotNull(allResponse.getHeroIssue());
+        assertEquals("OVERSEAS", allResponse.getHeroIssue().getCategory());
+        assertTrue(allResponse.getItems().stream().noneMatch(item -> item.getTitle().contains("HBM")));
         assertNotNull(overseasResponse.getHeroIssue());
         assertEquals("OVERSEAS", overseasResponse.getHeroIssue().getCategory());
         assertTrue(overseasResponse.getHeroIssue().getTitle().contains("Dell")
                 || overseasResponse.getHeroIssue().getTitle().contains("델"));
         assertEquals("positive", overseasResponse.getHeroIssue().getLabel());
+
+        InvestmentIssueDetailResponseDTO detail = investmentIssueService.getIssueDetail(
+                overseasResponse.getHeroIssue().getIssueId()
+        );
+        assertEquals("""
+                SaveTicker 상세 API에서 받은 전체 본문입니다.
+                두 번째 문단도 잘리지 않아야 합니다.
+                """.trim(), detail.getBody());
+        assertFalse(detail.getBody().contains("공개 페이지 본문은 복사하지 않아요"));
+        assertFalse(detail.getBody().contains("HBM 수요 폭발"));
+    }
+
+    @Test
+    void getIssueList_doesNotFallbackToPrimaryNewsFeedWhenPublicSourceIsEmpty() {
+        SequencedPublicIssueSourceProvider feedClient = new SequencedPublicIssueSourceProvider(List.of(List.of(
+                article("hbm-1", NewsCategory.DOMESTIC_STOCK,
+                        "HBM 수요 폭발에 AI 반도체주 상승",
+                        "AI 서버 투자 확대와 HBM 수요 증가 기대 요약",
+                        "본문",
+                        BASE_TIME)
+        )));
+        FakePublicIssueSourceProvider publicProvider = new FakePublicIssueSourceProvider(List.of());
+        InvestmentIssueService investmentIssueService = service(
+                feedClient,
+                Duration.ofSeconds(300),
+                Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), KST),
+                List.of(publicProvider)
+        );
+
+        InvestmentIssueListResponseDTO response = investmentIssueService.getIssueList("ALL", null, 20);
+
+        assertEquals(0, feedClient.fetchCount());
+        assertEquals(1, publicProvider.fetchCount());
+        assertNull(response.getHeroIssue());
+        assertTrue(response.getItems().isEmpty());
     }
 
     @Test
     void getIssueListAndDetail_formatTimestampsWithKstOffset() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(hbmArticles())));
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(hbmArticles())));
 
         InvestmentIssueItemDTO heroIssue = investmentIssueService.getIssueList("THEME", null, 20).getHeroIssue();
         InvestmentIssueDetailResponseDTO detail = investmentIssueService.getIssueDetail(heroIssue.getIssueId());
@@ -401,7 +511,7 @@ class InvestmentIssueServiceTest {
     @Test
     void getIssueList_appliesConfiguredDisplayLimits() {
         InvestmentIssueService investmentIssueService = service(
-                new FakeNewsFeedClient(List.of(hbmArticles())),
+                new SequencedPublicIssueSourceProvider(List.of(hbmArticles())),
                 Duration.ofSeconds(300),
                 Clock.fixed(Instant.parse("2026-05-19T00:00:00Z"), KST),
                 1,
@@ -420,7 +530,7 @@ class InvestmentIssueServiceTest {
 
     @Test
     void getIssueDetail_throwsNotFoundWhenIssueIdIsNotInCurrentCache() {
-        InvestmentIssueService investmentIssueService = service(new FakeNewsFeedClient(List.of(hbmArticles())));
+        InvestmentIssueService investmentIssueService = service(new SequencedPublicIssueSourceProvider(List.of(hbmArticles())));
 
         ApiException exception = assertThrows(
                 ApiException.class,
@@ -438,7 +548,7 @@ class InvestmentIssueServiceTest {
         MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
         ChatService chatService = mock(ChatService.class);
         InvestmentIssueService investmentIssueService = service(
-                new FakeNewsFeedClient(List.of(hbmArticles())),
+                new SequencedPublicIssueSourceProvider(List.of(hbmArticles())),
                 matchingRoomMemberRepository,
                 matchingRoomRepository,
                 chatService
@@ -481,7 +591,7 @@ class InvestmentIssueServiceTest {
         MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
         ChatService chatService = mock(ChatService.class);
         InvestmentIssueService investmentIssueService = service(
-                new FakeNewsFeedClient(List.of(hbmArticles())),
+                new SequencedPublicIssueSourceProvider(List.of(hbmArticles())),
                 matchingRoomMemberRepository,
                 matchingRoomRepository,
                 chatService
@@ -509,7 +619,7 @@ class InvestmentIssueServiceTest {
         MatchingRoomRepository matchingRoomRepository = mock(MatchingRoomRepository.class);
         ChatService chatService = mock(ChatService.class);
         InvestmentIssueService investmentIssueService = service(
-                new FakeNewsFeedClient(List.of(hbmArticles())),
+                new SequencedPublicIssueSourceProvider(List.of(hbmArticles())),
                 matchingRoomMemberRepository,
                 matchingRoomRepository,
                 chatService
@@ -538,23 +648,23 @@ class InvestmentIssueServiceTest {
         verify(chatService, never()).saveInvestmentIssueShareMessage(eq(3L), eq(7L), eq("이슈공유러"), any());
     }
 
-    private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient) {
-        return service(newsFeedClient, Duration.ofSeconds(300), Clock.fixed(
+    private InvestmentIssueService service(SequencedPublicIssueSourceProvider sourceProvider) {
+        return service(sourceProvider, Duration.ofSeconds(300), Clock.fixed(
                 Instant.parse("2026-05-19T00:00:00Z"),
                 KST
         ));
     }
 
-    private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient, Duration ttl, Clock clock) {
-        return service(newsFeedClient, ttl, clock, 3, 2, 5, 3);
+    private InvestmentIssueService service(SequencedPublicIssueSourceProvider sourceProvider, Duration ttl, Clock clock) {
+        return service(sourceProvider, ttl, clock, 3, 2, 5, 3);
     }
 
-    private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient,
+    private InvestmentIssueService service(SequencedPublicIssueSourceProvider sourceProvider,
                                            MatchingRoomMemberRepository matchingRoomMemberRepository,
                                            MatchingRoomRepository matchingRoomRepository,
                                            ChatService chatService) {
         return new InvestmentIssueService(
-                newsFeedClient,
+                List.of(sourceProvider),
                 new RawNewsDeduplicator(),
                 new IssueClusterService(new RawNewsNormalizer()),
                 new InvestmentIssueAnalyzer(new StockMappingService(), new EtfMappingService()),
@@ -570,7 +680,7 @@ class InvestmentIssueServiceTest {
         );
     }
 
-    private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient,
+    private InvestmentIssueService service(SequencedPublicIssueSourceProvider sourceProvider,
                                            Duration ttl,
                                            Clock clock,
                                            int maxReasonBullets,
@@ -578,7 +688,7 @@ class InvestmentIssueServiceTest {
                                            int maxRelatedStocks,
                                            int maxRelatedEtfs) {
         return new InvestmentIssueService(
-                newsFeedClient,
+                List.of(sourceProvider),
                 new RawNewsDeduplicator(),
                 new IssueClusterService(new RawNewsNormalizer()),
                 new InvestmentIssueAnalyzer(new StockMappingService(), new EtfMappingService()),
@@ -591,12 +701,11 @@ class InvestmentIssueServiceTest {
         );
     }
 
-    private InvestmentIssueService service(FakeNewsFeedClient newsFeedClient,
+    private InvestmentIssueService service(SequencedPublicIssueSourceProvider sourceProvider,
                                            Duration ttl,
                                            Clock clock,
                                            List<PublicIssueSourceProvider> publicIssueSourceProviders) {
         return new InvestmentIssueService(
-                newsFeedClient,
                 publicIssueSourceProviders,
                 new RawNewsDeduplicator(),
                 new IssueClusterService(new RawNewsNormalizer()),
@@ -631,24 +740,35 @@ class InvestmentIssueServiceTest {
                                              String summary,
                                              String content,
                                              LocalDateTime publishedAt) {
+        return article(id, category, title, summary, content, "", publishedAt);
+    }
+
+    private static FetchedNewsArticle article(String id,
+                                             NewsCategory category,
+                                             String title,
+                                             String summary,
+                                             String content,
+                                             String fullBody,
+                                             LocalDateTime publishedAt) {
         return FetchedNewsArticle.builder()
                 .id(id)
                 .category(category)
                 .title(title)
                 .summary(summary)
                 .content(content)
+                .fullBody(fullBody)
                 .sourceName("테스트뉴스")
                 .publishedAt(publishedAt)
                 .externalUrl("https://example.com/news/" + id)
                 .build();
     }
 
-    private static final class FakeNewsFeedClient implements NewsFeedClient {
+    private static final class SequencedPublicIssueSourceProvider implements PublicIssueSourceProvider {
 
         private final List<List<FetchedNewsArticle>> responses;
         private int fetchCount;
 
-        private FakeNewsFeedClient(List<List<FetchedNewsArticle>> responses) {
+        private SequencedPublicIssueSourceProvider(List<List<FetchedNewsArticle>> responses) {
             this.responses = new ArrayList<>(responses);
         }
 

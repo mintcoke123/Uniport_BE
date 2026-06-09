@@ -74,6 +74,10 @@ class SaveTickerNewsDomExtractorTest {
         assertTrue(article.getSummary().contains("시장 인텔리전스 플랫폼 알파센스는 3억 5천만 달러를 조달"));
         assertTrue(article.getSummary().contains("J.P. 모건 자산운용이 주도"));
         assertFalse(article.getSummary().contains("SaveTicker"));
+        assertEquals("""
+                6월 3일 (로이터) - 시장 인텔리전스 플랫폼 알파센스는 3억 5천만 달러를 조달했다고 밝혔다.
+                이번 라운드는 비트루비안 파트너스와 J.P. 모건 자산운용이 주도했다.
+                """.trim(), article.getFullBody());
         assertEquals("Reuters", article.getSourceName());
         assertEquals(LocalDateTime.of(2026, 6, 3, 20, 3, 19), article.getPublishedAt());
         assertEquals("$NVDA NVDA", article.getContent());
@@ -117,6 +121,7 @@ class SaveTickerNewsDomExtractorTest {
 
         assertEquals(1, articles.size());
         assertTrue(articles.get(0).getSummary().contains("전체 기사 문장"));
+        assertEquals("본문 탭을 누른 뒤 노출되는 전체 기사 문장입니다.", articles.get(0).getFullBody());
         InOrder inOrder = inOrder(page);
         inOrder.verify(page).evaluate(argThat(script -> containsAll(script, "본문", "click")));
         inOrder.verify(page).evaluate(argThat(script -> containsAll(script, "bodyText")));

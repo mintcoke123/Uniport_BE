@@ -285,6 +285,7 @@ public class SaveTickerNewsDomExtractor {
                 .title(title)
                 .summary(summary)
                 .content(tickerText(searchableText))
+                .fullBody(fullBodyFrom(title, detail.bodyText()))
                 .sourceName(sourceName(source, searchableText))
                 .publishedAt(parseDateTime(firstNonBlank(
                         detail.datetime(),
@@ -331,6 +332,17 @@ public class SaveTickerNewsDomExtractor {
             summaryLines.add(line);
         }
         return cleanLine(String.join(" ", summaryLines));
+    }
+
+    private String fullBodyFrom(String title, String value) {
+        List<String> bodyLines = new ArrayList<>();
+        for (String line : lines(value)) {
+            if (isNoiseLine(line, title)) {
+                continue;
+            }
+            bodyLines.add(line);
+        }
+        return String.join("\n", bodyLines).trim();
     }
 
     private boolean isNoiseLine(String line, String title) {

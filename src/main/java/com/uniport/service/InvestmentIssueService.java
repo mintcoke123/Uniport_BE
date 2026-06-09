@@ -61,7 +61,6 @@ public class InvestmentIssueService {
     private static final Comparator<LocalDateTime> NEWEST_FIRST =
             Comparator.nullsLast(Comparator.reverseOrder());
 
-    private final NewsFeedClient newsFeedClient;
     private final List<PublicIssueSourceProvider> publicIssueSourceProviders;
     private final RawNewsDeduplicator rawNewsDeduplicator;
     private final IssueClusterService issueClusterService;
@@ -80,8 +79,7 @@ public class InvestmentIssueService {
     private CacheEntry previousIssueCache;
 
     @Autowired
-    public InvestmentIssueService(NewsFeedClient newsFeedClient,
-                                  List<PublicIssueSourceProvider> publicIssueSourceProviders,
+    public InvestmentIssueService(List<PublicIssueSourceProvider> publicIssueSourceProviders,
                                   RawNewsDeduplicator rawNewsDeduplicator,
                                   IssueClusterService issueClusterService,
                                   InvestmentIssueAnalyzer investmentIssueAnalyzer,
@@ -98,7 +96,6 @@ public class InvestmentIssueService {
                                   @Value("${uniport.investment-issue.display.max-related-etfs:3}")
                                   int maxRelatedEtfs) {
         this(
-                newsFeedClient,
                 publicIssueSourceProviders,
                 rawNewsDeduplicator,
                 issueClusterService,
@@ -115,31 +112,7 @@ public class InvestmentIssueService {
         );
     }
 
-    InvestmentIssueService(NewsFeedClient newsFeedClient,
-                           RawNewsDeduplicator rawNewsDeduplicator,
-                           IssueClusterService issueClusterService,
-                           InvestmentIssueAnalyzer investmentIssueAnalyzer,
-                           Duration cacheTtl,
-                           Clock clock) {
-        this(
-                newsFeedClient,
-                List.of(),
-                rawNewsDeduplicator,
-                issueClusterService,
-                investmentIssueAnalyzer,
-                null,
-                null,
-                null,
-                cacheTtl,
-                clock,
-                DEFAULT_MAX_REASON_BULLETS,
-                DEFAULT_MAX_WATCH_POINTS,
-                DEFAULT_MAX_RELATED_STOCKS,
-                DEFAULT_MAX_RELATED_ETFS
-        );
-    }
-
-    InvestmentIssueService(NewsFeedClient newsFeedClient,
+    InvestmentIssueService(List<PublicIssueSourceProvider> publicIssueSourceProviders,
                            RawNewsDeduplicator rawNewsDeduplicator,
                            IssueClusterService issueClusterService,
                            InvestmentIssueAnalyzer investmentIssueAnalyzer,
@@ -150,36 +123,6 @@ public class InvestmentIssueService {
                            int maxRelatedStocks,
                            int maxRelatedEtfs) {
         this(
-                newsFeedClient,
-                List.of(),
-                rawNewsDeduplicator,
-                issueClusterService,
-                investmentIssueAnalyzer,
-                null,
-                null,
-                null,
-                cacheTtl,
-                clock,
-                maxReasonBullets,
-                maxWatchPoints,
-                maxRelatedStocks,
-                maxRelatedEtfs
-        );
-    }
-
-    InvestmentIssueService(NewsFeedClient newsFeedClient,
-                           List<PublicIssueSourceProvider> publicIssueSourceProviders,
-                           RawNewsDeduplicator rawNewsDeduplicator,
-                           IssueClusterService issueClusterService,
-                           InvestmentIssueAnalyzer investmentIssueAnalyzer,
-                           Duration cacheTtl,
-                           Clock clock,
-                           int maxReasonBullets,
-                           int maxWatchPoints,
-                           int maxRelatedStocks,
-                           int maxRelatedEtfs) {
-        this(
-                newsFeedClient,
                 publicIssueSourceProviders,
                 rawNewsDeduplicator,
                 issueClusterService,
@@ -196,7 +139,7 @@ public class InvestmentIssueService {
         );
     }
 
-    InvestmentIssueService(NewsFeedClient newsFeedClient,
+    InvestmentIssueService(List<PublicIssueSourceProvider> publicIssueSourceProviders,
                            RawNewsDeduplicator rawNewsDeduplicator,
                            IssueClusterService issueClusterService,
                            InvestmentIssueAnalyzer investmentIssueAnalyzer,
@@ -209,39 +152,6 @@ public class InvestmentIssueService {
                            int maxWatchPoints,
                            int maxRelatedStocks,
                            int maxRelatedEtfs) {
-        this(
-                newsFeedClient,
-                List.of(),
-                rawNewsDeduplicator,
-                issueClusterService,
-                investmentIssueAnalyzer,
-                matchingRoomMemberRepository,
-                matchingRoomRepository,
-                chatService,
-                cacheTtl,
-                clock,
-                maxReasonBullets,
-                maxWatchPoints,
-                maxRelatedStocks,
-                maxRelatedEtfs
-        );
-    }
-
-    InvestmentIssueService(NewsFeedClient newsFeedClient,
-                           List<PublicIssueSourceProvider> publicIssueSourceProviders,
-                           RawNewsDeduplicator rawNewsDeduplicator,
-                           IssueClusterService issueClusterService,
-                           InvestmentIssueAnalyzer investmentIssueAnalyzer,
-                           MatchingRoomMemberRepository matchingRoomMemberRepository,
-                           MatchingRoomRepository matchingRoomRepository,
-                           ChatService chatService,
-                           Duration cacheTtl,
-                           Clock clock,
-                           int maxReasonBullets,
-                           int maxWatchPoints,
-                           int maxRelatedStocks,
-                           int maxRelatedEtfs) {
-        this.newsFeedClient = Objects.requireNonNull(newsFeedClient, "newsFeedClient must not be null");
         this.publicIssueSourceProviders = publicIssueSourceProviders == null
                 ? List.of()
                 : List.copyOf(publicIssueSourceProviders);
@@ -399,14 +309,7 @@ public class InvestmentIssueService {
     }
 
     private List<CachedIssue> computeCurrentIssues() {
-        List<FetchedNewsArticle> fetchedArticles = new ArrayList<>(safeList(newsFeedClient.fetchLatest()));
-        for (PublicIssueSourceProvider provider : publicIssueSourceProviders) {
-            try {
-                fetchedArticles.addAll(safeList(provider.fetchLatest()));
-            } catch (Exception exception) {
-                LOGGER.warn("Public issue source provider failed: {}", exception.getMessage(), exception);
-            }
-        }
+        List<FetchedNewsArticle> fetchedArticles = publicIssueArticles();
         List<FetchedNewsArticle> deduplicatedArticles = rawNewsDeduplicator.deduplicate(fetchedArticles);
         return issueClusterService.cluster(deduplicatedArticles).stream()
                 .map(investmentIssueAnalyzer::analyze)
@@ -415,6 +318,22 @@ public class InvestmentIssueService {
                         .comparing((CachedIssue issue) -> issue.issue().updatedAt(), NEWEST_FIRST)
                         .thenComparing(CachedIssue::issueId))
                 .toList();
+    }
+
+    private List<FetchedNewsArticle> publicIssueArticles() {
+        if (publicIssueSourceProviders.isEmpty()) {
+            return List.of();
+        }
+
+        List<FetchedNewsArticle> articles = new ArrayList<>();
+        for (PublicIssueSourceProvider provider : publicIssueSourceProviders) {
+            try {
+                articles.addAll(safeList(provider.fetchLatest()));
+            } catch (Exception exception) {
+                LOGGER.warn("Public issue source provider failed: {}", exception.getMessage(), exception);
+            }
+        }
+        return articles;
     }
 
     private InvestmentIssueItemDTO toItem(CachedIssue cachedIssue) {
@@ -464,6 +383,11 @@ public class InvestmentIssueService {
     }
 
     private String sourceArticleBody(InvestmentIssue issue) {
+        String fullBody = sourceArticleFullBody(issue);
+        if (!fullBody.isBlank()) {
+            return fullBody;
+        }
+
         List<String> sections = new ArrayList<>();
         for (FetchedNewsArticle article : safeList(issue.sourceArticles())) {
             String title = cleanSourceArticleText(article.getTitle());
@@ -487,6 +411,25 @@ public class InvestmentIssueService {
             return String.join("\n\n", sections);
         }
         return cleanSourceArticleText(issue.summary());
+    }
+
+    private String sourceArticleFullBody(InvestmentIssue issue) {
+        List<String> bodies = safeList(issue.sourceArticles()).stream()
+                .map(FetchedNewsArticle::getFullBody)
+                .map(this::cleanFullBodyText)
+                .filter(body -> !body.isBlank())
+                .distinct()
+                .toList();
+        return String.join("\n\n", bodies);
+    }
+
+    private String cleanFullBodyText(String value) {
+        return trimToEmpty(value)
+                .replace('\u00A0', ' ')
+                .replaceAll("[\\t\\x0B\\f\\r]+", " ")
+                .replaceAll(" *\\n+ *", "\n")
+                .replaceAll("[ ]{2,}", " ")
+                .trim();
     }
 
     private String cleanSourceArticleText(String value) {
