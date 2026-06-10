@@ -256,6 +256,10 @@ class EtfDataServiceTest {
         when(assetMasterRepository.searchActive(eq("apple"), eq("STOCK"), eq(null), any(Pageable.class)))
                 .thenReturn(List.of(apple));
         when(assetMasterRepository.findByAssetIdAndActiveTrue("KRX_005930")).thenReturn(Optional.of(samsungAsset));
+        when(assetPriceDailyRepository.findCoverageSummariesByAssetIds(List.of("KRX_005930")))
+                .thenReturn(List.of(readyCoverage("KRX_005930")));
+        when(assetPriceDailyRepository.findCoverageSummariesByAssetIds(List.of("US_AAPL")))
+                .thenReturn(List.of(readyCoverage("US_AAPL")));
         when(stockVisualAssetResolver.resolve("KOSPI", "005930", "삼성전자", null)).thenReturn(visual("삼성"));
         when(stockVisualAssetResolver.resolve("NASDAQ", "AAPL", "Apple Inc.", null)).thenReturn(visual("AAPL"));
 
@@ -289,6 +293,12 @@ class EtfDataServiceTest {
         when(assetMasterRepository.searchActive(eq("TQQQ"), eq(null), eq(null), any(Pageable.class))).thenReturn(List.of(tqqq));
         when(assetMasterRepository.searchActive(eq("SQQQ"), eq(null), eq(null), any(Pageable.class))).thenReturn(List.of(sqqq));
         when(stockMasterRepository.searchForEtfAssetCandidates(any(), any(Pageable.class))).thenReturn(List.of());
+        when(assetPriceDailyRepository.findCoverageSummariesByAssetIds(List.of("US_SPY")))
+                .thenReturn(List.of(readyCoverage("US_SPY")));
+        when(assetPriceDailyRepository.findCoverageSummariesByAssetIds(List.of("US_TQQQ")))
+                .thenReturn(List.of(readyCoverage("US_TQQQ")));
+        when(assetPriceDailyRepository.findCoverageSummariesByAssetIds(List.of("US_SQQQ")))
+                .thenReturn(List.of(readyCoverage("US_SQQQ")));
         when(stockVisualAssetResolver.resolve(any(), any(), any(), any()))
                 .thenAnswer(invocation -> visual(invocation.getArgument(1)));
 
@@ -302,7 +312,7 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void searchAssets_includesDomesticStockPendingRealPriceVerification() {
+    void searchAssets_includesDomesticStockWhenRemotePricesCoverOneYear() {
         StockMaster samsung = stock("005930", "삼성전자", "KOSPI");
         when(stockMasterRepository.searchForEtfAssetCandidates(eq("삼성"), any()))
                 .thenReturn(List.of(samsung));
@@ -314,12 +324,15 @@ class EtfDataServiceTest {
         CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("삼성", "STOCK", null, 0, 10);
 
         assertEquals(1, response.getItems().size());
-        assertEquals("KRX_005930", response.getItems().get(0).getAssetId());
-        assertEquals(true, response.getItems().get(0).getBacktestEnabled());
-        assertEquals("PENDING_VERIFICATION", response.getItems().get(0).getDataStatus());
-        assertEquals("분석 시점에 실가격을 확인하며, 가격 데이터가 부족하면 분석이 제한됩니다.",
-                response.getItems().get(0).getDataStatusMessage());
         assertEquals(1, response.getTotalCount());
+        assertEquals("KRX_005930", response.getItems().get(0).getAssetId());
+        assertEquals("VERIFIED", response.getItems().get(0).getDataStatus());
+        assertEquals("READY", response.getItems().get(0).getPriceCoverage1Y().getStatus());
+        verify(historicalPriceProvider).getSecurityPriceSeriesForEligibility(
+                eq("KRX_005930"),
+                any(LocalDate.class),
+                any(LocalDate.class)
+        );
     }
 
     @Test
@@ -338,6 +351,11 @@ class EtfDataServiceTest {
                 .thenReturn(matches);
         when(assetMasterRepository.findByAssetIdAndActiveTrue(any()))
                 .thenReturn(Optional.empty());
+        List<String> matchAssetIds = matches.stream()
+                .map(stock -> "KRX_" + stock.getCode())
+                .toList();
+        when(assetPriceDailyRepository.findCoverageSummariesByAssetIds(matchAssetIds))
+                .thenReturn(matchAssetIds.stream().map(this::readyCoverage).toList());
         when(stockVisualAssetResolver.resolve(any(), any(), any(), any()))
                 .thenAnswer(invocation -> visual(invocation.getArgument(1)));
 
@@ -362,6 +380,8 @@ class EtfDataServiceTest {
                 .thenReturn(List.of(apple));
         when(stockMasterRepository.searchForEtfAssetCandidates(eq("애플"), any()))
                 .thenReturn(List.of());
+        when(assetPriceDailyRepository.findCoverageSummariesByAssetIds(List.of("US_AAPL")))
+                .thenReturn(List.of(readyCoverage("US_AAPL")));
         when(stockVisualAssetResolver.resolve("NASDAQ", "AAPL", "Apple Inc.", null)).thenReturn(visual("AAPL"));
 
         CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("애플", "STOCK", null, 0, 10);
@@ -373,7 +393,7 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void searchAssets_allowsVerifiedAssetWithoutCachedPricesForOnDemandAnalysisButReportsPendingCoverage() {
+    void searchAssets_includesVerifiedAssetWhenRemotePricesCoverOneYear() {
         AssetMaster apple = asset("US_AAPL", "STOCK", "Apple Inc.", "AAPL", "NASDAQ", "USD");
         when(assetMasterRepository.searchActive(eq("apple"), eq("STOCK"), eq("US"), any(Pageable.class)))
                 .thenReturn(List.of(apple));
@@ -386,12 +406,16 @@ class EtfDataServiceTest {
         CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("apple", "STOCK", "US", 0, 10);
 
         assertEquals(1, response.getItems().size());
+        assertEquals(1, response.getTotalCount());
         assertEquals("US_AAPL", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
-        assertEquals("PENDING_VERIFICATION", response.getItems().get(0).getDataStatus());
-        assertEquals("PENDING", response.getItems().get(0).getPriceCoverage1Y().getStatus());
-        assertEquals("PENDING", response.getItems().get(0).getPriceCoverage3Y().getStatus());
-        assertEquals("PENDING", response.getItems().get(0).getPriceCoverage5Y().getStatus());
+        assertEquals("VERIFIED", response.getItems().get(0).getDataStatus());
+        assertEquals("READY", response.getItems().get(0).getPriceCoverage1Y().getStatus());
+        verify(historicalPriceProvider).getSecurityPriceSeriesForEligibility(
+                eq("US_AAPL"),
+                any(LocalDate.class),
+                any(LocalDate.class)
+        );
     }
 
     @Test
@@ -418,7 +442,7 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void searchAssets_marksKnownPriceUnavailableStockAsNotSelectable() {
+    void searchAssets_includesKnownPriceUnavailableStockWhenRemotePricesRecover() {
         AssetMaster unsupported = asset("US_FAKE", "STOCK", "Fake Corp.", "FAKE", "NASDAQ", "USD");
         unsupported.setBacktestEnabled(false);
         unsupported.setPriceSourceStatus("PRICE_UNAVAILABLE");
@@ -438,14 +462,13 @@ class EtfDataServiceTest {
         assertEquals(1, response.getItems().size());
         assertEquals(1, response.getTotalCount());
         assertEquals("US_FAKE", response.getItems().get(0).getAssetId());
-        assertEquals(false, response.getItems().get(0).getBacktestEnabled());
-        assertEquals("PRICE_UNAVAILABLE", response.getItems().get(0).getDataStatus());
-        assertEquals("No recent KIS price", response.getItems().get(0).getDataStatusMessage());
-        assertEquals("UNAVAILABLE", response.getItems().get(0).getPriceCoverage1Y().getStatus());
+        assertEquals(true, response.getItems().get(0).getBacktestEnabled());
+        assertEquals("VERIFIED", response.getItems().get(0).getDataStatus());
+        assertEquals("READY", response.getItems().get(0).getPriceCoverage1Y().getStatus());
     }
 
     @Test
-    void searchAssets_usesYahooSearchFallbackForUsCompanyNameWhenMasterMisses() {
+    void searchAssets_includesYahooSearchFallbackForUsCompanyNameWhenRemotePricesCoverOneYear() {
         when(assetMasterRepository.searchActive(eq("apple"), eq("STOCK"), eq("US"), any(Pageable.class)))
                 .thenReturn(List.of());
         when(assetAliasRepository.searchActiveAssetMatches(eq("apple"), eq("STOCK"), eq("US"), any(Pageable.class)))
@@ -464,12 +487,12 @@ class EtfDataServiceTest {
         assertEquals("Apple Inc.", response.getItems().get(0).getName());
         assertEquals("AAPL", response.getItems().get(0).getSymbol());
         assertEquals("NASDAQ", response.getItems().get(0).getMarket());
-        assertNull(response.getItems().get(0).getLogoUrl());
-        assertNotNull(response.getItems().get(0).getVisual());
+        assertEquals("VERIFIED", response.getItems().get(0).getDataStatus());
+        assertEquals("READY", response.getItems().get(0).getPriceCoverage1Y().getStatus());
     }
 
     @Test
-    void searchAssets_usesYahooSearchFallbackForUsTickerWhenMasterMisses() {
+    void searchAssets_includesYahooSearchFallbackForUsTickerWhenRemotePricesCoverOneYear() {
         when(assetMasterRepository.searchActive(eq("iren"), eq("STOCK"), eq("US"), any(Pageable.class)))
                 .thenReturn(List.of());
         when(assetAliasRepository.searchActiveAssetMatches(eq("iren"), eq("STOCK"), eq("US"), any(Pageable.class)))
@@ -488,10 +511,12 @@ class EtfDataServiceTest {
         assertEquals("IREN Limited", response.getItems().get(0).getName());
         assertEquals("IREN", response.getItems().get(0).getSymbol());
         assertEquals("NASDAQ", response.getItems().get(0).getMarket());
+        assertEquals("VERIFIED", response.getItems().get(0).getDataStatus());
+        assertEquals("READY", response.getItems().get(0).getPriceCoverage1Y().getStatus());
     }
 
     @Test
-    void searchAssets_mergesYahooSearchResultsWhenLocalCatalogHasPartialUsMatches() {
+    void searchAssets_includesYahooSearchResultsWhenRemotePricesCoverOneYearWithLocalCatalogMatch() {
         AssetMaster local = asset("US_TECH", "STOCK", "Tech Local Inc.", "TECH", "NASDAQ", "USD");
         when(assetMasterRepository.searchActive(eq("tech"), eq("STOCK"), eq("US"), any(Pageable.class)))
                 .thenReturn(List.of(local));
@@ -502,6 +527,8 @@ class EtfDataServiceTest {
         when(yahooAssetSearchClient.searchUsEquities("tech", 10)).thenReturn(List.of(
                 new YahooAssetSearchClient.YahooAssetResult("AAPL", "Apple Inc.", "NASDAQ", "USD")
         ));
+        when(assetPriceDailyRepository.findCoverageSummariesByAssetIds(List.of("US_TECH", "US_AAPL")))
+                .thenReturn(List.of(readyCoverage("US_TECH")));
         when(stockVisualAssetResolver.resolve("NASDAQ", "TECH", "Tech Local Inc.", null)).thenReturn(visual("TECH"));
         when(stockVisualAssetResolver.resolve("NASDAQ", "AAPL", "Apple Inc.", null)).thenReturn(visual("AAPL"));
 
@@ -513,7 +540,7 @@ class EtfDataServiceTest {
     }
 
     @Test
-    void searchAssets_allowsAddingOneHundredDistinctUsSearchResults() {
+    void searchAssets_includesDistinctUsFallbackResultsWhenRemotePricesCoverOneYear() {
         List<AssetFlowCase> cases = broadAssetSearchCases();
         Set<String> uniqueAssetIds = new LinkedHashSet<>(cases.stream().map(AssetFlowCase::assetId).toList());
         assertEquals(100, cases.size());
@@ -547,20 +574,22 @@ class EtfDataServiceTest {
                     0,
                     10
             );
+
             var found = search.getItems().stream()
                     .filter(item -> testCase.assetId().equals(item.getAssetId()))
                     .findFirst()
-                    .orElseThrow(() -> new AssertionError("검색 결과 누락: " + testCase));
+                    .orElseThrow(() -> new AssertionError("원격 가격 조회 가능 fallback 결과 누락: " + testCase));
 
-            assertEquals(true, found.getBacktestEnabled(), "주식형 fallback 결과는 온디맨드 분석 시도 가능이어야 함: " + testCase);
-            assertEquals("PENDING_VERIFICATION", found.getDataStatus(), "검증 전 데이터 상태 누락: " + testCase);
+            assertEquals(true, found.getBacktestEnabled(), "주식형 fallback 결과는 분석 가능이어야 함: " + testCase);
+            assertEquals("VERIFIED", found.getDataStatus(), "원격 가격 조회 성공 상태 누락: " + testCase);
+            assertEquals("READY", found.getPriceCoverage1Y().getStatus(), "1년 가격 커버리지 상태 누락: " + testCase);
             assertNull(found.getLogoUrl(), "fallback 로고 URL이 생성되면 안 됨: " + testCase);
             assertNotNull(found.getVisual(), "fallback visual 누락: " + testCase);
         }
     }
 
     @Test
-    void searchAssets_includesPendingAssetMasterStockForRealPriceVerification() {
+    void searchAssets_includesPendingAssetMasterStockWhenRemotePricesCoverOneYear() {
         AssetMaster pending = asset("KRX_373220", "STOCK", "LG에너지솔루션", "373220", "KOSPI", "KRW");
         pending.setBacktestEnabled(false);
         pending.setPriceSourceStatus("PENDING_VERIFICATION");
@@ -578,18 +607,18 @@ class EtfDataServiceTest {
         CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("LG", "STOCK", null, 0, 10);
 
         assertEquals(1, response.getItems().size());
+        assertEquals(1, response.getTotalCount());
         assertEquals("KRX_373220", response.getItems().get(0).getAssetId());
         assertEquals(true, response.getItems().get(0).getBacktestEnabled());
-        assertEquals("PENDING_VERIFICATION", response.getItems().get(0).getDataStatus());
-        assertEquals("분석 시점에 실가격을 확인하며, 가격 데이터가 부족하면 분석이 제한됩니다.",
-                response.getItems().get(0).getDataStatusMessage());
+        assertEquals("VERIFIED", response.getItems().get(0).getDataStatus());
+        assertEquals("READY", response.getItems().get(0).getPriceCoverage1Y().getStatus());
         assertEquals(false, pending.getBacktestEnabled());
         assertEquals("PENDING_VERIFICATION", pending.getPriceSourceStatus());
         verify(assetMasterRepository, never()).save(pending);
     }
 
     @Test
-    void searchAssets_includesYahooSymbolSearchResultPendingRealPriceVerification() {
+    void searchAssets_excludesYahooSymbolSearchResultWithoutCachedPriceData() {
         when(assetMasterRepository.searchActive(eq("new co"), eq("STOCK"), eq("US"), any(Pageable.class)))
                 .thenReturn(List.of());
         when(assetAliasRepository.searchActiveAssetMatches(eq("new co"), eq("STOCK"), eq("US"), any(Pageable.class)))
@@ -605,12 +634,10 @@ class EtfDataServiceTest {
 
         CustomEtfAssetSearchResponseDTO response = etfDataService.searchAssets("new co", "STOCK", "US", 0, 10);
 
-        assertEquals(1, response.getItems().size());
-        assertEquals(1, response.getTotalCount());
-        assertEquals("US_NEWC", response.getItems().get(0).getAssetId());
-        assertEquals(true, response.getItems().get(0).getBacktestEnabled());
-        assertEquals("PENDING_VERIFICATION", response.getItems().get(0).getDataStatus());
-        verify(historicalPriceProvider, never())
+        assertEquals(0, response.getItems().size());
+        assertEquals(0, response.getTotalCount());
+        verify(stockVisualAssetResolver, never()).resolve("NASDAQ", "NEWC", "NewCo Inc.", null);
+        verify(historicalPriceProvider)
                 .getSecurityPriceSeriesForEligibility(eq("US_NEWC"), any(LocalDate.class), any(LocalDate.class));
     }
 
@@ -1647,6 +1674,11 @@ class EtfDataServiceTest {
 
     private BacktestPricePoint point(String date, String adjustedCloseKrw) {
         return new BacktestPricePoint(LocalDate.parse(date), new BigDecimal(adjustedCloseKrw));
+    }
+
+    private AssetPriceDailyRepository.AssetPriceCoverageSummary readyCoverage(String assetId) {
+        LocalDate now = LocalDate.now();
+        return coverage(assetId, now.minusMonths(13), now.minusDays(1), 243L);
     }
 
     private AssetPriceDailyRepository.AssetPriceCoverageSummary coverage(String assetId,

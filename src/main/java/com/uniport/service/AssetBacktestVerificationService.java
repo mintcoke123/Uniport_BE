@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -22,6 +23,7 @@ public class AssetBacktestVerificationService {
     private static final int DEFAULT_BATCH_SIZE = 200;
     private static final int MAX_BATCH_SIZE = 1_000;
     private static final int LOOKBACK_DAYS = 366 * 5 + 14;
+    private static final double MIN_PERIOD_COVERAGE_RATIO = 0.80d;
     private static final String ASSET_TYPE_BOND = "BOND";
     private static final String ASSET_TYPE_CASH = "CASH";
     private static final String DATA_STATUS_VERIFIED = "VERIFIED";
@@ -60,18 +62,18 @@ public class AssetBacktestVerificationService {
                 continue;
             }
             try {
-                List<BacktestPricePoint> series = historicalPriceProvider.getSecurityPriceSeries(
+                List<BacktestPricePoint> series = historicalPriceProvider.getSecurityPriceSeriesForEligibility(
                         asset.getAssetId(),
                         startDate,
                         endDate
                 );
-                if (series != null && series.size() >= 2) {
+                if (hasOneYearReadyCoverage(series, endDate)) {
                     asset.setBacktestEnabled(true);
                     asset.setPriceSourceStatus(DATA_STATUS_VERIFIED);
                     asset.setLastPriceError(null);
                     enabled++;
                 } else {
-                    markUnavailable(asset, "No recent price data from provider");
+                    markUnavailable(asset, "Insufficient one-year price coverage from provider");
                     disabled++;
                 }
             } catch (Exception e) {
@@ -98,6 +100,37 @@ public class AssetBacktestVerificationService {
     private boolean isProxyAsset(AssetMaster asset) {
         String type = asset.getAssetType();
         return ASSET_TYPE_BOND.equals(type) || ASSET_TYPE_CASH.equals(type);
+    }
+
+    private boolean hasOneYearReadyCoverage(List<BacktestPricePoint> series, LocalDate endDate) {
+        if (series == null || series.size() < 2 || endDate == null) {
+            return false;
+        }
+        List<BacktestPricePoint> cleanSeries = series.stream()
+                .filter(point -> point != null && point.date() != null && point.adjustedCloseKrw() != null)
+                .sorted(java.util.Comparator.comparing(BacktestPricePoint::date))
+                .toList();
+        if (cleanSeries.size() < 2) {
+            return false;
+        }
+        LocalDate startDate = endDate.minusYears(1);
+        LocalDate firstDate = cleanSeries.get(0).date();
+        LocalDate lastDate = cleanSeries.get(cleanSeries.size() - 1).date();
+        return coverageRatio(startDate, endDate, firstDate, lastDate) >= MIN_PERIOD_COVERAGE_RATIO;
+    }
+
+    private double coverageRatio(LocalDate candidateStartDate,
+                                 LocalDate endDate,
+                                 LocalDate commonStartDate,
+                                 LocalDate commonEndDate) {
+        LocalDate overlapStartDate = commonStartDate.isAfter(candidateStartDate) ? commonStartDate : candidateStartDate;
+        LocalDate overlapEndDate = commonEndDate.isBefore(endDate) ? commonEndDate : endDate;
+        if (overlapEndDate.isBefore(overlapStartDate)) {
+            return 0.0d;
+        }
+        long requiredDays = Math.max(1L, ChronoUnit.DAYS.between(candidateStartDate, endDate));
+        long coveredDays = Math.max(0L, ChronoUnit.DAYS.between(overlapStartDate, overlapEndDate));
+        return coveredDays / (double) requiredDays;
     }
 
     private String safeMessage(Exception e) {

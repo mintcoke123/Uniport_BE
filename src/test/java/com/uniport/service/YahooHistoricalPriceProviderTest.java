@@ -106,6 +106,48 @@ class YahooHistoricalPriceProviderTest {
     }
 
     @Test
+    void getSecurityPriceSeriesForEligibility_savesFetchedYahooRowsToPriceCache() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        AssetMasterRepository assetMasterRepository = mock(AssetMasterRepository.class);
+        AssetPriceDailyRepository priceRepository = mock(AssetPriceDailyRepository.class);
+        YahooHistoricalPriceProvider provider = new YahooHistoricalPriceProvider(
+                restTemplate,
+                (currency, date) -> "USD".equals(currency) ? BigDecimal.valueOf(1300) : BigDecimal.ONE,
+                assetMasterRepository,
+                priceRepository,
+                false,
+                "https://query1.finance.yahoo.com"
+        );
+        when(assetMasterRepository.findByAssetIdAndActiveTrue("US_AAPL")).thenReturn(Optional.of(asset(
+                "US_AAPL", "AAPL", "NASDAQ", "USD"
+        )));
+        when(priceRepository.findByAssetIdAndTradeDate(eq("US_AAPL"), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+        stubYahoo(restTemplate, chartJson(
+                List.of(1735689600L, 1735776000L),
+                List.of("10.0", "11.0"),
+                List.of("9.5", "10.5")
+        ));
+
+        provider.getSecurityPriceSeriesForEligibility(
+                "US_AAPL",
+                LocalDate.parse("2025-01-01"),
+                LocalDate.parse("2025-01-02")
+        );
+
+        ArgumentCaptor<Iterable<AssetPriceDaily>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(priceRepository).saveAll(captor.capture());
+        List<AssetPriceDaily> rows = iterableToList(captor.getValue());
+        assertEquals(2, rows.size());
+        assertEquals("US_AAPL", rows.get(0).getAssetId());
+        assertEquals(LocalDate.parse("2025-01-01"), rows.get(0).getTradeDate());
+        assertEquals(0, new BigDecimal("9.5").compareTo(rows.get(0).getCloseNative()));
+        assertEquals(0, new BigDecimal("12350.000000").compareTo(rows.get(0).getCloseKrw()));
+        assertEquals("USD", rows.get(0).getCurrency());
+        assertEquals("YAHOO_FINANCE_CHART_API", rows.get(0).getSource());
+    }
+
+    @Test
     void getSecurityPriceSeries_usesKosdaqYahooSuffixFromAssetMetadata() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         AssetMasterRepository assetMasterRepository = mock(AssetMasterRepository.class);

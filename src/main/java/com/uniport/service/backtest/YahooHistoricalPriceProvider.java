@@ -92,7 +92,7 @@ public class YahooHistoricalPriceProvider implements HistoricalPriceProvider {
         if (normalizedSecurityId.startsWith("CASH_") || normalizedSecurityId.startsWith("BOND_")) {
             return List.of();
         }
-        return fetchYahooSeries(null, toSecurityTicker(normalizedSecurityId), startDate, endDate);
+        return fetchYahooSeries(normalizedSecurityId, toSecurityTicker(normalizedSecurityId), startDate, endDate);
     }
 
     @Override

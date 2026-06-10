@@ -249,9 +249,16 @@ public class EtfDataService {
                     .ifPresent(item -> candidates.put(item.assetId(), item));
         }
 
-        Map<String, CachedPriceCoverage> coverageByAssetId = cachedPriceCoverageByAssetId(candidates.keySet());
+        Map<String, CachedPriceCoverage> coverageByAssetId = searchPriceCoverageByAssetId(candidates.values());
         List<CustomEtfAssetSearchItemDTO> all = candidates.values().stream()
-                .map(item -> toAssetSearchItem(item, coverageByAssetId.getOrDefault(item.assetId(), CachedPriceCoverage.empty(item.assetId()))))
+                .filter(item -> isSearchSelectableAsset(
+                        item,
+                        coverageByAssetId.getOrDefault(item.assetId(), CachedPriceCoverage.empty(item.assetId()))
+                ))
+                .map(item -> toAssetSearchItem(
+                        item,
+                        coverageByAssetId.getOrDefault(item.assetId(), CachedPriceCoverage.empty(item.assetId()))
+                ))
                 .toList();
         int fromIndex = Math.min(page * size, all.size());
         int toIndex = Math.min(fromIndex + size, all.size());
@@ -1412,6 +1419,64 @@ public class EtfDataService {
                 : summary.map(this::toCachedPriceCoverage).orElse(CachedPriceCoverage.empty(assetId));
     }
 
+    private Map<String, CachedPriceCoverage> searchPriceCoverageByAssetId(Iterable<EtfAssetCatalogItem> items) {
+        LinkedHashSet<String> assetIds = new LinkedHashSet<>();
+        List<EtfAssetCatalogItem> orderedItems = new ArrayList<>();
+        for (EtfAssetCatalogItem item : items) {
+            assetIds.add(item.assetId());
+            orderedItems.add(item);
+        }
+        Map<String, CachedPriceCoverage> coverageByAssetId = new LinkedHashMap<>(cachedPriceCoverageByAssetId(assetIds));
+        for (EtfAssetCatalogItem item : orderedItems) {
+            CachedPriceCoverage cached = coverageByAssetId.getOrDefault(
+                    item.assetId(),
+                    CachedPriceCoverage.empty(item.assetId())
+            );
+            if (PRICE_COVERAGE_READY.equals(priceCoverageStatus("1Y", item, cached))) {
+                continue;
+            }
+            CachedPriceCoverage remote = remoteSearchPriceCoverage(item);
+            if (remote.hasAnyPriceHistory()) {
+                coverageByAssetId.put(item.assetId(), remote);
+            }
+        }
+        return coverageByAssetId;
+    }
+
+    private CachedPriceCoverage remoteSearchPriceCoverage(EtfAssetCatalogItem item) {
+        if (!isEquityLikeAssetType(item.assetType())) {
+            return CachedPriceCoverage.empty(item.assetId());
+        }
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = startDateForPeriod("1Y", endDate);
+        try {
+            List<BacktestPricePoint> series = cleanPriceSeries(
+                    historicalPriceProvider.getSecurityPriceSeriesForEligibility(item.assetId(), startDate, endDate)
+            );
+            if (series.size() < 2) {
+                return CachedPriceCoverage.empty(item.assetId());
+            }
+            return new CachedPriceCoverage(
+                    item.assetId(),
+                    series.get(0).date(),
+                    series.get(series.size() - 1).date(),
+                    series.size()
+            );
+        } catch (ApiException e) {
+            if (isRequiredPriceConfigurationFailure(e)) {
+                throw e;
+            }
+            return CachedPriceCoverage.empty(item.assetId());
+        } catch (RuntimeException e) {
+            return CachedPriceCoverage.empty(item.assetId());
+        }
+    }
+
+    private boolean isRequiredPriceConfigurationFailure(RuntimeException e) {
+        String message = e.getMessage();
+        return message != null && message.contains("FX rate is required");
+    }
+
     private CachedPriceCoverage toCachedPriceCoverage(AssetPriceDailyRepository.AssetPriceCoverageSummary summary) {
         return new CachedPriceCoverage(
                 summary.getAssetId(),
@@ -1477,7 +1542,7 @@ public class EtfDataService {
 
     private boolean isCustomEtfSelectableAsset(EtfAssetCatalogItem item, CachedPriceCoverage coverage) {
         return isEquityLikeAssetType(item.assetType())
-                && !PRICE_COVERAGE_UNAVAILABLE.equals(priceCoverageStatus("1Y", item, coverage));
+                && PRICE_COVERAGE_READY.equals(priceCoverageStatus("1Y", item, coverage));
     }
 
     private boolean isSearchSelectableAsset(EtfAssetCatalogItem item, CachedPriceCoverage coverage) {

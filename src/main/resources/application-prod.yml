@@ -84,7 +84,7 @@ backtest:
 asset:
   backtest-verification:
     enabled: ${ASSET_BACKTEST_VERIFICATION_ENABLED:true}
-    batch-size: ${ASSET_BACKTEST_VERIFICATION_BATCH_SIZE:200}
+    batch-size: ${ASSET_BACKTEST_VERIFICATION_BATCH_SIZE:1000}
     cron: ${ASSET_BACKTEST_VERIFICATION_CRON:0 30 8 * * *}
     zone: ${ASSET_BACKTEST_VERIFICATION_ZONE:Asia/Seoul}
 

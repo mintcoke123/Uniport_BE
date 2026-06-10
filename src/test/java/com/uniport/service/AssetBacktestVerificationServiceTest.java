@@ -32,9 +32,12 @@ class AssetBacktestVerificationServiceTest {
         HistoricalPriceProvider priceProvider = mock(HistoricalPriceProvider.class);
         AssetBacktestVerificationService service = new AssetBacktestVerificationService(repository, priceProvider);
         when(repository.findActiveForBacktestVerification(any(Pageable.class))).thenReturn(List.of(apple, fake, cash));
-        when(priceProvider.getSecurityPriceSeries(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(List.of(point("2026-05-07", "100"), point("2026-05-08", "101")));
-        when(priceProvider.getSecurityPriceSeries(eq("US_FAKE"), any(LocalDate.class), any(LocalDate.class)))
+        when(priceProvider.getSecurityPriceSeriesForEligibility(eq("US_AAPL"), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(invocation -> List.of(
+                        point(invocation.getArgument(2, LocalDate.class).minusYears(1).toString(), "100"),
+                        point(invocation.getArgument(2, LocalDate.class).toString(), "101")
+                ));
+        when(priceProvider.getSecurityPriceSeriesForEligibility(eq("US_FAKE"), any(LocalDate.class), any(LocalDate.class)))
                 .thenReturn(List.of());
         ArgumentCaptor<List<AssetMaster>> captor = ArgumentCaptor.forClass(List.class);
 
@@ -49,12 +52,34 @@ class AssetBacktestVerificationServiceTest {
         assertEquals(null, apple.getLastPriceError());
         assertEquals(false, fake.getBacktestEnabled());
         assertEquals("PRICE_UNAVAILABLE", fake.getPriceSourceStatus());
-        assertEquals("No recent price data from provider", fake.getLastPriceError());
+        assertEquals("Insufficient one-year price coverage from provider", fake.getLastPriceError());
         assertEquals(true, cash.getBacktestEnabled());
         assertEquals("PROXY", cash.getPriceSourceStatus());
         assertEquals(null, cash.getLastPriceError());
         assertEquals(3, captor.getValue().size());
-        verify(priceProvider, never()).getSecurityPriceSeries(eq("CASH_KRW"), any(LocalDate.class), any(LocalDate.class));
+        verify(priceProvider, never()).getSecurityPriceSeriesForEligibility(eq("CASH_KRW"), any(LocalDate.class), any(LocalDate.class));
+    }
+
+    @Test
+    void verifyActiveAssets_marksStockUnavailableWhenProviderReturnsOnlyShortRecentSeries() {
+        AssetMaster stock = asset("US_SHORT", "STOCK", "Short History Inc.", "SHORT", "NASDAQ", "USD");
+        AssetMasterRepository repository = mock(AssetMasterRepository.class);
+        HistoricalPriceProvider priceProvider = mock(HistoricalPriceProvider.class);
+        AssetBacktestVerificationService service = new AssetBacktestVerificationService(repository, priceProvider);
+        when(repository.findActiveForBacktestVerification(any(Pageable.class))).thenReturn(List.of(stock));
+        when(priceProvider.getSecurityPriceSeriesForEligibility(eq("US_SHORT"), any(LocalDate.class), any(LocalDate.class)))
+                .thenAnswer(invocation -> List.of(
+                        point(invocation.getArgument(2, LocalDate.class).minusMonths(3).toString(), "100"),
+                        point(invocation.getArgument(2, LocalDate.class).toString(), "101")
+                ));
+
+        ImportResult result = service.verifyActiveAssets(10);
+
+        assertEquals(0, result.getUpdated());
+        assertEquals(1, result.getSkipped());
+        assertEquals(false, stock.getBacktestEnabled());
+        assertEquals("PRICE_UNAVAILABLE", stock.getPriceSourceStatus());
+        assertEquals("Insufficient one-year price coverage from provider", stock.getLastPriceError());
     }
 
     private AssetMaster asset(String assetId, String assetType, String name, String symbol, String market, String currency) {
