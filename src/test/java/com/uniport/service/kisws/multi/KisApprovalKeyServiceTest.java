@@ -12,7 +12,6 @@ class KisApprovalKeyServiceTest {
     void isKeyConfigured_rejectsSecondaryKeyInSingleKeyMode() {
         KisApprovalKeyService service = new KisApprovalKeyService(
                 mock(RestTemplate.class),
-                null,
                 "https://kis.example",
                 "https://kis-mock.example",
                 false,

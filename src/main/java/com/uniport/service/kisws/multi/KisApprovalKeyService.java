@@ -9,7 +9,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -32,7 +31,6 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
     private static final long APPROVAL_KEY_REFRESH_BUFFER_MILLIS = 5L * 60 * 1000;
 
     private final RestTemplate restTemplate;
-    private final KeyPool keyPool;
     private final String baseUrl;
     private final String baseUrlMock;
     private final boolean useMock;
@@ -45,14 +43,12 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
     private final String fallbackAppsecret;
 
     public KisApprovalKeyService(RestTemplate restTemplate,
-                                 @Lazy KeyPool keyPool,
                                  @Value("${kis.api.base-url:https://openapi.koreainvestment.com:9443}") String baseUrl,
                                  @Value("${kis.api.base-url-mock:https://openapivts.koreainvestment.com:29443}") String baseUrlMock,
                                  @Value("${kis.api.use-mock:false}") boolean useMock,
                                  @Value("${kis.api.appkey:}") String fallbackAppkey,
                                  @Value("${kis.api.appsecret:}") String fallbackAppsecret) {
         this.restTemplate = restTemplate;
-        this.keyPool = keyPool;
         this.baseUrl = baseUrl != null ? baseUrl : "https://openapi.koreainvestment.com:9443";
         this.baseUrlMock = baseUrlMock != null ? baseUrlMock : "https://openapivts.koreainvestment.com:29443";
         this.useMock = useMock;
@@ -76,12 +72,6 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
         }
         if (!"default".equals(keyId)) {
             throw new IllegalArgumentException("Only the default KIS key is supported");
-        }
-        if (keyPool != null) {
-            KisRestClient client = keyPool.getRestClient(keyId);
-            if (client != null) {
-                return client.getApprovalKey();
-            }
         }
         if (fallbackAppkey.isBlank() || fallbackAppsecret.isBlank()) {
             throw new IllegalStateException("KIS default key not configured");
