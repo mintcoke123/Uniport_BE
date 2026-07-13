@@ -81,7 +81,8 @@ public class KeyPool {
             keyIds.add("default");
         }
         for (String keyId : keyIds) {
-            KeyCircuitBreaker circuitBreaker = new KeyCircuitBreaker(keyId);
+            KeyCircuitBreaker restCircuitBreaker = new KeyCircuitBreaker(keyId + "-rest");
+            KeyCircuitBreaker webSocketCircuitBreaker = new KeyCircuitBreaker(keyId + "-ws");
             TokenBucketLimiter wsLimiter = new TokenBucketLimiter(WS_LIMITER_CAPACITY, WS_LIMITER_REFILL);
             TokenBucketLimiter restLimiter = useMock
                     ? new TokenBucketLimiter(REST_LIMITER_CAPACITY_MOCK, REST_LIMITER_REFILL_MOCK)
@@ -91,10 +92,10 @@ public class KeyPool {
                 continue;
             }
             KisRestClient restClient = new KisRestClient(keyId, restTemplate, baseUrl, baseUrlMock, useMock,
-                    defaultAppkey, defaultAppsecret, defaultAccessToken, circuitBreaker, restLimiter);
+                    defaultAppkey, defaultAppsecret, defaultAccessToken, restCircuitBreaker, restLimiter);
             restClients.put(keyId, restClient);
             KeyContext ctx = new KeyContext(keyId, approvalKeyProvider, stockRealtimeCache,
-                    priceCache, priceBroadcaster, useMock, circuitBreaker, wsLimiter);
+                    priceCache, priceBroadcaster, useMock, webSocketCircuitBreaker, wsLimiter);
             contexts.add(ctx);
             ctx.connect();
         }
