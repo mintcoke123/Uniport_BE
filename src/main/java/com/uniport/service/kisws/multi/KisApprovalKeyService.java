@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -33,7 +32,6 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
     private static final long APPROVAL_KEY_REFRESH_BUFFER_MILLIS = 5L * 60 * 1000;
 
     private final RestTemplate restTemplate;
-    private final KisKeyProperties kisKeyProperties;
     private final KeyPool keyPool;
     private final String baseUrl;
     private final String baseUrlMock;
@@ -47,7 +45,6 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
     private final String fallbackAppsecret;
 
     public KisApprovalKeyService(RestTemplate restTemplate,
-                                 KisKeyProperties kisKeyProperties,
                                  @Lazy KeyPool keyPool,
                                  @Value("${kis.api.base-url:https://openapi.koreainvestment.com:9443}") String baseUrl,
                                  @Value("${kis.api.base-url-mock:https://openapivts.koreainvestment.com:29443}") String baseUrlMock,
@@ -55,7 +52,6 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
                                  @Value("${kis.api.appkey:}") String fallbackAppkey,
                                  @Value("${kis.api.appsecret:}") String fallbackAppsecret) {
         this.restTemplate = restTemplate;
-        this.kisKeyProperties = kisKeyProperties;
         this.keyPool = keyPool;
         this.baseUrl = baseUrl != null ? baseUrl : "https://openapi.koreainvestment.com:9443";
         this.baseUrlMock = baseUrlMock != null ? baseUrlMock : "https://openapivts.koreainvestment.com:29443";
@@ -70,22 +66,7 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
 
     @Override
     public boolean isKeyConfigured(String keyId) {
-        if (keyId == null || keyId.isBlank()) {
-            return false;
-        }
-        if ("default".equals(keyId)) {
-            return !fallbackAppkey.isBlank() && !fallbackAppsecret.isBlank();
-        }
-        List<KeyCredential> keys = kisKeyProperties.getKeys();
-        if (keys == null) return false;
-        for (KeyCredential k : keys) {
-            if (keyId.equals(k.getId())) {
-                String ak = k.getAppkey();
-                String as = k.getAppsecret();
-                return ak != null && !ak.isBlank() && as != null && !as.isBlank();
-            }
-        }
-        return false;
+        return "default".equals(keyId) && !fallbackAppkey.isBlank() && !fallbackAppsecret.isBlank();
     }
 
     @Override
@@ -93,30 +74,17 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
         if (keyId == null || keyId.isBlank()) {
             keyId = "default";
         }
+        if (!"default".equals(keyId)) {
+            throw new IllegalArgumentException("Only the default KIS key is supported");
+        }
         if (keyPool != null) {
             KisRestClient client = keyPool.getRestClient(keyId);
             if (client != null) {
                 return client.getApprovalKey();
             }
         }
-        String key;
-        String secret;
-        if ("default".equals(keyId)) {
-            if (fallbackAppkey.isBlank() || fallbackAppsecret.isBlank()) {
-                throw new IllegalStateException("KIS default key not configured");
-            }
-            key = fallbackAppkey;
-            secret = fallbackAppsecret;
-        } else {
-            KeyCredential cred = findCredential(keyId);
-            if (cred == null) {
-                throw new IllegalArgumentException("Unknown key id: " + keyId);
-            }
-            key = cred.getAppkey() != null ? cred.getAppkey().trim() : "";
-            secret = cred.getAppsecret() != null ? cred.getAppsecret().trim() : "";
-        }
-        if (key.isBlank() || secret.isBlank()) {
-            throw new IllegalStateException("KIS key not configured for keyId: " + keyId);
+        if (fallbackAppkey.isBlank() || fallbackAppsecret.isBlank()) {
+            throw new IllegalStateException("KIS default key not configured");
         }
         long now = System.currentTimeMillis();
         CachedApproval cached = cache.get(keyId);
@@ -138,8 +106,8 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
             headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
             Map<String, String> body = Map.of(
                     "grant_type", "client_credentials",
-                    "appkey", key,
-                    "secretkey", secret
+                    "appkey", fallbackAppkey,
+                    "secretkey", fallbackAppsecret
             );
             HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
@@ -163,15 +131,6 @@ public class KisApprovalKeyService implements ApprovalKeyProvider {
         } finally {
             lock.unlock();
         }
-    }
-
-    private KeyCredential findCredential(String keyId) {
-        List<KeyCredential> keys = kisKeyProperties.getKeys();
-        if (keys == null) return null;
-        for (KeyCredential k : keys) {
-            if (keyId.equals(k.getId())) return k;
-        }
-        return null;
     }
 
     private static String getString(Map<String, Object> m, String key, String defaultValue) {

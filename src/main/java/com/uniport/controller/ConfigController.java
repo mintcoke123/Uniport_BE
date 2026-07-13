@@ -35,11 +35,13 @@ public class ConfigController {
         return ResponseEntity.ok(Map.of("configured", configured));
     }
 
-    /** KIS 접근토큰 폐기. POST /oauth2/revokeP 호출 후 캐시된 토큰 제거. 다음 API 호출 시 새 토큰 발급. */
+    /** 고정 접근 토큰은 외부에서 교체해야 하므로 애플리케이션에서 폐기할 수 없다. */
     @PostMapping("/kis-revoke")
     public ResponseEntity<Map<String, Object>> revokeKisToken() {
-        kisApiService.revokeAccessToken();
-        return ResponseEntity.ok(Map.of("success", true, "message", "접근토큰이 폐기되었습니다."));
+        return ResponseEntity.status(410).body(Map.of(
+                "success", false,
+                "message", "고정 접근 토큰은 실행 환경에서 교체해야 합니다."
+        ));
     }
 
     /** 실시간(웹소켓) 접속키 발급. local/dev 프로필에서만 200 반환, 그 외 403. */

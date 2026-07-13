@@ -31,7 +31,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -39,7 +38,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,8 +51,6 @@ import org.slf4j.LoggerFactory;
 public class KisApiService {
 
     private static final Logger log = LoggerFactory.getLogger(KisApiService.class);
-    private static final String TOKEN_PATH = "/oauth2/tokenP";
-    private static final String TOKEN_REVOKE_PATH = "/oauth2/revokeP";
     /** 실시간(웹소켓) 접속키 발급 */
     private static final String APPROVAL_PATH = "/oauth2/Approval";
     private static final String STOCK_PRICE_PATH = "/uapi/domestic-stock/v1/quotations/inquire-price";
@@ -80,7 +76,6 @@ public class KisApiService {
     private static final String TR_ID_STOCK_DAILY_CHART = "FHKST03010100";
     /** 해외주식 기간별시세 tr_id */
     private static final String TR_ID_OVERSEAS_DAILY_PRICE = "HHDFS76240000";
-    private static final int TOKEN_REFRESH_BUFFER_SECONDS = 60;
     /** approval_key TTL 23시간 */
     private static final long APPROVAL_KEY_TTL_MILLIS = 23L * 60 * 60 * 1000;
     /** approval_key 만료 5분 전까지 캐시 재사용 */
@@ -110,13 +105,10 @@ public class KisApiService {
     private String appkey;
     @Value("${kis.api.appsecret:}")
     private String appsecret;
+    @Value("${kis.api.access-token:}")
+    private String accessToken;
     @Value("${kis.api.use-mock:false}")
     private boolean useMock;
-
-    private final AtomicReference<String> cachedAccessToken = new AtomicReference<>();
-    private volatile long tokenExpiresAtMillis = 0L;
-    /** 동시에 한 번만 토큰 발급되도록 락 (배포 시 레이트리밋/지연 방지) */
-    private final ReentrantLock tokenIssueLock = new ReentrantLock();
 
     private volatile String cachedApprovalKey;
     private volatile long approvalKeyExpiresAtMillis = 0L;
@@ -155,7 +147,9 @@ public class KisApiService {
     }
 
     private boolean isConfigured() {
-        return appkey != null && !appkey.isBlank() && appsecret != null && !appsecret.isBlank();
+        return appkey != null && !appkey.isBlank()
+                && appsecret != null && !appsecret.isBlank()
+                && accessToken != null && !accessToken.isBlank();
     }
 
     /** KIS 설정 여부. Step3: keyPool.hasAnyRestClient() 이면 true, 아니면 단일키(isConfigured) 기준. */
@@ -171,9 +165,7 @@ public class KisApiService {
         return useMock ? "ws://ops.koreainvestment.com:31000" : "ws://ops.koreainvestment.com:21000";
     }
 
-    /**
-     * KIS OAuth2 접근토큰 발급. Step3: keyPool 있으면 default/첫 restClient로 위임.
-     */
+    /** KIS 고정 접근 토큰 조회. 애플리케이션 내부에서는 새 토큰을 발급하지 않는다. */
     public String getAccessToken() {
         if (keyPool != null) {
             KisRestClient c = keyPool.getDefaultOrFirstRestClient();
@@ -181,153 +173,14 @@ public class KisApiService {
                 return c.getAccessToken();
             }
         }
-        String key = appkey != null ? appkey.trim() : "";
-        String secret = appsecret != null ? appsecret.trim() : "";
-        if (key.isBlank() || secret.isBlank()) {
+        if (appkey == null || appkey.isBlank() || appsecret == null || appsecret.isBlank()) {
             throw new ApiException("KIS API appkey/appsecret not configured", HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        long now = System.currentTimeMillis();
-        if (cachedAccessToken.get() != null && now < tokenExpiresAtMillis - TOKEN_REFRESH_BUFFER_SECONDS * 1000L) {
-            return cachedAccessToken.get();
+        String configuredAccessToken = accessToken != null ? accessToken.trim() : "";
+        if (configuredAccessToken.isBlank()) {
+            throw new ApiException("KIS API access token not configured", HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        tokenIssueLock.lock();
-        try {
-            if (cachedAccessToken.get() != null && System.currentTimeMillis() < tokenExpiresAtMillis - TOKEN_REFRESH_BUFFER_SECONDS * 1000L) {
-                return cachedAccessToken.get();
-            }
-            String url = getBaseUrl() + TOKEN_PATH;
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
-            Map<String, String> body = Map.of(
-                    "grant_type", "client_credentials",
-                    "appkey", key,
-                    "appsecret", secret
-            );
-            HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
-            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                    url, HttpMethod.POST, request, new ParameterizedTypeReference<Map<String, Object>>() {});
-            if (response.getBody() == null) {
-                throw new ApiException("KIS token response body is null", HttpStatus.SERVICE_UNAVAILABLE);
-            }
-            Map<String, Object> res = response.getBody();
-            String accessToken = getString(res, "access_token", null);
-            if (accessToken == null || accessToken.isBlank()) {
-                accessToken = getString(res, "accessToken", null);
-            }
-            if (accessToken == null || accessToken.isBlank()) {
-                String kisError = kisErrorMessage(res, "token");
-                throw new ApiException("KIS 접근토큰 발급 실패. " + kisError, HttpStatus.SERVICE_UNAVAILABLE);
-            }
-            int expiresInSeconds = parseTokenExpiresIn(res);
-            cachedAccessToken.set(accessToken);
-            tokenExpiresAtMillis = System.currentTimeMillis() + expiresInSeconds * 1000L;
-            return accessToken;
-        } catch (ApiException e) {
-            throw e;
-        } catch (RestClientResponseException e) {
-            String bodyStr = e.getResponseBodyAsString();
-            throw new ApiException("KIS token request failed: " + e.getStatusCode() + " " + (bodyStr != null ? bodyStr : e.getMessage()), HttpStatus.SERVICE_UNAVAILABLE);
-        } catch (RestClientException e) {
-            throw new ApiException("KIS token request failed: " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
-        } finally {
-            tokenIssueLock.unlock();
-        }
-    }
-
-    /** KIS 토큰 응답에서 만료 시간(초) 추출. expires_in 또는 access_token_token_expired(날짜 문자열) 지원 */
-    private int parseTokenExpiresIn(Map<String, Object> res) {
-        Object expiresInObj = res.get("expires_in");
-        if (expiresInObj instanceof Number) {
-            return ((Number) expiresInObj).intValue();
-        }
-        String expiredStr = getString(res, "access_token_token_expired", null);
-        if (expiredStr != null && !expiredStr.isBlank()) {
-            try {
-                java.time.LocalDateTime expired = java.time.LocalDateTime.parse(
-                        expiredStr.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                long seconds = java.time.Duration.between(java.time.LocalDateTime.now(), expired).getSeconds();
-                return seconds > 0 ? (int) seconds : 86400;
-            } catch (Exception ignored) {
-            }
-        }
-        return 86400;
-    }
-
-    /** access token 캐시만 비움. 다음 getAccessToken() 시 KIS 재발급. 매일 08:00 KST 스케줄용. */
-    public void invalidateAccessTokenCache() {
-        if (keyPool != null && keyPool.hasAnyRestClient()) {
-            keyPool.invalidateAllAccessTokenCaches();
-            return;
-        }
-        cachedAccessToken.set(null);
-        tokenExpiresAtMillis = 0L;
-    }
-
-    /**
-     * 매일 08:00 KST 스케줄에서 호출. 캐시 무효화 후 즉시 재발급 요청해 새 토큰을 캐시.
-     */
-    public void refreshTokenAt8am() {
-        if (keyPool != null && keyPool.hasAnyRestClient()) {
-            keyPool.invalidateAllAccessTokenCaches();
-            for (KisRestClient client : keyPool.getAllRestClients()) {
-                if (client == null || !client.isConfigured()) continue;
-                try {
-                    client.getAccessToken();
-                    log.debug("KIS token daily refresh success keyId={}", client.getKeyId());
-                } catch (Exception e) {
-                    log.warn("KIS token daily refresh failed keyId={}: {}", client.getKeyId(), e.getMessage());
-                }
-            }
-            return;
-        }
-        if (!isConfigured()) return;
-        cachedAccessToken.set(null);
-        tokenExpiresAtMillis = 0L;
-        try {
-            getAccessToken();
-            log.debug("KIS token daily refresh success (single key)");
-        } catch (Exception e) {
-            log.warn("KIS token daily refresh failed (single key): {}", e.getMessage());
-        }
-    }
-
-    /**
-     * KIS 접근토큰 폐기. Step3: keyPool 있으면 default/첫 restClient로 위임.
-     */
-    public void revokeAccessToken() {
-        if (keyPool != null) {
-            KisRestClient c = keyPool.getDefaultOrFirstRestClient();
-            if (c != null) {
-                c.revokeAccessToken();
-                return;
-            }
-        }
-        String key = appkey != null ? appkey.trim() : "";
-        String secret = appsecret != null ? appsecret.trim() : "";
-        if (key.isBlank() || secret.isBlank()) {
-            throw new ApiException("KIS API appkey/appsecret not configured", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-        String tokenToRevoke = cachedAccessToken.get();
-        cachedAccessToken.set(null);
-        tokenExpiresAtMillis = 0L;
-        if (tokenToRevoke == null || tokenToRevoke.isBlank()) {
-            return;
-        }
-        String url = getBaseUrl() + TOKEN_REVOKE_PATH;
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
-        Map<String, String> body = Map.of(
-                "appkey", key,
-                "appsecret", secret,
-                "token", tokenToRevoke
-        );
-        HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
-        try {
-            restTemplate.exchange(
-                    url, HttpMethod.POST, request, new ParameterizedTypeReference<Map<String, Object>>() {});
-        } catch (RestClientException e) {
-            // 폐기 요청 실패해도 캐시는 이미 비워둠.
-        }
+        return configuredAccessToken;
     }
 
     /**

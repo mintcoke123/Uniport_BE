@@ -12,9 +12,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -22,10 +20,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class KisRestClient {
 
-    private static final String TOKEN_PATH = "/oauth2/tokenP";
-    private static final String TOKEN_REVOKE_PATH = "/oauth2/revokeP";
     private static final String APPROVAL_PATH = "/oauth2/Approval";
-    private static final int TOKEN_REFRESH_BUFFER_SECONDS = 60;
     private static final long APPROVAL_KEY_TTL_MILLIS = 23L * 60 * 60 * 1000;
     private static final long APPROVAL_KEY_REFRESH_BUFFER_MILLIS = 5L * 60 * 1000;
 
@@ -36,12 +31,9 @@ public class KisRestClient {
     private final boolean useMock;
     private final String appkey;
     private final String appsecret;
+    private final String accessToken;
     private final KeyCircuitBreaker circuitBreaker;
     private final TokenBucketLimiter restLimiter;
-
-    private final AtomicReference<String> cachedAccessToken = new AtomicReference<>();
-    private volatile long tokenExpiresAtMillis = 0L;
-    private final ReentrantLock tokenIssueLock = new ReentrantLock();
 
     private volatile String cachedApprovalKey;
     private volatile long approvalKeyExpiresAtMillis = 0L;
@@ -49,7 +41,7 @@ public class KisRestClient {
 
     public KisRestClient(String keyId, RestTemplate restTemplate,
                          String baseUrl, String baseUrlMock, boolean useMock,
-                         String appkey, String appsecret,
+                         String appkey, String appsecret, String accessToken,
                          KeyCircuitBreaker circuitBreaker, TokenBucketLimiter restLimiter) {
         this.keyId = keyId;
         this.restTemplate = restTemplate;
@@ -58,6 +50,7 @@ public class KisRestClient {
         this.useMock = useMock;
         this.appkey = appkey != null ? appkey.trim() : "";
         this.appsecret = appsecret != null ? appsecret.trim() : "";
+        this.accessToken = accessToken != null ? accessToken.trim() : "";
         this.circuitBreaker = circuitBreaker != null ? circuitBreaker : new KeyCircuitBreaker(keyId);
         this.restLimiter = restLimiter;
     }
@@ -76,7 +69,7 @@ public class KisRestClient {
 
     /** appkey/appsecret 설정 여부. hasAnyRestClient() 가용 판단용. */
     public boolean isConfigured() {
-        return appkey != null && !appkey.isBlank() && appsecret != null && !appsecret.isBlank();
+        return !appkey.isBlank() && !appsecret.isBlank() && !accessToken.isBlank();
     }
 
     private void requireRateLimit() {
@@ -89,59 +82,10 @@ public class KisRestClient {
         if (appkey.isBlank() || appsecret.isBlank()) {
             throw new ApiException("KIS API appkey/appsecret not configured keyId=" + keyId, HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        requireRateLimit();
-        if (!circuitBreaker.isAvailable()) {
-            throw new ApiException("KIS key circuit open keyId=" + keyId, HttpStatus.SERVICE_UNAVAILABLE);
+        if (accessToken.isBlank()) {
+            throw new ApiException("KIS API access token not configured keyId=" + keyId, HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        long now = System.currentTimeMillis();
-        if (cachedAccessToken.get() != null && now < tokenExpiresAtMillis - TOKEN_REFRESH_BUFFER_SECONDS * 1000L) {
-            return cachedAccessToken.get();
-        }
-        tokenIssueLock.lock();
-        try {
-            if (cachedAccessToken.get() != null && System.currentTimeMillis() < tokenExpiresAtMillis - TOKEN_REFRESH_BUFFER_SECONDS * 1000L) {
-                return cachedAccessToken.get();
-            }
-            String url = getBaseUrl() + TOKEN_PATH;
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
-            Map<String, String> body = Map.of(
-                    "grant_type", "client_credentials",
-                    "appkey", appkey,
-                    "appsecret", appsecret
-            );
-            HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
-            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                    url, HttpMethod.POST, request, new ParameterizedTypeReference<Map<String, Object>>() {});
-            if (response.getBody() == null) {
-                circuitBreaker.onFailure("token null body");
-                throw new ApiException("KIS token response body is null", HttpStatus.SERVICE_UNAVAILABLE);
-            }
-            Map<String, Object> res = response.getBody();
-            String accessToken = getString(res, "access_token", null);
-            if (accessToken == null || accessToken.isBlank()) {
-                accessToken = getString(res, "accessToken", null);
-            }
-            if (accessToken == null || accessToken.isBlank()) {
-                circuitBreaker.onFailure("token empty");
-                throw new ApiException("KIS 접근토큰 발급 실패 keyId=" + keyId, HttpStatus.SERVICE_UNAVAILABLE);
-            }
-            int expiresInSeconds = parseTokenExpiresIn(res);
-            cachedAccessToken.set(accessToken);
-            tokenExpiresAtMillis = System.currentTimeMillis() + expiresInSeconds * 1000L;
-            circuitBreaker.onSuccess();
-            return accessToken;
-        } catch (ApiException e) {
-            throw e;
-        } catch (RestClientResponseException e) {
-            circuitBreaker.onFailure("token " + e.getStatusCode());
-            throw new ApiException("KIS token request failed: " + e.getStatusCode() + " " + e.getResponseBodyAsString(), HttpStatus.SERVICE_UNAVAILABLE);
-        } catch (RestClientException e) {
-            circuitBreaker.onFailure("token");
-            throw new ApiException("KIS token request failed: " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
-        } finally {
-            tokenIssueLock.unlock();
-        }
+        return accessToken;
     }
 
     public String getApprovalKey() {
@@ -251,55 +195,6 @@ public class KisRestClient {
             circuitBreaker.onFailure("rest");
             throw new ApiException("KIS request failed: " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
         }
-    }
-
-    /** 캐시만 비움. 다음 getAccessToken() 호출 시 KIS에 재발급 요청. 매일 08:00 KST 스케줄용. */
-    public void invalidateAccessTokenCache() {
-        cachedAccessToken.set(null);
-        tokenExpiresAtMillis = 0L;
-    }
-
-    public void revokeAccessToken() {
-        if (appkey.isBlank() || appsecret.isBlank()) {
-            return;
-        }
-        String tokenToRevoke = cachedAccessToken.get();
-        cachedAccessToken.set(null);
-        tokenExpiresAtMillis = 0L;
-        if (tokenToRevoke == null || tokenToRevoke.isBlank()) {
-            return;
-        }
-        String url = getBaseUrl() + TOKEN_REVOKE_PATH;
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType("application/json;charset=UTF-8"));
-        Map<String, String> body = Map.of(
-                "appkey", appkey,
-                "appsecret", appsecret,
-                "token", tokenToRevoke
-        );
-        HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
-        try {
-            restTemplate.exchange(url, HttpMethod.POST, request, new ParameterizedTypeReference<Map<String, Object>>() {});
-        } catch (RestClientException ignored) {
-        }
-    }
-
-    private int parseTokenExpiresIn(Map<String, Object> res) {
-        Object expiresInObj = res.get("expires_in");
-        if (expiresInObj instanceof Number) {
-            return ((Number) expiresInObj).intValue();
-        }
-        String expiredStr = getString(res, "access_token_token_expired", null);
-        if (expiredStr != null && !expiredStr.isBlank()) {
-            try {
-                java.time.LocalDateTime expired = java.time.LocalDateTime.parse(
-                        expiredStr.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                long seconds = java.time.Duration.between(java.time.LocalDateTime.now(), expired).getSeconds();
-                return seconds > 0 ? (int) seconds : 86400;
-            } catch (Exception ignored) {
-            }
-        }
-        return 86400;
     }
 
     private static String getString(Map<String, Object> m, String key, String defaultValue) {

@@ -34,7 +34,6 @@ public class KeyPool {
     private static final int REST_LIMITER_CAPACITY_MOCK = 2;
     private static final double REST_LIMITER_REFILL_MOCK = 2.0;
 
-    private final KisKeyProperties kisKeyProperties;
     private final ApprovalKeyProvider approvalKeyProvider;
     private final StockRealtimeCache stockRealtimeCache;
     private final PriceCache priceCache;
@@ -45,13 +44,13 @@ public class KeyPool {
     private final String baseUrlMock;
     private final String defaultAppkey;
     private final String defaultAppsecret;
+    private final String defaultAccessToken;
 
     private final List<KeyContext> contexts = new ArrayList<>();
     private final Map<String, TokenBucketLimiter> restLimiters = new ConcurrentHashMap<>();
     private final Map<String, KisRestClient> restClients = new ConcurrentHashMap<>();
 
-    public KeyPool(KisKeyProperties kisKeyProperties,
-                   ApprovalKeyProvider approvalKeyProvider,
+    public KeyPool(ApprovalKeyProvider approvalKeyProvider,
                    StockRealtimeCache stockRealtimeCache,
                    PriceCache priceCache,
                    PriceBroadcaster priceBroadcaster,
@@ -60,8 +59,8 @@ public class KeyPool {
                    @Value("${kis.api.base-url:https://openapi.koreainvestment.com:9443}") String baseUrl,
                    @Value("${kis.api.base-url-mock:https://openapivts.koreainvestment.com:29443}") String baseUrlMock,
                    @Value("${kis.api.appkey:}") String defaultAppkey,
-                   @Value("${kis.api.appsecret:}") String defaultAppsecret) {
-        this.kisKeyProperties = kisKeyProperties;
+                   @Value("${kis.api.appsecret:}") String defaultAppsecret,
+                   @Value("${kis.api.access-token:}") String defaultAccessToken) {
         this.approvalKeyProvider = approvalKeyProvider;
         this.stockRealtimeCache = stockRealtimeCache;
         this.priceCache = priceCache;
@@ -72,21 +71,13 @@ public class KeyPool {
         this.baseUrlMock = baseUrlMock != null ? baseUrlMock : "https://openapivts.koreainvestment.com:29443";
         this.defaultAppkey = defaultAppkey != null ? defaultAppkey.trim() : "";
         this.defaultAppsecret = defaultAppsecret != null ? defaultAppsecret.trim() : "";
+        this.defaultAccessToken = defaultAccessToken != null ? defaultAccessToken.trim() : "";
     }
 
     @PostConstruct
     public void init() {
-        List<KeyCredential> keys = kisKeyProperties.getKeys();
         List<String> keyIds = new ArrayList<>();
-        if (keys != null && !keys.isEmpty()) {
-            for (KeyCredential k : keys) {
-                if (k.getId() != null && !k.getId().isBlank()
-                        && approvalKeyProvider.isKeyConfigured(k.getId())) {
-                    keyIds.add(k.getId());
-                }
-            }
-        }
-        if (keyIds.isEmpty() && approvalKeyProvider.isKeyConfigured("default")) {
+        if (approvalKeyProvider.isKeyConfigured("default")) {
             keyIds.add("default");
         }
         for (String keyId : keyIds) {
@@ -96,21 +87,11 @@ public class KeyPool {
                     ? new TokenBucketLimiter(REST_LIMITER_CAPACITY_MOCK, REST_LIMITER_REFILL_MOCK)
                     : new TokenBucketLimiter(REST_LIMITER_CAPACITY_REAL, REST_LIMITER_REFILL_REAL);
             restLimiters.put(keyId, restLimiter);
-            String appkey;
-            String appsecret;
-            if ("default".equals(keyId)) {
-                appkey = defaultAppkey;
-                appsecret = defaultAppsecret;
-            } else {
-                KeyCredential cred = findCredential(keyId);
-                appkey = cred != null && cred.getAppkey() != null ? cred.getAppkey().trim() : "";
-                appsecret = cred != null && cred.getAppsecret() != null ? cred.getAppsecret().trim() : "";
-            }
-            if (appkey.isBlank() || appsecret.isBlank()) {
+            if (defaultAppkey.isBlank() || defaultAppsecret.isBlank()) {
                 continue;
             }
             KisRestClient restClient = new KisRestClient(keyId, restTemplate, baseUrl, baseUrlMock, useMock,
-                    appkey, appsecret, circuitBreaker, restLimiter);
+                    defaultAppkey, defaultAppsecret, defaultAccessToken, circuitBreaker, restLimiter);
             restClients.put(keyId, restClient);
             KeyContext ctx = new KeyContext(keyId, approvalKeyProvider, stockRealtimeCache,
                     priceCache, priceBroadcaster, useMock, circuitBreaker, wsLimiter);
@@ -122,15 +103,6 @@ public class KeyPool {
         } else {
             log.info("KIS KeyPool initialized with {} key(s)", contexts.size());
         }
-    }
-
-    private KeyCredential findCredential(String keyId) {
-        List<KeyCredential> keys = kisKeyProperties.getKeys();
-        if (keys == null) return null;
-        for (KeyCredential k : keys) {
-            if (keyId.equals(k.getId())) return k;
-        }
-        return null;
     }
 
     /** REST 클라이언트 존재 여부. 사용 가능한(isConfigured) 클라이언트가 1개라도 있으면 true. */
@@ -196,18 +168,6 @@ public class KeyPool {
             if (client != null && client.isAvailable()) return client;
         }
         return c != null ? c : restClients.values().stream().filter(r -> r != null).findFirst().orElse(null);
-    }
-
-    /** 등록된 REST 클라이언트 전체. 매일 08:00 KST 토큰 재발급 스케줄에서 사용. */
-    public List<KisRestClient> getAllRestClients() {
-        return new ArrayList<>(restClients.values());
-    }
-
-    /** 모든 키의 access token 캐시 무효화. 다음 getAccessToken() 시 KIS 재발급. */
-    public void invalidateAllAccessTokenCaches() {
-        for (KisRestClient client : restClients.values()) {
-            if (client != null) client.invalidateAccessTokenCache();
-        }
     }
 
     /** stockCode 없는 REST 호출용 키 후보: 가용 키만. default 우선, 이후 context 순, 중복 제거. */
@@ -363,4 +323,3 @@ public class KeyPool {
         }
     }
 }
-

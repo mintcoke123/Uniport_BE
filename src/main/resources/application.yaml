@@ -73,19 +73,20 @@ firebase:
   credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
   credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
 
-# KIS Open API (env: KIS_APPKEY_2, KIS_APPSECRET_2. 설정 시에만 시세/거래량 API 사용)
-# 단일 키 운영: kis.api 와 kis.keys 모두 2번 키만 바라본다.
+# KIS Open API 단일 키 운영. 시크릿과 고정 접근 토큰은 환경 변수로만 주입한다.
 kis:
   api:
     base-url: ${KIS_API_BASE_URL:https://openapi.koreainvestment.com:9443}
     base-url-mock: ${KIS_API_BASE_URL_MOCK:https://openapivts.koreainvestment.com:29443}
-    appkey: ${KIS_APPKEY_2:}
-    appsecret: ${KIS_APPSECRET_2:}
+    appkey: ${KIS_API_APPKEY:}
+    appsecret: ${KIS_API_APPSECRET:}
+    access-token: ${KIS_API_ACCESS_TOKEN:}
     use-mock: ${KIS_API_USE_MOCK:false}
-  keys:
-    - id: k2
-      appkey: ${KIS_APPKEY_2:}
-      appsecret: ${KIS_APPSECRET_2:}
+  # 멀티키 운영 비활성화. kis.keys 목록을 설정하지 않고 kis.api 단일 키만 사용한다.
+  # keys:
+  #   - id: secondary
+  #     appkey: ${KIS_SECONDARY_APPKEY:}
+  #     appsecret: ${KIS_SECONDARY_APPSECRET:}
 
 backtest:
   fx:

@@ -2,6 +2,7 @@ package com.uniport.service;
 
 import com.uniport.dto.StockPriceDTO;
 import com.uniport.dto.StockVisualDTO;
+import com.uniport.exception.ApiException;
 import com.uniport.service.kisws.PriceCache;
 import com.uniport.service.kisws.PriceSnapshot;
 import com.uniport.service.kisws.KisWsSubscriptionManager;
@@ -18,6 +19,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -26,6 +29,53 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class KisApiServiceTest {
+
+    @Test
+    void getAccessToken_returnsConfiguredTokenWithoutIssuingANewToken() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        KisApiService service = new KisApiService(
+                restTemplate,
+                mock(KisWsSubscriptionManager.class),
+                new PriceCache(),
+                null,
+                mock(StockVisualAssetResolver.class),
+                mock(StockSymbolLogoUrlResolver.class),
+                new VirtualStockService()
+        );
+        ReflectionTestUtils.setField(service, "appkey", "appkey");
+        ReflectionTestUtils.setField(service, "appsecret", "appsecret");
+        ReflectionTestUtils.setField(service, "accessToken", "fixed-access-token");
+
+        String token = service.getAccessToken();
+
+        assertEquals("fixed-access-token", token);
+        verify(restTemplate, never()).exchange(
+                anyString(),
+                any(HttpMethod.class),
+                any(HttpEntity.class),
+                any(ParameterizedTypeReference.class)
+        );
+    }
+
+    @Test
+    void getAccessToken_reportsMissingFixedTokenSeparatelyFromAppCredentials() {
+        KisApiService service = new KisApiService(
+                mock(RestTemplate.class),
+                mock(KisWsSubscriptionManager.class),
+                new PriceCache(),
+                null,
+                mock(StockVisualAssetResolver.class),
+                mock(StockSymbolLogoUrlResolver.class),
+                new VirtualStockService()
+        );
+        ReflectionTestUtils.setField(service, "appkey", "appkey");
+        ReflectionTestUtils.setField(service, "appsecret", "appsecret");
+        ReflectionTestUtils.setField(service, "accessToken", " ");
+
+        ApiException exception = assertThrows(ApiException.class, service::getAccessToken);
+
+        assertTrue(exception.getMessage().contains("access token not configured"));
+    }
 
     @Test
     void getStockPrice_virtualStockDoesNotRequireKisConfigurationOrKisSubscription() {
@@ -145,6 +195,7 @@ class KisApiServiceTest {
         ReflectionTestUtils.setField(service, "baseUrl", "https://kis.example");
         ReflectionTestUtils.setField(service, "appkey", "appkey");
         ReflectionTestUtils.setField(service, "appsecret", "appsecret");
+        ReflectionTestUtils.setField(service, "accessToken", "access-token");
 
         StockPriceDTO result = service.getStockQuote("005930");
 
@@ -202,6 +253,7 @@ class KisApiServiceTest {
         ReflectionTestUtils.setField(service, "baseUrl", "https://kis.example");
         ReflectionTestUtils.setField(service, "appkey", "appkey");
         ReflectionTestUtils.setField(service, "appsecret", "appsecret");
+        ReflectionTestUtils.setField(service, "accessToken", "access-token");
 
         StockPriceDTO result = service.getStockQuote("005930");
 
